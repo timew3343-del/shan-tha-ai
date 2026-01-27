@@ -3,14 +3,29 @@ import { useNavigate } from "react-router-dom";
 import { Image, Video, Volume2, Loader2, Sparkles, Crown, Settings, Wallet } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { useCredits } from "@/hooks/useCredits";
 
-export const AIToolsTab = () => {
+interface AIToolsTabProps {
+  userId?: string;
+}
+
+export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [result, setResult] = useState<{ type: string; content: string } | null>(null);
+  const { credits, deductCredits } = useCredits(userId);
+
+  const getCreditCost = (action: string): number => {
+    switch (action) {
+      case "image": return 2;
+      case "video": return 5;
+      case "speech": return 1;
+      default: return 0;
+    }
+  };
 
   const handleAction = async (action: string) => {
     if (!inputText.trim()) return;
@@ -38,6 +53,13 @@ export const AIToolsTab = () => {
       navigate("/api-settings");
       return;
     }
+
+    const creditCost = getCreditCost(action);
+    const actionName = action === "image" ? "ပုံဆွဲခြင်း" : action === "video" ? "ဗီဒီယို" : "အသံပြောင်းခြင်း";
+
+    // Check and deduct credits
+    const success = await deductCredits(creditCost, actionName);
+    if (!success) return;
     
     setIsLoading(true);
     setActiveAction(action);
@@ -50,6 +72,11 @@ export const AIToolsTab = () => {
       type: action,
       content: `${action === "image" ? "🖼️ ပုံထုတ်ပြီးပါပြီ" : action === "video" ? "🎬 ဗီဒီယိုထုတ်ပြီးပါပြီ" : "🔊 အသံပြောင်းပြီးပါပြီ"}: "${inputText.substring(0, 50)}${inputText.length > 50 ? "..." : ""}"`,
     });
+
+    toast({
+      title: "အောင်မြင်ပါသည်",
+      description: `${creditCost} Credits အသုံးပြုပြီးပါပြီ။ ကျန်ရှိ ${credits - creditCost} Credits`,
+    });
     
     setIsLoading(false);
     setActiveAction(null);
@@ -59,18 +86,21 @@ export const AIToolsTab = () => {
     {
       id: "image",
       label: "ပုံထုတ်မည်",
+      sublabel: "2 Credits",
       icon: Image,
       gradient: "btn-gradient-blue",
     },
     {
       id: "video",
       label: "ဗီဒီယိုလုပ်မည်",
+      sublabel: "5 Credits",
       icon: Video,
       gradient: "btn-gradient-red",
     },
     {
       id: "speech",
       label: "အသံပြောင်းမည်",
+      sublabel: "1 Credit",
       icon: Volume2,
       gradient: "btn-gradient-green",
     },
@@ -136,14 +166,17 @@ export const AIToolsTab = () => {
               key={btn.id}
               onClick={() => handleAction(btn.id)}
               disabled={isLoading || !inputText.trim()}
-              className={`${btn.gradient} flex items-center justify-center gap-2 py-4 px-5 rounded-2xl font-semibold text-base transition-all duration-300 hover:scale-[1.02] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 text-foreground shadow-lg`}
+              className={`${btn.gradient} flex items-center justify-between py-4 px-5 rounded-2xl font-semibold text-base transition-all duration-300 hover:scale-[1.02] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 text-foreground shadow-lg`}
             >
-              {isActive ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Icon className="w-5 h-5" />
-              )}
-              {btn.label}
+              <div className="flex items-center gap-2">
+                {isActive ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Icon className="w-5 h-5" />
+                )}
+                <span>{btn.label}</span>
+              </div>
+              <span className="text-xs opacity-80">{btn.sublabel}</span>
             </button>
           );
         })}

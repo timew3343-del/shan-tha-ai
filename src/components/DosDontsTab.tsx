@@ -25,6 +25,10 @@ const dosItems = [
     title: "ကျင့်ဝတ်နှင့်အညီ အသုံးပြုပါ",
     description: "AI ကို တရားဝင် ရည်ရွယ်ချက်များအတွက်သာ အသုံးပြုပါ",
   },
+  {
+    title: "Transaction ID စစ်ဆေးပါ",
+    description: "Screenshot တင်ခြင်းမပြုမီ Transaction ID မှန်ကန်ကြောင်း စစ်ဆေးပါ",
+  },
 ];
 
 const dontsItems = [
