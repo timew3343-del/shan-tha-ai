@@ -18,7 +18,7 @@ const dosItems = [
     description: "AI ကို ဖန်တီးမှု၊ သုတေသန၊ လေ့လာမှု စသည်တို့တွင် အသုံးပြုပါ",
   },
   {
-    title: "တိုးတက်မှုအတွက် အကြံပြုချက် ပေးပါ",
+    title: "တိုးတက်မှုအတွက် လေ့လာပါ",
     description: "AI ၏ ပြောင်းလဲမှုများကို သိရှိနိုင်ရန် ပုံမှန် လေ့လာပါ",
   },
   {
@@ -33,20 +33,20 @@ const dontsItems = [
     description: "AI ၏ အဖြေများကို အစစ်အဆေး မရှိဘဲ လက်မခံပါနှင့်",
   },
   {
-    title: "လှည့်ဖျားခြင်းတွင် အသုံးမပြုပါနှင့်",
+    title: "လှည့်ဖျားခြင်းတွင် မသုံးပါနှင့်",
     description: "AI ကို လိမ်လည်ခြင်း၊ မှားယွင်းသော သတင်းများ ဖန်တီးခြင်းတွင် မသုံးပါနှင့်",
   },
   {
-    title: "ကိုယ်ရေးကိုယ်တာ မျှဝေခြင်း",
+    title: "ကိုယ်ရေးကိုယ်တာ မမျှဝေပါနှင့်",
     description: "ငွေကြေး၊ စကားဝှက် စသည့် အရေးကြီးသော အချက်အလက်များ မထည့်ပါနှင့်",
   },
   {
-    title: "မူပိုင်ခွင့် ချိုးဖောက်ခြင်း",
+    title: "မူပိုင်ခွင့် မချိုးဖောက်ပါနှင့်",
     description: "AI ကို အခြားသူများ၏ မူပိုင်ခွင့်ကို ချိုးဖောက်ရန် မသုံးပါနှင့်",
   },
   {
     title: "အကြမ်းဖက် အကြောင်းအရာများ",
-    description: "အန္တရာယ်ရှိသော သို့မဟုတ် အကြမ်းဖက်မှု ပါဝင်သော အကြောင်းအရာများ မဖန်တီးပါနှင့်",
+    description: "အန္တရာယ်ရှိသော အကြောင်းအရာများ မဖန်တီးပါနှင့်",
   },
   {
     title: "အလွဲသုံးစားမှု",
@@ -59,7 +59,7 @@ export const DosDontsTab = () => {
     <div className="flex flex-col gap-6 p-4 pb-24">
       {/* Header */}
       <div className="text-center pt-4">
-        <h1 className="text-2xl font-bold mb-2">လုပ်ရန် / မလုပ်ရန်</h1>
+        <h1 className="text-2xl font-bold mb-2 text-primary">AI အသုံးပြုနည်း လမ်းညွှန်</h1>
         <p className="text-muted-foreground text-sm">
           AI ကို ထိရောက်စွာနှင့် တာဝန်ယူမှုရှိစွာ အသုံးပြုနည်း
         </p>
@@ -68,16 +68,16 @@ export const DosDontsTab = () => {
       {/* Dos Section */}
       <div className="animate-fade-up">
         <div className="flex items-center gap-2 mb-4">
-          <div className="p-2 rounded-xl bg-success/20">
+          <div className="p-2 rounded-xl bg-success/20 border border-success/30">
             <Lightbulb className="w-5 h-5 text-success" />
           </div>
-          <h2 className="text-lg font-semibold text-success">လုပ်ရန် အကြံပြုချက်များ</h2>
+          <h2 className="text-lg font-semibold text-success">လုပ်ဆောင်ရန်များ</h2>
         </div>
         <div className="space-y-3">
           {dosItems.map((item, index) => (
             <div
               key={index}
-              className="card-gradient rounded-xl p-4 border border-success/20 flex gap-3 animate-fade-up"
+              className="gradient-card rounded-xl p-4 border border-success/20 flex gap-3 animate-fade-up"
               style={{ animationDelay: `${index * 0.05}s` }}
             >
               <div className="flex-shrink-0 w-8 h-8 rounded-full bg-success/20 flex items-center justify-center">
@@ -95,16 +95,16 @@ export const DosDontsTab = () => {
       {/* Don'ts Section */}
       <div className="animate-fade-up" style={{ animationDelay: "0.3s" }}>
         <div className="flex items-center gap-2 mb-4">
-          <div className="p-2 rounded-xl bg-destructive/20">
+          <div className="p-2 rounded-xl bg-destructive/20 border border-destructive/30">
             <ShieldAlert className="w-5 h-5 text-destructive" />
           </div>
-          <h2 className="text-lg font-semibold text-destructive">မလုပ်ရန် သတိပေးချက်များ</h2>
+          <h2 className="text-lg font-semibold text-destructive">ရှောင်ကြဉ်ရန်များ</h2>
         </div>
         <div className="space-y-3">
           {dontsItems.map((item, index) => (
             <div
               key={index}
-              className="card-gradient rounded-xl p-4 border border-destructive/20 flex gap-3 animate-fade-up"
+              className="gradient-card rounded-xl p-4 border border-destructive/20 flex gap-3 animate-fade-up"
               style={{ animationDelay: `${0.3 + index * 0.05}s` }}
             >
               <div className="flex-shrink-0 w-8 h-8 rounded-full bg-destructive/20 flex items-center justify-center">
@@ -117,13 +117,6 @@ export const DosDontsTab = () => {
             </div>
           ))}
         </div>
-      </div>
-
-      {/* Source Info */}
-      <div className="card-gradient rounded-xl p-4 border border-border/50 text-center animate-fade-up" style={{ animationDelay: "0.6s" }}>
-        <p className="text-xs text-muted-foreground">
-          အချက်အလက်များသည် OpenAI ၏ အကောင်းဆုံး အလေ့အကျင့်များမှ ထုတ်ယူထားပါသည်
-        </p>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { BookOpen, Clock, Star, ChevronRight, Lock, PlayCircle } from "lucide-react";
+import { BookOpen, Clock, Star, ChevronRight, Lock, PlayCircle, Crown } from "lucide-react";
 
 const courses = [
   {
@@ -13,8 +13,8 @@ const courses = [
   },
   {
     id: 2,
-    title: "ChatGPT အသုံးပြုနည်း",
-    description: "ChatGPT ကို ထိရောက်စွာ အသုံးပြုနည်း လမ်းညွှန်",
+    title: "AI Chatbot အသုံးပြုနည်း",
+    description: "AI Chatbot ကို ထိရောက်စွာ အသုံးပြုနည်း လမ်းညွှန်",
     duration: "၂၅ မိနစ်",
     lessons: 8,
     rating: 4.9,
@@ -24,7 +24,7 @@ const courses = [
   {
     id: 3,
     title: "ပုံထုတ်ခြင်း AI",
-    description: "DALL-E, Midjourney စသည်တို့ဖြင့် ပုံဆွဲနည်း",
+    description: "AI ဖြင့် ပုံဆွဲနည်း အခြေခံမှ အဆင့်မြင့်အထိ",
     duration: "၃၀ မိနစ်",
     lessons: 10,
     rating: 4.7,
@@ -33,8 +33,8 @@ const courses = [
   },
   {
     id: 4,
-    title: "AI ဖြင့် ဗီဒီယိုထုတ်လုပ်ခြင်း",
-    description: "Sora နှင့် အခြား AI ဗီဒီယို ကိရိယာများ",
+    title: "AI ဗီဒီယိုထုတ်လုပ်ခြင်း",
+    description: "AI ဗီဒီယို ကိရိယာများ အသုံးပြုနည်း",
     duration: "၄၅ မိနစ်",
     lessons: 12,
     rating: 4.6,
@@ -68,20 +68,23 @@ export const CourseTab = () => {
     <div className="flex flex-col gap-6 p-4 pb-24">
       {/* Header */}
       <div className="text-center pt-4">
-        <h1 className="text-2xl font-bold mb-2">AI သင်တန်းများ</h1>
+        <h1 className="text-2xl font-bold mb-2 text-primary">AI သင်တန်းများ</h1>
         <p className="text-muted-foreground text-sm">
           AI ကို အခြေခံမှ အဆင့်မြင့်အထိ လေ့လာပါ
         </p>
       </div>
 
       {/* Progress Overview */}
-      <div className="card-gradient rounded-2xl p-4 border border-primary/20 animate-fade-up">
+      <div className="gradient-card rounded-2xl p-4 border border-primary/30 shadow-gold animate-fade-up">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-medium">သင်တန်း တိုးတက်မှု</span>
+          <div className="flex items-center gap-2">
+            <Crown className="w-5 h-5 text-primary" />
+            <span className="text-sm font-medium">သင်တန်း တိုးတက်မှု</span>
+          </div>
           <span className="text-primary font-semibold">၂ / ၆ ပြီးပြီ</span>
         </div>
-        <div className="h-2 bg-background rounded-full overflow-hidden">
-          <div className="h-full w-1/3 bg-gradient-to-r from-primary to-primary/70 rounded-full transition-all duration-500" />
+        <div className="h-3 bg-background rounded-full overflow-hidden">
+          <div className="h-full w-1/3 gradient-gold rounded-full transition-all duration-500" />
         </div>
       </div>
 
@@ -90,10 +93,10 @@ export const CourseTab = () => {
         {courses.map((course, index) => (
           <div
             key={course.id}
-            className={`card-gradient rounded-2xl p-4 border transition-all duration-300 hover:scale-[1.01] animate-fade-up ${
+            className={`gradient-card rounded-2xl p-4 border transition-all duration-300 hover:scale-[1.01] animate-fade-up ${
               course.isLocked 
                 ? "border-border/30 opacity-70" 
-                : "border-border/50 cursor-pointer hover:border-primary/30"
+                : "border-primary/20 cursor-pointer hover:border-primary/40 hover:shadow-gold"
             }`}
             style={{ animationDelay: `${index * 0.05}s` }}
           >
@@ -103,13 +106,13 @@ export const CourseTab = () => {
                 course.isLocked 
                   ? "bg-muted" 
                   : course.progress > 0 
-                    ? "btn-gradient-blue" 
-                    : "bg-primary/20"
+                    ? "gradient-gold" 
+                    : "bg-primary/20 border border-primary/30"
               }`}>
                 {course.isLocked ? (
                   <Lock className="w-5 h-5 text-muted-foreground" />
                 ) : course.progress > 0 ? (
-                  <PlayCircle className="w-6 h-6 text-foreground" />
+                  <PlayCircle className="w-6 h-6 text-primary-foreground" />
                 ) : (
                   <BookOpen className="w-5 h-5 text-primary" />
                 )}
@@ -120,7 +123,7 @@ export const CourseTab = () => {
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="font-semibold text-foreground truncate">{course.title}</h3>
                   {!course.isLocked && (
-                    <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                    <ChevronRight className="w-5 h-5 text-primary flex-shrink-0" />
                   )}
                 </div>
                 <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
@@ -138,7 +141,7 @@ export const CourseTab = () => {
                     {course.lessons} သင်ခန်းစာ
                   </div>
                   <div className="flex items-center gap-1">
-                    <Star className="w-3 h-3 text-warning fill-warning" />
+                    <Star className="w-3 h-3 text-primary fill-primary" />
                     {course.rating}
                   </div>
                 </div>
@@ -152,7 +155,7 @@ export const CourseTab = () => {
                     </div>
                     <div className="h-1.5 bg-background rounded-full overflow-hidden">
                       <div 
-                        className="h-full bg-primary rounded-full transition-all duration-500"
+                        className="h-full gradient-gold rounded-full transition-all duration-500"
                         style={{ width: `${course.progress}%` }}
                       />
                     </div>
@@ -165,7 +168,7 @@ export const CourseTab = () => {
       </div>
 
       {/* Unlock Message */}
-      <div className="card-gradient rounded-xl p-4 border border-warning/20 text-center animate-fade-up" style={{ animationDelay: "0.3s" }}>
+      <div className="gradient-card rounded-xl p-4 border border-primary/20 text-center animate-fade-up" style={{ animationDelay: "0.3s" }}>
         <p className="text-sm text-muted-foreground">
           🔓 ပိတ်ထားသော သင်တန်းများကို ဖွင့်ရန် ယခင်သင်တန်းများ ပြီးအောင်လုပ်ပါ
         </p>

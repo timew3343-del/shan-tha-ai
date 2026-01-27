@@ -7,7 +7,7 @@ interface BottomNavigationProps {
 
 const tabs = [
   { id: "ai-tools", label: "AI ကိရိယာများ", icon: Wand2 },
-  { id: "dos-donts", label: "လုပ်ရန် / မလုပ်ရန်", icon: BookCheck },
+  { id: "dos-donts", label: "လမ်းညွှန်", icon: BookCheck },
   { id: "course", label: "သင်တန်း", icon: GraduationCap },
 ];
 
@@ -25,7 +25,7 @@ export const BottomNavigation = ({ activeTab, onTabChange }: BottomNavigationPro
               onClick={() => onTabChange(tab.id)}
               className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all duration-300 ${
                 isActive 
-                  ? "text-primary bg-primary/10 shadow-glow" 
+                  ? "text-primary bg-primary/10 shadow-glow-gold" 
                   : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
               }`}
             >
