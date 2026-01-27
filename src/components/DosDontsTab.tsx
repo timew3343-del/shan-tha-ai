@@ -56,10 +56,10 @@ const dontsItems = [
 
 export const DosDontsTab = () => {
   return (
-    <div className="flex flex-col gap-6 p-4 pb-24">
+    <div className="flex flex-col gap-4 p-4 pb-24">
       {/* Header */}
       <div className="text-center pt-4">
-        <h1 className="text-2xl font-bold mb-2 text-primary">AI အသုံးပြုနည်း လမ်းညွှန်</h1>
+        <h1 className="text-xl font-bold mb-2 text-primary">AI အသုံးပြုနည်း လမ်းညွှန်</h1>
         <p className="text-muted-foreground text-sm">
           AI ကို ထိရောက်စွာနှင့် တာဝန်ယူမှုရှိစွာ အသုံးပြုနည်း
         </p>
@@ -67,25 +67,25 @@ export const DosDontsTab = () => {
 
       {/* Dos Section */}
       <div className="animate-fade-up">
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center gap-2 mb-3">
           <div className="p-2 rounded-xl bg-success/20 border border-success/30">
-            <Lightbulb className="w-5 h-5 text-success" />
+            <Lightbulb className="w-4 h-4 text-success" />
           </div>
-          <h2 className="text-lg font-semibold text-success">လုပ်ဆောင်ရန်များ</h2>
+          <h2 className="text-base font-semibold text-success">လုပ်ဆောင်ရန်များ</h2>
         </div>
-        <div className="space-y-3">
+        <div className="space-y-2">
           {dosItems.map((item, index) => (
             <div
               key={index}
-              className="gradient-card rounded-xl p-4 border border-success/20 flex gap-3 animate-fade-up"
-              style={{ animationDelay: `${index * 0.05}s` }}
+              className="gradient-card rounded-xl p-3 border border-success/20 flex gap-3 animate-fade-up"
+              style={{ animationDelay: `${index * 0.03}s` }}
             >
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-success/20 flex items-center justify-center">
-                <Check className="w-5 h-5 text-success" />
+              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-success/20 flex items-center justify-center">
+                <Check className="w-4 h-4 text-success" />
               </div>
-              <div>
-                <h3 className="font-medium text-foreground mb-1">{item.title}</h3>
-                <p className="text-sm text-muted-foreground">{item.description}</p>
+              <div className="min-w-0">
+                <h3 className="font-medium text-foreground text-sm mb-0.5">{item.title}</h3>
+                <p className="text-xs text-muted-foreground">{item.description}</p>
               </div>
             </div>
           ))}
@@ -93,26 +93,26 @@ export const DosDontsTab = () => {
       </div>
 
       {/* Don'ts Section */}
-      <div className="animate-fade-up" style={{ animationDelay: "0.3s" }}>
-        <div className="flex items-center gap-2 mb-4">
+      <div className="animate-fade-up" style={{ animationDelay: "0.2s" }}>
+        <div className="flex items-center gap-2 mb-3">
           <div className="p-2 rounded-xl bg-destructive/20 border border-destructive/30">
-            <ShieldAlert className="w-5 h-5 text-destructive" />
+            <ShieldAlert className="w-4 h-4 text-destructive" />
           </div>
-          <h2 className="text-lg font-semibold text-destructive">ရှောင်ကြဉ်ရန်များ</h2>
+          <h2 className="text-base font-semibold text-destructive">ရှောင်ကြဉ်ရန်များ</h2>
         </div>
-        <div className="space-y-3">
+        <div className="space-y-2">
           {dontsItems.map((item, index) => (
             <div
               key={index}
-              className="gradient-card rounded-xl p-4 border border-destructive/20 flex gap-3 animate-fade-up"
-              style={{ animationDelay: `${0.3 + index * 0.05}s` }}
+              className="gradient-card rounded-xl p-3 border border-destructive/20 flex gap-3 animate-fade-up"
+              style={{ animationDelay: `${0.2 + index * 0.03}s` }}
             >
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-destructive/20 flex items-center justify-center">
-                <X className="w-5 h-5 text-destructive" />
+              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-destructive/20 flex items-center justify-center">
+                <X className="w-4 h-4 text-destructive" />
               </div>
-              <div>
-                <h3 className="font-medium text-foreground mb-1">{item.title}</h3>
-                <p className="text-sm text-muted-foreground">{item.description}</p>
+              <div className="min-w-0">
+                <h3 className="font-medium text-foreground text-sm mb-0.5">{item.title}</h3>
+                <p className="text-xs text-muted-foreground">{item.description}</p>
               </div>
             </div>
           ))}
