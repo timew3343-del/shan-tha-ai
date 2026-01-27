@@ -58,6 +58,16 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        gold: {
+          DEFAULT: "hsl(var(--gold))",
+          dark: "hsl(var(--gold-dark))",
+          light: "hsl(var(--gold-light))",
+        },
+        navy: {
+          DEFAULT: "hsl(var(--navy))",
+          dark: "hsl(var(--navy-dark))",
+          light: "hsl(var(--navy-light))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
@@ -68,9 +78,6 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
-        "btn-blue": "hsl(var(--btn-blue))",
-        "btn-red": "hsl(var(--btn-red))",
-        "btn-green": "hsl(var(--btn-green))",
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -88,20 +95,14 @@ export default {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
-        shimmer: {
-          "0%": { transform: "translateX(-100%)" },
-          "100%": { transform: "translateX(100%)" },
-        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        shimmer: "shimmer 2s infinite",
       },
       boxShadow: {
-        glow: "0 0 20px hsl(var(--primary) / 0.3)",
-        "glow-red": "0 0 20px hsl(var(--btn-red) / 0.3)",
-        "glow-green": "0 0 20px hsl(var(--btn-green) / 0.3)",
+        glow: "0 0 20px hsl(var(--primary) / 0.4)",
+        "glow-gold": "0 4px 25px hsl(45 93% 58% / 0.35)",
       },
     },
   },
