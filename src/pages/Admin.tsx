@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { 
   ArrowLeft, Users, CreditCard, CheckCircle, XCircle, Clock, 
   BarChart3, Download, Settings, Activity, Sun, Moon, 
-  Bell, TrendingUp, DollarSign, Image, Video, Volume2
+  Bell, TrendingUp, DollarSign, Image, Video, Volume2,
+  Save, Key, Building
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -33,14 +34,6 @@ interface PricingPackage {
   price: number;
 }
 
-interface ActivityLog {
-  id: string;
-  user_id: string;
-  action: string;
-  credits_used: number;
-  created_at: string;
-}
-
 export const Admin = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -58,6 +51,18 @@ export const Admin = () => {
     { id: "professional", name: "Professional", credits: 700, price: 40000 },
     { id: "enterprise", name: "Enterprise", credits: 2000, price: 100000 },
   ]);
+  const [isSavingPricing, setIsSavingPricing] = useState(false);
+
+  // API Keys state
+  const [geminiApiKey, setGeminiApiKey] = useState("");
+  const [stabilityApiKey, setStabilityApiKey] = useState("");
+  const [isSavingApiKeys, setIsSavingApiKeys] = useState(false);
+
+  // Bank Details state
+  const [bankScbAccount, setBankScbAccount] = useState("399-459002-6");
+  const [bankScbNameTh, setBankScbNameTh] = useState("เงินฝากออมทรัพย์ (ไม่มีสมุดคู่ฝาก)");
+  const [bankScbNameEn, setBankScbNameEn] = useState("ATASIT KANTHA");
+  const [isSavingBank, setIsSavingBank] = useState(false);
 
   // Analytics state
   const [analytics, setAnalytics] = useState({
@@ -99,10 +104,48 @@ export const Admin = () => {
       fetchTransactions();
       calculateAnalytics();
       checkApiHealth();
+      loadSettings();
     };
 
     checkAdminAccess();
   }, [navigate, toast]);
+
+  const loadSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("app_settings")
+        .select("key, value");
+      
+      if (error) {
+        console.error("Error loading settings:", error);
+        return;
+      }
+
+      if (data) {
+        data.forEach((setting) => {
+          switch (setting.key) {
+            case "gemini_api_key":
+              setGeminiApiKey(setting.value || "");
+              break;
+            case "stability_api_key":
+              setStabilityApiKey(setting.value || "");
+              break;
+            case "bank_scb_account":
+              setBankScbAccount(setting.value || "399-459002-6");
+              break;
+            case "bank_scb_name_th":
+              setBankScbNameTh(setting.value || "เงินฝากออมทรัพย์ (ไม่มีสมุดคู่ฝาก)");
+              break;
+            case "bank_scb_name_en":
+              setBankScbNameEn(setting.value || "ATASIT KANTHA");
+              break;
+          }
+        });
+      }
+    } catch (error) {
+      console.error("Error loading settings:", error);
+    }
+  };
 
   const fetchTransactions = async () => {
     const { data, error } = await supabase
@@ -154,8 +197,8 @@ export const Admin = () => {
   };
 
   const checkApiHealth = async () => {
-    // Check Gemini API
-    const geminiKey = localStorage.getItem("gemini_api_key");
+    // Check Gemini API from stored settings
+    const geminiKey = geminiApiKey || localStorage.getItem("gemini_api_key");
     if (geminiKey) {
       try {
         const response = await fetch(
@@ -179,7 +222,7 @@ export const Admin = () => {
     }
 
     // Check Stability API
-    const stabilityKey = localStorage.getItem("stability_api_key");
+    const stabilityKey = stabilityApiKey || localStorage.getItem("stability_api_key");
     if (stabilityKey) {
       setApiHealth(prev => ({
         ...prev,
@@ -190,6 +233,100 @@ export const Admin = () => {
         ...prev,
         stability: { status: "no_key", lastCheck: new Date() }
       }));
+    }
+  };
+
+  const saveApiKeys = async () => {
+    setIsSavingApiKeys(true);
+    try {
+      // Save to database
+      const updates = [
+        { key: "gemini_api_key", value: geminiApiKey },
+        { key: "stability_api_key", value: stabilityApiKey },
+      ];
+
+      for (const update of updates) {
+        const { error } = await supabase
+          .from("app_settings")
+          .upsert({ key: update.key, value: update.value }, { onConflict: "key" });
+        
+        if (error) throw error;
+      }
+
+      // Also save to localStorage for immediate use
+      localStorage.setItem("gemini_api_key", geminiApiKey);
+      localStorage.setItem("stability_api_key", stabilityApiKey);
+
+      toast({
+        title: "သိမ်းဆည်းပြီးပါပြီ",
+        description: "API Keys များကို အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ",
+      });
+
+      checkApiHealth();
+    } catch (error) {
+      console.error("Error saving API keys:", error);
+      toast({
+        title: "အမှား",
+        description: "API Keys သိမ်းဆည်းရာတွင် ပြဿနာရှိပါသည်။",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingApiKeys(false);
+    }
+  };
+
+  const saveBankDetails = async () => {
+    setIsSavingBank(true);
+    try {
+      const updates = [
+        { key: "bank_scb_account", value: bankScbAccount },
+        { key: "bank_scb_name_th", value: bankScbNameTh },
+        { key: "bank_scb_name_en", value: bankScbNameEn },
+      ];
+
+      for (const update of updates) {
+        const { error } = await supabase
+          .from("app_settings")
+          .upsert({ key: update.key, value: update.value }, { onConflict: "key" });
+        
+        if (error) throw error;
+      }
+
+      toast({
+        title: "သိမ်းဆည်းပြီးပါပြီ",
+        description: "Bank Details များကို အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ",
+      });
+    } catch (error) {
+      console.error("Error saving bank details:", error);
+      toast({
+        title: "အမှား",
+        description: "Bank Details သိမ်းဆည်းရာတွင် ပြဿနာရှိပါသည်။",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingBank(false);
+    }
+  };
+
+  const savePricingChanges = async () => {
+    setIsSavingPricing(true);
+    try {
+      // Save pricing to localStorage for now (can be migrated to DB later)
+      localStorage.setItem("pricing_packages", JSON.stringify(packages));
+      
+      toast({
+        title: "သိမ်းဆည်းပြီးပါပြီ",
+        description: "စျေးနှုန်းများကို အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ",
+      });
+    } catch (error) {
+      console.error("Error saving pricing:", error);
+      toast({
+        title: "အမှား",
+        description: "စျေးနှုန်းများ သိမ်းဆည်းရာတွင် ပြဿနာရှိပါသည်။",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingPricing(false);
     }
   };
 
@@ -304,10 +441,6 @@ export const Admin = () => {
     setPackages(prev => prev.map(pkg => 
       pkg.id === id ? { ...pkg, [field]: value } : pkg
     ));
-    toast({
-      title: "အပ်ဒိတ်ပြီးပါပြီ",
-      description: "စျေးနှုန်းကို ပြောင်းလဲပြီးပါပြီ။",
-    });
   };
 
   const formatDate = (dateString: string) => {
@@ -477,14 +610,12 @@ export const Admin = () => {
                               အတည်ပြု ငြင်းပယ်မည်
                             </Button>
                             <Button
-                              onClick={() => {
-                                setShowRejectModal(null);
-                                setRejectReason("");
-                              }}
+                              onClick={() => setShowRejectModal(null)}
                               size="sm"
                               variant="outline"
+                              className="flex-1"
                             >
-                              ပယ်ဖျက်
+                              ပယ်ဖျက်မည်
                             </Button>
                           </div>
                         </div>
@@ -495,36 +626,40 @@ export const Admin = () => {
               )}
             </div>
 
-            {/* Recent Completed */}
+            {/* Completed Transactions */}
             <div>
-              <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-                <Users className="w-5 h-5 text-primary" />
-                မကြာသေးမီ ငွေသွင်းမှုများ
-              </h2>
-
-              <div className="space-y-2">
-                {completedTransactions.slice(0, 10).map((tx) => (
-                  <div
-                    key={tx.id}
-                    className="gradient-card rounded-xl p-3 border border-border/30 flex items-center justify-between"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{tx.package_name}</p>
-                      <p className="text-xs text-muted-foreground">{formatDate(tx.created_at)}</p>
+              <h2 className="text-lg font-semibold text-foreground mb-4">မှတ်တမ်းများ</h2>
+              {completedTransactions.length === 0 ? (
+                <div className="gradient-card rounded-2xl p-6 border border-border/30 text-center">
+                  <p className="text-muted-foreground">မှတ်တမ်း မရှိသေးပါ</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {completedTransactions.slice(0, 10).map((tx) => (
+                    <div
+                      key={tx.id}
+                      className={`gradient-card rounded-xl p-3 border ${
+                        tx.status === "success" ? "border-success/30" : "border-destructive/30"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-foreground text-sm">{tx.package_name}</p>
+                          <p className="text-xs text-muted-foreground">{formatDate(tx.created_at)}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className={`text-sm font-medium ${
+                            tx.status === "success" ? "text-success" : "text-destructive"
+                          }`}>
+                            {tx.status === "success" ? "အတည်ပြုပြီး" : "ငြင်းပယ်ပြီး"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{tx.credits} Credits</p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {tx.status === "success" ? (
-                        <CheckCircle className="w-4 h-4 text-success" />
-                      ) : (
-                        <XCircle className="w-4 h-4 text-destructive" />
-                      )}
-                      <span className="text-sm font-medium text-foreground">
-                        {tx.credits + (tx.bonus_credits || 0)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </TabsContent>
 
@@ -534,109 +669,219 @@ export const Admin = () => {
               <div className="gradient-card rounded-2xl p-4 border border-primary/20">
                 <div className="flex items-center gap-2 mb-2">
                   <TrendingUp className="w-5 h-5 text-primary" />
-                  <span className="text-sm text-muted-foreground">ဝင်ငွေ အနှစ်ချုပ်</span>
+                  <span className="text-sm text-muted-foreground">ယနေ့ဝင်ငွေ</span>
                 </div>
-                
-                <div className="grid grid-cols-3 gap-4 mt-4">
-                  <div className="text-center p-3 bg-background/50 rounded-xl">
-                    <p className="text-xs text-muted-foreground mb-1">ယနေ့</p>
-                    <p className="text-lg font-bold text-success">{formatCurrency(analytics.dailyIncome)}</p>
-                  </div>
-                  <div className="text-center p-3 bg-background/50 rounded-xl">
-                    <p className="text-xs text-muted-foreground mb-1">ဤအပတ်</p>
-                    <p className="text-lg font-bold text-primary">{formatCurrency(analytics.weeklyIncome)}</p>
-                  </div>
-                  <div className="text-center p-3 bg-background/50 rounded-xl">
-                    <p className="text-xs text-muted-foreground mb-1">ဤလ</p>
-                    <p className="text-lg font-bold text-warning">{formatCurrency(analytics.monthlyIncome)}</p>
-                  </div>
-                </div>
+                <p className="text-2xl font-bold text-foreground">{formatCurrency(analytics.dailyIncome)}</p>
               </div>
-
-              <Button onClick={handleExportCSV} className="w-full gradient-gold py-4 rounded-2xl">
-                <Download className="w-5 h-5 mr-2" />
-                Excel/CSV Export
-              </Button>
+              
+              <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <BarChart3 className="w-5 h-5 text-primary" />
+                  <span className="text-sm text-muted-foreground">ဤအပတ်ဝင်ငွေ</span>
+                </div>
+                <p className="text-2xl font-bold text-foreground">{formatCurrency(analytics.weeklyIncome)}</p>
+              </div>
+              
+              <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <DollarSign className="w-5 h-5 text-primary" />
+                  <span className="text-sm text-muted-foreground">ဤလဝင်ငွေ</span>
+                </div>
+                <p className="text-2xl font-bold text-foreground">{formatCurrency(analytics.monthlyIncome)}</p>
+              </div>
             </div>
+
+            <Button onClick={handleExportCSV} className="w-full" variant="outline">
+              <Download className="w-4 h-4 mr-2" />
+              CSV Export
+            </Button>
           </TabsContent>
 
           {/* Pricing Tab */}
           <TabsContent value="pricing" className="space-y-4">
-            <h2 className="text-lg font-semibold text-foreground mb-4">စျေးနှုန်း ပြင်ဆင်ရန်</h2>
-            
-            {packages.map((pkg) => (
-              <div key={pkg.id} className="gradient-card rounded-2xl p-4 border border-primary/20">
-                <h3 className="font-semibold text-foreground mb-3">{pkg.name}</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-muted-foreground mb-1">Credits</label>
-                    <Input
-                      type="number"
-                      value={pkg.credits}
-                      onChange={(e) => updatePackagePrice(pkg.id, "credits", parseInt(e.target.value) || 0)}
-                      className="text-sm"
-                    />
+            <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-primary" />
+                စျေးနှုန်း ပြင်ဆင်ခြင်း
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4">
+                မှတ်ချက်: API costs များသည် USD ဖြင့် ဖြစ်သည်။ အမြတ်ရရန် သင့်လျော်သော စျေးနှုန်းများ သတ်မှတ်ပါ။
+              </p>
+
+              <div className="space-y-4">
+                {packages.map((pkg) => (
+                  <div key={pkg.id} className="p-3 bg-secondary/30 rounded-xl">
+                    <p className="font-medium text-foreground mb-2">{pkg.name}</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-muted-foreground">Credits</label>
+                        <Input
+                          type="number"
+                          value={pkg.credits}
+                          onChange={(e) => updatePackagePrice(pkg.id, "credits", parseInt(e.target.value) || 0)}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">Price (MMK)</label>
+                        <Input
+                          type="number"
+                          value={pkg.price}
+                          onChange={(e) => updatePackagePrice(pkg.id, "price", parseInt(e.target.value) || 0)}
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs text-muted-foreground mb-1">Price (MMK)</label>
-                    <Input
-                      type="number"
-                      value={pkg.price}
-                      onChange={(e) => updatePackagePrice(pkg.id, "price", parseInt(e.target.value) || 0)}
-                      className="text-sm"
-                    />
-                  </div>
-                </div>
+                ))}
               </div>
-            ))}
+
+              <Button 
+                onClick={savePricingChanges} 
+                disabled={isSavingPricing}
+                className="w-full mt-4 gradient-gold text-primary-foreground"
+              >
+                {isSavingPricing ? (
+                  <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Save Changes
+                  </>
+                )}
+              </Button>
+            </div>
           </TabsContent>
 
           {/* System Tab */}
           <TabsContent value="system" className="space-y-4">
-            <h2 className="text-lg font-semibold text-foreground mb-4">System Health</h2>
-            
-            <div className="space-y-3">
-              <div className="gradient-card rounded-2xl p-4 border border-primary/20 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${
-                    apiHealth.gemini.status === "active" ? "bg-success" :
-                    apiHealth.gemini.status === "error" ? "bg-destructive" : "bg-warning"
-                  }`} />
-                  <div>
-                    <p className="font-medium text-foreground">Google Gemini API</p>
-                    <p className="text-xs text-muted-foreground">
-                      {apiHealth.gemini.status === "active" ? "အလုပ်လုပ်နေသည်" :
-                       apiHealth.gemini.status === "no_key" ? "API Key မထည့်ရသေးပါ" : "ချိတ်ဆက်မှု အမှား"}
-                    </p>
-                  </div>
+            {/* API Health */}
+            <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                <Activity className="w-5 h-5 text-primary" />
+                API Status
+              </h3>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                  <span className="text-sm text-foreground">Google Gemini</span>
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    apiHealth.gemini.status === "active" ? "bg-success/20 text-success" :
+                    apiHealth.gemini.status === "configured" ? "bg-warning/20 text-warning" :
+                    "bg-destructive/20 text-destructive"
+                  }`}>
+                    {apiHealth.gemini.status === "active" ? "Active" :
+                     apiHealth.gemini.status === "configured" ? "Configured" :
+                     apiHealth.gemini.status === "no_key" ? "No Key" : "Error"}
+                  </span>
                 </div>
-                <Volume2 className="w-5 h-5 text-muted-foreground" />
-              </div>
-
-              <div className="gradient-card rounded-2xl p-4 border border-primary/20 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${
-                    apiHealth.stability.status === "configured" ? "bg-success" : "bg-warning"
-                  }`} />
-                  <div>
-                    <p className="font-medium text-foreground">Stability AI API</p>
-                    <p className="text-xs text-muted-foreground">
-                      {apiHealth.stability.status === "configured" ? "ပြင်ဆင်ပြီး" : "API Key မထည့်ရသေးပါ"}
-                    </p>
-                  </div>
+                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                  <span className="text-sm text-foreground">Stability AI</span>
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    apiHealth.stability.status === "configured" ? "bg-success/20 text-success" :
+                    "bg-destructive/20 text-destructive"
+                  }`}>
+                    {apiHealth.stability.status === "configured" ? "Configured" : "No Key"}
+                  </span>
                 </div>
-                <Image className="w-5 h-5 text-muted-foreground" />
               </div>
             </div>
 
-            <Button
-              onClick={checkApiHealth}
-              variant="outline"
-              className="w-full mt-4"
-            >
-              <Activity className="w-4 h-4 mr-2" />
-              ပြန်စစ်ဆေးမည်
-            </Button>
+            {/* API Keys Settings */}
+            <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                <Key className="w-5 h-5 text-primary" />
+                API Keys
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-2 block">Google Gemini API Key</label>
+                  <Input
+                    type="password"
+                    value={geminiApiKey}
+                    onChange={(e) => setGeminiApiKey(e.target.value)}
+                    placeholder="AIzaSy..."
+                    className="bg-background/50"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">အသံပြောင်းခြင်းအတွက် အသုံးပြုပါသည်</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-2 block">Stability AI API Key</label>
+                  <Input
+                    type="password"
+                    value={stabilityApiKey}
+                    onChange={(e) => setStabilityApiKey(e.target.value)}
+                    placeholder="sk-..."
+                    className="bg-background/50"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">ပုံထုတ်ခြင်းအတွက် အသုံးပြုပါသည်</p>
+                </div>
+                <Button 
+                  onClick={saveApiKeys} 
+                  disabled={isSavingApiKeys}
+                  className="w-full gradient-gold text-primary-foreground"
+                >
+                  {isSavingApiKeys ? (
+                    <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Save API Keys
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Bank Details Settings */}
+            <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                <Building className="w-5 h-5 text-primary" />
+                SCB Bank Details
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-2 block">Account Number</label>
+                  <Input
+                    value={bankScbAccount}
+                    onChange={(e) => setBankScbAccount(e.target.value)}
+                    placeholder="399-459002-6"
+                    className="bg-background/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-2 block">Account Name (TH)</label>
+                  <Input
+                    value={bankScbNameTh}
+                    onChange={(e) => setBankScbNameTh(e.target.value)}
+                    placeholder="เงินฝากออมทรัพย์"
+                    className="bg-background/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-2 block">Account Name (EN)</label>
+                  <Input
+                    value={bankScbNameEn}
+                    onChange={(e) => setBankScbNameEn(e.target.value)}
+                    placeholder="ATASIT KANTHA"
+                    className="bg-background/50"
+                  />
+                </div>
+                <Button 
+                  onClick={saveBankDetails} 
+                  disabled={isSavingBank}
+                  className="w-full gradient-gold text-primary-foreground"
+                >
+                  {isSavingBank ? (
+                    <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Save Bank Details
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
       </div>
