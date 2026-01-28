@@ -6,10 +6,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-interface TTSRequest {
-  text: string;
-  voice: string;
-  language: string;
+interface GenerateImageRequest {
+  prompt: string;
+  referenceImage?: string;
 }
 
 serve(async (req) => {
@@ -47,7 +46,7 @@ serve(async (req) => {
     }
 
     const userId = claims.claims.sub;
-    console.log(`User ${userId} requesting text-to-speech`);
+    console.log(`User ${userId} requesting image generation`);
 
     // Check user credits server-side
     const { data: profile, error: profileError } = await supabaseAdmin
@@ -64,7 +63,7 @@ serve(async (req) => {
       );
     }
 
-    const creditCost = 1;
+    const creditCost = 2;
     if (profile.credit_balance < creditCost) {
       return new Response(
         JSON.stringify({ 
@@ -76,19 +75,75 @@ serve(async (req) => {
       );
     }
 
-    // Parse request body - NO apiKey from client
-    const { text, voice, language }: TTSRequest = await req.json();
+    // Fetch Stability AI API key from app_settings (server-side only)
+    const { data: settings, error: settingsError } = await supabaseAdmin
+      .from("app_settings")
+      .select("value")
+      .eq("key", "stability_api_key")
+      .single();
 
-    if (!text || text.trim() === "") {
+    if (settingsError || !settings?.value) {
+      console.error("API key not configured:", settingsError);
       return new Response(
-        JSON.stringify({ error: "Text is required" }),
+        JSON.stringify({ error: "Image generation service not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const stabilityKey = settings.value;
+
+    // Parse request body
+    const { prompt, referenceImage }: GenerateImageRequest = await req.json();
+
+    if (!prompt || prompt.trim() === "") {
+      return new Response(
+        JSON.stringify({ error: "Prompt is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`Generating TTS for text: "${text.substring(0, 50)}..." with voice: ${voice}`);
+    console.log(`Generating image for prompt: "${prompt.substring(0, 50)}..."`);
 
-    // Deduct credits BEFORE returning (since we're using Web Speech API fallback)
+    // Call Stability AI API server-side
+    const response = await fetch(
+      "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${stabilityKey}`,
+        },
+        body: JSON.stringify({
+          text_prompts: [{ text: prompt, weight: 1 }],
+          cfg_scale: 7,
+          height: 1024,
+          width: 1024,
+          steps: 30,
+          samples: 1,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Stability AI error:", errorText);
+      return new Response(
+        JSON.stringify({ error: "Image generation failed" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const data = await response.json();
+    
+    if (!data.artifacts || !data.artifacts[0]) {
+      return new Response(
+        JSON.stringify({ error: "No image generated" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Deduct credits AFTER successful generation
     const { error: deductError } = await supabaseAdmin
       .from("profiles")
       .update({ credit_balance: profile.credit_balance - creditCost })
@@ -96,22 +151,15 @@ serve(async (req) => {
 
     if (deductError) {
       console.error("Credit deduction error:", deductError);
-      return new Response(
-        JSON.stringify({ error: "Credit deduction failed" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      // Image was generated, so we should still return it but log the error
     }
 
-    // For now, we'll use Web Speech API on the client side
-    // In production, this could be replaced with a proper TTS API
+    console.log(`Image generated successfully for user ${userId}`);
+
     return new Response(
       JSON.stringify({
         success: true,
-        text: text,
-        voice: voice,
-        language: language,
-        useWebSpeech: true,
-        message: "Use Web Speech API for audio generation",
+        image: `data:image/png;base64,${data.artifacts[0].base64}`,
         creditsUsed: creditCost,
         newBalance: profile.credit_balance - creditCost,
       }),
@@ -121,7 +169,7 @@ serve(async (req) => {
       }
     );
   } catch (error: any) {
-    console.error("TTS error:", error);
+    console.error("Generate image error:", error);
     return new Response(
       JSON.stringify({ error: error.message || "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

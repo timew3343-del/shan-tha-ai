@@ -2,15 +2,16 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   ArrowLeft, Users, CreditCard, CheckCircle, XCircle, Clock, 
-  BarChart3, Download, Settings, Activity, Sun, Moon, 
-  Bell, TrendingUp, DollarSign, Image, Video, Volume2,
-  Save, Key, Building, Plus, Trash2, Wallet, CreditCard as CardIcon
+  BarChart3, Download, Settings, Activity, Sun, Moon,
+  Bell, TrendingUp, DollarSign, Building,
+  Save, Key, Plus, Trash2, Wallet, CreditCard as CardIcon
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { useUserRole } from "@/hooks/useUserRole";
 import { useTheme } from "next-themes";
 
 interface PendingTransaction {
@@ -47,7 +48,8 @@ export const Admin = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [userId, setUserId] = useState<string | undefined>(undefined);
+  const { isAdmin, isLoading: roleLoading } = useUserRole(userId);
   const [isLoading, setIsLoading] = useState(true);
   const [transactions, setTransactions] = useState<PendingTransaction[]>([]);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -103,8 +105,16 @@ export const Admin = () => {
         return;
       }
 
-      const adminEmails = ["timew3343@gmail.com", "youtrubezarni@gmail.com"];
-      if (!adminEmails.includes(user.email || "")) {
+      setUserId(user.id);
+    };
+
+    checkAdminAccess();
+  }, [navigate]);
+
+  // Check admin access once role is loaded
+  useEffect(() => {
+    if (!roleLoading && userId) {
+      if (!isAdmin) {
         toast({
           title: "ခွင့်ပြုချက်မရှိပါ",
           description: "Admin အကောင့်သာ ဝင်ရောက်ခွင့်ရှိပါသည်။",
@@ -114,15 +124,13 @@ export const Admin = () => {
         return;
       }
 
-      setIsAdmin(true);
       fetchTransactions();
       calculateAnalytics();
       checkApiHealth();
       loadSettings();
-    };
-
-    checkAdminAccess();
-  }, [navigate, toast]);
+      setIsLoading(false);
+    }
+  }, [roleLoading, isAdmin, userId, navigate, toast]);
 
   const loadSettings = async () => {
     try {
@@ -218,22 +226,12 @@ export const Admin = () => {
   };
 
   const checkApiHealth = async () => {
-    const geminiKey = geminiApiKey || localStorage.getItem("gemini_api_key");
-    if (geminiKey) {
-      try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey}`
-        );
-        setApiHealth(prev => ({
-          ...prev,
-          gemini: { status: response.ok ? "active" : "error", lastCheck: new Date() }
-        }));
-      } catch {
-        setApiHealth(prev => ({
-          ...prev,
-          gemini: { status: "error", lastCheck: new Date() }
-        }));
-      }
+    // Check if keys are configured in database (not localStorage)
+    if (geminiApiKey) {
+      setApiHealth(prev => ({
+        ...prev,
+        gemini: { status: "configured", lastCheck: new Date() }
+      }));
     } else {
       setApiHealth(prev => ({
         ...prev,
@@ -241,8 +239,7 @@ export const Admin = () => {
       }));
     }
 
-    const stabilityKey = stabilityApiKey || localStorage.getItem("stability_api_key");
-    if (stabilityKey) {
+    if (stabilityApiKey) {
       setApiHealth(prev => ({
         ...prev,
         stability: { status: "configured", lastCheck: new Date() }
@@ -271,8 +268,7 @@ export const Admin = () => {
         if (error) throw error;
       }
 
-      localStorage.setItem("gemini_api_key", geminiApiKey);
-      localStorage.setItem("stability_api_key", stabilityApiKey);
+      // DO NOT store in localStorage - keys stay server-side only
 
       toast({
         title: "သိမ်းဆည်းပြီးပါပြီ",

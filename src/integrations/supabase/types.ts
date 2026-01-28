@@ -178,6 +178,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_user_credits: {
+        Args: { _amount: number; _user_id: string }
+        Returns: Json
+      }
+      deduct_user_credits: {
+        Args: { _action: string; _amount: number; _user_id: string }
+        Returns: Json
+      }
       get_user_email: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
