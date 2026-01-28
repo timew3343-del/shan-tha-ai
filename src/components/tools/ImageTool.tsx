@@ -1,9 +1,10 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Image, Plus, Sparkles, Download, Loader2, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useCreditCosts } from "@/hooks/useCreditCosts";
 
 interface ImageToolProps {
   userId?: string;
@@ -11,6 +12,7 @@ interface ImageToolProps {
 
 export const ImageTool = ({ userId }: ImageToolProps) => {
   const { toast } = useToast();
+  const { costs } = useCreditCosts();
   const [prompt, setPrompt] = useState("");
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
@@ -201,7 +203,7 @@ export const ImageTool = ({ userId }: ImageToolProps) => {
         ) : (
           <>
             <Image className="w-5 h-5 mr-2" />
-            ပုံထုတ်မည် (2 Credits)
+            ပုံထုတ်မည် ({costs.image_generation} Credits)
           </>
         )}
       </Button>

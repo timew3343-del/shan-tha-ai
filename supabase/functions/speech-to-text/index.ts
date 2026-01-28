@@ -63,7 +63,15 @@ serve(async (req) => {
       );
     }
 
-    const creditCost = 1;
+    // Fetch dynamic credit cost from app_settings
+    const { data: costSetting } = await supabaseAdmin
+      .from("app_settings")
+      .select("value")
+      .eq("key", "credit_cost_speech_to_text")
+      .maybeSingle();
+    
+    const creditCost = costSetting?.value ? parseInt(costSetting.value, 10) : 5;
+    
     if (profile.credit_balance < creditCost) {
       return new Response(
         JSON.stringify({ 

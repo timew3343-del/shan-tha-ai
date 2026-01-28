@@ -4,6 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useCredits } from "@/hooks/useCredits";
+import { useCreditCosts } from "@/hooks/useCreditCosts";
 
 interface VideoToolProps {
   userId?: string;
@@ -12,6 +13,7 @@ interface VideoToolProps {
 export const VideoTool = ({ userId }: VideoToolProps) => {
   const { toast } = useToast();
   const { credits, deductCredits } = useCredits(userId);
+  const { costs } = useCreditCosts();
   const [prompt, setPrompt] = useState("");
   const [speechText, setSpeechText] = useState("");
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
@@ -47,8 +49,11 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
       return;
     }
 
+    // Determine credit cost based on whether speech text is included
+    const creditCost = speechText.trim() ? costs.video_with_speech : costs.video_generation;
+    
     // Check and deduct credits
-    const success = await deductCredits(5, "ဗီဒီယိုထုတ်ခြင်း");
+    const success = await deductCredits(creditCost, "ဗီဒီယိုထုတ်ခြင်း");
     if (!success) return;
 
     setIsLoading(true);
@@ -158,7 +163,7 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
         ) : (
           <>
             <Video className="w-5 h-5 mr-2" />
-            ဗီဒီယိုထုတ်မည် (5 Credits)
+            ဗီဒီယိုထုတ်မည် ({speechText.trim() ? costs.video_with_speech : costs.video_generation} Credits)
           </>
         )}
       </Button>

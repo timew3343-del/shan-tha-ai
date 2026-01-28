@@ -60,9 +60,19 @@ export const Admin = () => {
   const [packages, setPackages] = useState<PricingPackage[]>([
     { id: "starter", name: "Starter", credits: 300, price: 20000 },
     { id: "professional", name: "Professional", credits: 700, price: 40000 },
-    { id: "enterprise", name: "Enterprise", credits: 2000, price: 100000 },
+    { id: "enterprise", name: "Enterprise", credits: 2000, price: 120000 },
   ]);
   const [isSavingPricing, setIsSavingPricing] = useState(false);
+
+  // Credit Costs state
+  const [creditCosts, setCreditCosts] = useState({
+    image_generation: 2,
+    video_generation: 7,
+    video_with_speech: 10,
+    text_to_speech: 2,
+    speech_to_text: 5,
+  });
+  const [isSavingCosts, setIsSavingCosts] = useState(false);
 
   // API Keys state
   const [geminiApiKey, setGeminiApiKey] = useState("");
@@ -145,6 +155,7 @@ export const Admin = () => {
 
       if (data) {
         const loadedPayments: PaymentMethod[] = [];
+        const loadedCosts: Record<string, number> = {};
         
         data.forEach((setting) => {
           switch (setting.key) {
@@ -165,10 +176,20 @@ export const Admin = () => {
               }
             } catch {}
           }
+          
+          // Load credit costs
+          if (setting.key.startsWith("credit_cost_")) {
+            const costKey = setting.key.replace("credit_cost_", "");
+            loadedCosts[costKey] = parseInt(setting.value || "0", 10);
+          }
         });
         
         if (loadedPayments.length > 0) {
           setPaymentMethods(loadedPayments);
+        }
+        
+        if (Object.keys(loadedCosts).length > 0) {
+          setCreditCosts(prev => ({ ...prev, ...loadedCosts }));
         }
       }
     } catch (error) {
@@ -363,6 +384,38 @@ export const Admin = () => {
       });
     } catch (error) {
       console.error("Error deleting payment:", error);
+    }
+  };
+
+  const saveCreditCosts = async () => {
+    setIsSavingCosts(true);
+    try {
+      const updates = Object.entries(creditCosts).map(([key, value]) => ({
+        key: `credit_cost_${key}`,
+        value: value.toString(),
+      }));
+
+      for (const update of updates) {
+        const { error } = await supabase
+          .from("app_settings")
+          .upsert({ key: update.key, value: update.value }, { onConflict: "key" });
+        
+        if (error) throw error;
+      }
+
+      toast({
+        title: "သိမ်းဆည်းပြီးပါပြီ",
+        description: "Credit costs များကို အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ",
+      });
+    } catch (error) {
+      console.error("Error saving credit costs:", error);
+      toast({
+        title: "အမှား",
+        description: "Credit costs သိမ်းဆည်းရာတွင် ပြဿနာရှိပါသည်။",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingCosts(false);
     }
   };
 
@@ -810,6 +863,99 @@ export const Admin = () => {
 
           {/* System Tab */}
           <TabsContent value="system" className="space-y-4">
+            {/* Credit Consumption Settings */}
+            <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-primary" />
+                ကုန်ကျမည့် ခရက်ဒစ် ပြောင်းလဲခြင်း
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4">
+                AI Tools တစ်ခုစီအတွက် ကုန်ကျမည့် Credits ပမာဏကို သတ်မှတ်ပါ
+              </p>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                  <div>
+                    <span className="text-sm font-medium text-foreground">ပုံထုတ်ရန် (Image)</span>
+                    <p className="text-xs text-muted-foreground">Generate Image</p>
+                  </div>
+                  <Input
+                    type="number"
+                    value={creditCosts.image_generation}
+                    onChange={(e) => setCreditCosts(prev => ({ ...prev, image_generation: parseInt(e.target.value) || 0 }))}
+                    className="w-20 text-center bg-background/50"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                  <div>
+                    <span className="text-sm font-medium text-foreground">ဗီဒီယိုထုတ်ရန် (Video)</span>
+                    <p className="text-xs text-muted-foreground">Image + Prompt ဖြင့် ဗီဒီယိုထုတ်</p>
+                  </div>
+                  <Input
+                    type="number"
+                    value={creditCosts.video_generation}
+                    onChange={(e) => setCreditCosts(prev => ({ ...prev, video_generation: parseInt(e.target.value) || 0 }))}
+                    className="w-20 text-center bg-background/50"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                  <div>
+                    <span className="text-sm font-medium text-foreground">စာသားပါဗီဒီယို</span>
+                    <p className="text-xs text-muted-foreground">Video with Speech overlay</p>
+                  </div>
+                  <Input
+                    type="number"
+                    value={creditCosts.video_with_speech}
+                    onChange={(e) => setCreditCosts(prev => ({ ...prev, video_with_speech: parseInt(e.target.value) || 0 }))}
+                    className="w-20 text-center bg-background/50"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                  <div>
+                    <span className="text-sm font-medium text-foreground">စာ → အသံ (TTS)</span>
+                    <p className="text-xs text-muted-foreground">Text to Speech</p>
+                  </div>
+                  <Input
+                    type="number"
+                    value={creditCosts.text_to_speech}
+                    onChange={(e) => setCreditCosts(prev => ({ ...prev, text_to_speech: parseInt(e.target.value) || 0 }))}
+                    className="w-20 text-center bg-background/50"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                  <div>
+                    <span className="text-sm font-medium text-foreground">အသံ → စာ (STT)</span>
+                    <p className="text-xs text-muted-foreground">Speech to Text</p>
+                  </div>
+                  <Input
+                    type="number"
+                    value={creditCosts.speech_to_text}
+                    onChange={(e) => setCreditCosts(prev => ({ ...prev, speech_to_text: parseInt(e.target.value) || 0 }))}
+                    className="w-20 text-center bg-background/50"
+                  />
+                </div>
+              </div>
+
+              <Button 
+                onClick={saveCreditCosts} 
+                disabled={isSavingCosts}
+                className="w-full mt-4 gradient-gold text-primary-foreground"
+              >
+                {isSavingCosts ? (
+                  <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 mr-2" />
+                    Save Credit Costs
+                  </>
+                )}
+              </Button>
+            </div>
+
             {/* API Health */}
             <div className="gradient-card rounded-2xl p-4 border border-primary/20">
               <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
