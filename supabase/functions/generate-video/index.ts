@@ -112,28 +112,31 @@ serve(async (req) => {
 
     console.log(`Generating video for prompt: "${prompt.substring(0, 50)}..."`);
 
-    // Build request for video generation
-    // Using image generation model to create animated-style content
-    const messages: any[] = [];
+    // Build request for video generation using image generation model
+    const systemPrompt = `You are an AI that generates images. When the user provides a description, you MUST generate an image based on that description. Do not ask questions or provide text responses - always generate an image directly. If an image is provided, animate or modify it according to the description.`;
+    
+    const messages: any[] = [
+      { role: "system", content: systemPrompt }
+    ];
     
     if (image) {
-      // If reference image provided, include it
+      // If reference image provided, include it with explicit generation instruction
       messages.push({
         role: "user",
         content: [
-          { type: "text", text: `Create an animated video scene based on this image and description: ${prompt}` },
+          { type: "text", text: `Generate an animated version of this image with the following motion/action: ${prompt}. Output the generated image directly.` },
           { type: "image_url", image_url: { url: image } }
         ]
       });
     } else {
-      // Text-to-video style generation
+      // Text-to-video style generation with explicit instruction
       messages.push({
         role: "user",
-        content: `Create a detailed animated video scene: ${prompt}. Include motion and dynamic elements.`
+        content: `Generate an image of: ${prompt}. Make it dynamic and animated-looking with motion blur or action elements. Output the generated image directly.`
       });
     }
 
-    // Call Lovable AI Gateway for image sequence generation
+    // Call Lovable AI Gateway for image generation
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -141,7 +144,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image",
+        model: "google/gemini-3-pro-image-preview",
         messages: messages,
         modalities: ["image", "text"]
       }),
@@ -171,16 +174,54 @@ serve(async (req) => {
     }
 
     const data = await response.json();
+    console.log("AI Response structure:", JSON.stringify(data, null, 2));
     
-    // Extract generated content from response
-    const generatedImage = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    // Extract generated content - check multiple possible locations
+    let generatedImage = null;
     const generatedText = data.choices?.[0]?.message?.content;
     
+    // Check for images array in message
+    if (data.choices?.[0]?.message?.images?.[0]?.image_url?.url) {
+      generatedImage = data.choices[0].message.images[0].image_url.url;
+    }
+    // Check for inline base64 images in content (some models return this way)
+    else if (data.choices?.[0]?.message?.content) {
+      const content = data.choices[0].message.content;
+      // Check if content is an array with image parts
+      if (Array.isArray(content)) {
+        for (const part of content) {
+          if (part.type === "image_url" && part.image_url?.url) {
+            generatedImage = part.image_url.url;
+            break;
+          }
+          if (part.type === "image" && part.data) {
+            generatedImage = `data:image/png;base64,${part.data}`;
+            break;
+          }
+        }
+      }
+      // Check for base64 image in text content
+      else if (typeof content === "string" && content.includes("data:image")) {
+        const match = content.match(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/);
+        if (match) {
+          generatedImage = match[0];
+        }
+      }
+    }
+    // Check for images at response level
+    if (!generatedImage && data.images?.[0]?.url) {
+      generatedImage = data.images[0].url;
+    }
+    
     if (!generatedImage) {
-      console.error("No content in response:", JSON.stringify(data));
+      console.error("No image in response. Full response:", JSON.stringify(data));
+      // Return a helpful error with the text response if available
       return new Response(
-        JSON.stringify({ error: "No video content generated" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ 
+          error: "ပုံမထုတ်နိုင်ပါ။ ကျေးဇူးပြု၍ prompt ကို ပိုရှင်းအောင် ပြန်ရေးပါ။",
+          details: generatedText || "No response from AI"
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
