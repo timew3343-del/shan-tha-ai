@@ -41,10 +41,10 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
   };
 
   const handleGenerate = async () => {
-    if (!prompt.trim() && !uploadedImage) {
+    if (!uploadedImage) {
       toast({
-        title: "အချက်အလက်ထည့်ပါ",
-        description: "ဗီဒီယိုထုတ်ရန် ပုံ သို့မဟုတ် prompt ထည့်ပါ",
+        title: "ပုံထည့်ရန်လိုအပ်ပါသည်",
+        description: "ဗီဒီယိုထုတ်ရန် ပုံတစ်ပုံထည့်ပေးပါ (Image-to-Video)",
         variant: "destructive",
       });
       return;
@@ -99,6 +99,17 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
       const result = await response.json();
 
       if (!response.ok) {
+        // Handle refunded credits message
+        if (result.refunded) {
+          toast({
+            title: "ဗီဒီယိုထုတ်ခြင်း မအောင်မြင်ပါ",
+            description: `${result.error} (${result.creditsRefunded} Credits ပြန်ပေးပြီးပါပြီ)`,
+            variant: "destructive",
+          });
+          refetchCredits();
+          return;
+        }
+        
         if (response.status === 402) {
           toast({
             title: "ခရက်ဒစ် မလုံလောက်ပါ",
@@ -138,11 +149,14 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
 
   return (
     <div className="space-y-4">
-      {/* Image Upload */}
+      {/* Image Upload - Required for Image-to-Video */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">
         <label className="block text-sm font-medium text-primary mb-3">
-          ပုံထည့်ရန်
+          ပုံထည့်ရန် (လိုအပ်သည်)
         </label>
+        <p className="text-xs text-muted-foreground mb-3">
+          Stability AI Image-to-Video API သုံးပြီး ပုံကို ဗီဒီယိုအဖြစ် ပြောင်းပေးပါမည်
+        </p>
         
         {uploadedImage ? (
           <div className="relative inline-block">
@@ -206,13 +220,13 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
       {/* Generate Button */}
       <Button
         onClick={handleGenerate}
-        disabled={isLoading || (!prompt.trim() && !uploadedImage)}
+        disabled={isLoading || !uploadedImage}
         className="w-full btn-gradient-red py-4 rounded-2xl font-semibold"
       >
         {isLoading ? (
           <>
             <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-            ဗီဒီယိုထုတ်နေသည်...
+            ဗီဒီယိုထုတ်နေသည်... (၃ မိနစ်ခန့် ကြာနိုင်သည်)
           </>
         ) : (
           <>

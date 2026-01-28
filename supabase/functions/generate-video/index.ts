@@ -12,6 +12,31 @@ interface GenerateVideoRequest {
   speechText?: string;
 }
 
+// Helper function to refund credits
+async function refundCredits(supabaseAdmin: any, userId: string, amount: number, reason: string) {
+  try {
+    const { error } = await supabaseAdmin.rpc("add_user_credits", {
+      _user_id: userId,
+      _amount: amount,
+    });
+    if (error) {
+      console.error("Failed to refund credits:", error);
+    } else {
+      console.log(`Refunded ${amount} credits to user ${userId} - Reason: ${reason}`);
+    }
+  } catch (e) {
+    console.error("Refund error:", e);
+  }
+}
+
+// Convert base64 to proper format for Stability API
+function extractBase64Data(dataUrl: string): string {
+  if (dataUrl.startsWith("data:")) {
+    return dataUrl.split(",")[1];
+  }
+  return dataUrl;
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -52,9 +77,9 @@ serve(async (req) => {
     // Parse request body
     const { prompt, image, speechText }: GenerateVideoRequest = await req.json();
 
-    if (!prompt || prompt.trim() === "") {
+    if (!image) {
       return new Response(
-        JSON.stringify({ error: "Prompt is required" }),
+        JSON.stringify({ error: "ဗီဒီယိုထုတ်ရန် ပုံတစ်ပုံထည့်ရန်လိုအပ်ပါသည်" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -92,7 +117,7 @@ serve(async (req) => {
     if (profile.credit_balance < creditCost) {
       return new Response(
         JSON.stringify({ 
-          error: "Insufficient credits", 
+          error: "ခရက်ဒစ် မလုံလောက်ပါ", 
           required: creditCost,
           balance: profile.credit_balance 
         }),
@@ -100,132 +125,7 @@ serve(async (req) => {
       );
     }
 
-    // Get Lovable API key (auto-provisioned)
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      console.error("LOVABLE_API_KEY not configured");
-      return new Response(
-        JSON.stringify({ error: "Video generation service not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    console.log(`Generating video for prompt: "${prompt.substring(0, 50)}..."`);
-
-    // Build request for video generation using image generation model
-    const systemPrompt = `You are an AI that generates images. When the user provides a description, you MUST generate an image based on that description. Do not ask questions or provide text responses - always generate an image directly. If an image is provided, animate or modify it according to the description.`;
-    
-    const messages: any[] = [
-      { role: "system", content: systemPrompt }
-    ];
-    
-    if (image) {
-      // If reference image provided, include it with explicit generation instruction
-      messages.push({
-        role: "user",
-        content: [
-          { type: "text", text: `Generate an animated version of this image with the following motion/action: ${prompt}. Output the generated image directly.` },
-          { type: "image_url", image_url: { url: image } }
-        ]
-      });
-    } else {
-      // Text-to-video style generation with explicit instruction
-      messages.push({
-        role: "user",
-        content: `Generate an image of: ${prompt}. Make it dynamic and animated-looking with motion blur or action elements. Output the generated image directly.`
-      });
-    }
-
-    // Call Lovable AI Gateway for image generation
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-pro-image-preview",
-        messages: messages,
-        modalities: ["image", "text"]
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Lovable AI error:", response.status, errorText);
-      
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI service quota exceeded." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
-      return new Response(
-        JSON.stringify({ error: "Video generation failed" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const data = await response.json();
-    console.log("AI Response structure:", JSON.stringify(data, null, 2));
-    
-    // Extract generated content - check multiple possible locations
-    let generatedImage = null;
-    const generatedText = data.choices?.[0]?.message?.content;
-    
-    // Check for images array in message
-    if (data.choices?.[0]?.message?.images?.[0]?.image_url?.url) {
-      generatedImage = data.choices[0].message.images[0].image_url.url;
-    }
-    // Check for inline base64 images in content (some models return this way)
-    else if (data.choices?.[0]?.message?.content) {
-      const content = data.choices[0].message.content;
-      // Check if content is an array with image parts
-      if (Array.isArray(content)) {
-        for (const part of content) {
-          if (part.type === "image_url" && part.image_url?.url) {
-            generatedImage = part.image_url.url;
-            break;
-          }
-          if (part.type === "image" && part.data) {
-            generatedImage = `data:image/png;base64,${part.data}`;
-            break;
-          }
-        }
-      }
-      // Check for base64 image in text content
-      else if (typeof content === "string" && content.includes("data:image")) {
-        const match = content.match(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/);
-        if (match) {
-          generatedImage = match[0];
-        }
-      }
-    }
-    // Check for images at response level
-    if (!generatedImage && data.images?.[0]?.url) {
-      generatedImage = data.images[0].url;
-    }
-    
-    if (!generatedImage) {
-      console.error("No image in response. Full response:", JSON.stringify(data));
-      // Return a helpful error with the text response if available
-      return new Response(
-        JSON.stringify({ 
-          error: "ပုံမထုတ်နိုင်ပါ။ ကျေးဇူးပြု၍ prompt ကို ပိုရှင်းအောင် ပြန်ရေးပါ။",
-          details: generatedText || "No response from AI"
-        }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Deduct credits using the secure function
+    // Deduct credits FIRST
     const { data: deductResult, error: deductError } = await supabaseAdmin
       .rpc("deduct_user_credits", {
         _user_id: userId,
@@ -235,26 +135,207 @@ serve(async (req) => {
 
     if (deductError) {
       console.error("Credit deduction error:", deductError);
-      // Continue anyway since content was generated
+      return new Response(
+        JSON.stringify({ error: "Credit deduction failed" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    const newBalance = deductResult?.new_balance ?? (profile.credit_balance - creditCost);
+    console.log(`Deducted ${creditCost} credits from user ${userId}`);
 
-    console.log(`Video generated successfully for user ${userId}, new balance: ${newBalance}`);
+    // Get Stability API key
+    const STABILITY_API_KEY = Deno.env.get("STABILITY_API_KEY");
+    if (!STABILITY_API_KEY) {
+      console.error("STABILITY_API_KEY not configured");
+      // Refund credits since we can't proceed
+      await refundCredits(supabaseAdmin, userId, creditCost, "API key not configured");
+      return new Response(
+        JSON.stringify({ error: "Video generation service not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        video: generatedImage, // For now, returning animated image
-        description: generatedText,
-        creditsUsed: creditCost,
-        newBalance: newBalance,
-      }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    console.log(`Generating video for prompt: "${prompt?.substring(0, 50) || 'no prompt'}..."`);
+
+    try {
+      // Step 1: Start video generation with Stability AI Image-to-Video API
+      const imageBase64 = extractBase64Data(image);
+      const imageBytes = Uint8Array.from(atob(imageBase64), c => c.charCodeAt(0));
+      
+      // Create form data for the request
+      const formData = new FormData();
+      formData.append("image", new Blob([imageBytes], { type: "image/png" }), "image.png");
+      if (prompt?.trim()) {
+        formData.append("motion_bucket_id", "127");
+        formData.append("cfg_scale", "1.8");
       }
-    );
+
+      console.log("Calling Stability AI Image-to-Video API...");
+      
+      const startResponse = await fetch("https://api.stability.ai/v2beta/image-to-video", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${STABILITY_API_KEY}`,
+        },
+        body: formData,
+      });
+
+      if (!startResponse.ok) {
+        const errorText = await startResponse.text();
+        console.error("Stability AI start error:", startResponse.status, errorText);
+        
+        // Refund credits on API error
+        await refundCredits(supabaseAdmin, userId, creditCost, `Stability API error: ${startResponse.status}`);
+        
+        // Check for insufficient credits error
+        if (startResponse.status === 402 || errorText.includes("insufficient") || errorText.includes("balance")) {
+          return new Response(
+            JSON.stringify({ 
+              error: "Stability AI Credit မလုံလောက်ပါ - ကျေးဇူးပြု၍ Credit ထပ်ဖြည့်ပါ",
+              refunded: true,
+              creditsRefunded: creditCost
+            }),
+            { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        if (startResponse.status === 429) {
+          return new Response(
+            JSON.stringify({ 
+              error: "Rate limit exceeded. Please try again later.",
+              refunded: true,
+              creditsRefunded: creditCost
+            }),
+            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        return new Response(
+          JSON.stringify({ 
+            error: "Video generation failed to start",
+            refunded: true,
+            creditsRefunded: creditCost
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const startData = await startResponse.json();
+      const generationId = startData.id;
+      
+      if (!generationId) {
+        console.error("No generation ID received:", startData);
+        await refundCredits(supabaseAdmin, userId, creditCost, "No generation ID received");
+        return new Response(
+          JSON.stringify({ 
+            error: "Video generation failed - no ID received",
+            refunded: true,
+            creditsRefunded: creditCost
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`Video generation started with ID: ${generationId}`);
+
+      // Step 2: Poll for completion (max 3 minutes)
+      const maxAttempts = 36; // 36 * 5 seconds = 180 seconds = 3 minutes
+      let videoData: string | null = null;
+      
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        // Wait 5 seconds between polls
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        
+        console.log(`Polling attempt ${attempt + 1}/${maxAttempts}...`);
+        
+        const resultResponse = await fetch(`https://api.stability.ai/v2beta/image-to-video/result/${generationId}`, {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${STABILITY_API_KEY}`,
+            "Accept": "video/*",
+          },
+        });
+
+        if (resultResponse.status === 202) {
+          // Still processing
+          console.log("Video still processing...");
+          continue;
+        }
+
+        if (resultResponse.status === 200) {
+          // Video is ready
+          const videoBuffer = await resultResponse.arrayBuffer();
+          const base64Video = btoa(
+            new Uint8Array(videoBuffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
+          );
+          videoData = `data:video/mp4;base64,${base64Video}`;
+          console.log("Video generation completed!");
+          break;
+        }
+
+        // Error occurred
+        const errorText = await resultResponse.text();
+        console.error("Polling error:", resultResponse.status, errorText);
+        
+        if (resultResponse.status === 404) {
+          await refundCredits(supabaseAdmin, userId, creditCost, "Generation not found");
+          return new Response(
+            JSON.stringify({ 
+              error: "Video generation failed - not found",
+              refunded: true,
+              creditsRefunded: creditCost
+            }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+        
+        break;
+      }
+
+      if (!videoData) {
+        console.error("Video generation timed out or failed");
+        await refundCredits(supabaseAdmin, userId, creditCost, "Generation timed out");
+        return new Response(
+          JSON.stringify({ 
+            error: "ဗီဒီယိုထုတ်ရာတွင် အချိန်ကုန်သွားပါသည်။ ထပ်မံကြိုးစားပါ။",
+            refunded: true,
+            creditsRefunded: creditCost
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const newBalance = deductResult?.new_balance ?? (profile.credit_balance - creditCost);
+
+      console.log(`Video generated successfully for user ${userId}, new balance: ${newBalance}`);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          video: videoData,
+          creditsUsed: creditCost,
+          newBalance: newBalance,
+        }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+
+    } catch (apiError: any) {
+      console.error("API Error:", apiError);
+      // Refund credits on any API error
+      await refundCredits(supabaseAdmin, userId, creditCost, `API error: ${apiError.message}`);
+      return new Response(
+        JSON.stringify({ 
+          error: apiError.message || "Video generation failed",
+          refunded: true,
+          creditsRefunded: creditCost
+        }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
   } catch (error: any) {
     console.error("Generate video error:", error);
     return new Response(
