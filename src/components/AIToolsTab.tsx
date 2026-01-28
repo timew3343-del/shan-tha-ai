@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Image, Video, Volume2, Crown, Settings, Wallet } from "lucide-react";
+import { Image, Video, Volume2, Crown, Wallet } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ImageTool } from "./tools/ImageTool";
 import { VideoTool } from "./tools/VideoTool";
@@ -30,13 +30,6 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
 
       {/* Quick Actions */}
       <div className="flex gap-2 animate-fade-up">
-        <button
-          onClick={() => navigate("/api-settings")}
-          className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-secondary/50 border border-border hover:bg-secondary transition-colors"
-        >
-          <Settings className="w-4 h-4 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">API ဆက်တင်</span>
-        </button>
         <button
           onClick={() => navigate("/top-up")}
           className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-primary/10 border border-primary/30 hover:bg-primary/20 transition-colors"
