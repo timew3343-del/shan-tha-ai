@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
+// User role types for RBAC
 type AppRole = "admin" | "moderator" | "user";
 
 export const useUserRole = (userId?: string) => {
