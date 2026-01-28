@@ -1,9 +1,8 @@
 import { useState, useRef } from "react";
-import { Volume2, Mic, Upload, Download, Loader2, Play, Pause, Languages } from "lucide-react";
+import { Volume2, Mic, Upload, Loader2, Play, Pause } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { useCredits } from "@/hooks/useCredits";
 import {
   Select,
   SelectContent,
@@ -38,7 +37,6 @@ const LANGUAGES = [
 
 export const SpeechTool = ({ userId }: SpeechToolProps) => {
   const { toast } = useToast();
-  const { credits, deductCredits } = useCredits(userId);
   
   // Text-to-Speech state
   const [ttsText, setTtsText] = useState("");
@@ -52,7 +50,6 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
   // Speech-to-Text state
   const [sttLanguage, setSttLanguage] = useState("my");
   const [transcribedText, setTranscribedText] = useState("");
-  const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -62,7 +59,6 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
     if ('speechSynthesis' in window) {
       const utterance = new SpeechSynthesisUtterance(text);
       
-      // Map language codes
       const langMap: Record<string, string> = {
         'my': 'my-MM',
         'en': 'en-US',
@@ -90,36 +86,58 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
       return;
     }
 
-    const geminiKey = localStorage.getItem("gemini_api_key");
-    if (!geminiKey || geminiKey.trim() === "") {
+    if (!userId) {
       toast({
-        title: "API Key မရှိပါ",
-        description: "အသံပြောင်းရန် Google Gemini API Key ထည့်သွင်းပါ",
+        title: "လော့ဂ်အင်လုပ်ပါ",
+        description: "အသံပြောင်းရန် အကောင့်ဝင်ပါ",
         variant: "destructive",
       });
       return;
     }
 
-    // Check and deduct credits
-    const success = await deductCredits(1, "အသံပြောင်းခြင်း");
-    if (!success) return;
-
     setIsGeneratingTTS(true);
     setGeneratedAudio(null);
 
     try {
-      // Use Web Speech API for immediate audio playback
-      speakText(ttsText);
-      
-      // Create a blob URL for download (using audio recording)
-      // For now, we'll create a simple audio indicator
-
-      // Mark as generated with a placeholder for the audio player
-      setGeneratedAudio("generated");
-      toast({
-        title: "အောင်မြင်ပါသည်",
-        description: "အသံဖတ်ပြနေပါသည်",
+      // Call the secure Edge Function - no API key passed
+      const { data, error } = await supabase.functions.invoke("text-to-speech", {
+        body: {
+          text: ttsText,
+          voice: selectedVoice,
+          language: ttsLanguage,
+        },
       });
+
+      if (error) {
+        throw new Error(error.message || "အသံပြောင်းရာတွင် အမှားရှိပါသည်");
+      }
+
+      if (data?.error) {
+        if (data.error === "Insufficient credits") {
+          toast({
+            title: "ခရက်ဒစ် မလုံလောက်ပါ",
+            description: `အသံပြောင်းရန် ${data.required} Credits လိုအပ်ပါသည်`,
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "အမှားရှိပါသည်",
+            description: data.error,
+            variant: "destructive",
+          });
+        }
+        return;
+      }
+
+      if (data?.useWebSpeech) {
+        // Use Web Speech API for immediate audio playback
+        speakText(ttsText);
+        setGeneratedAudio("generated");
+        toast({
+          title: "အောင်မြင်ပါသည်",
+          description: `အသံဖတ်ပြနေပါသည်။ ကျန် Credits: ${data.newBalance}`,
+        });
+      }
     } catch (error: any) {
       console.error("TTS error:", error);
       toast({
@@ -132,22 +150,10 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
     }
   };
 
-  const base64ToBlob = (base64: string, mimeType: string): Blob => {
-    const byteCharacters = atob(base64);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    return new Blob([byteArray], { type: mimeType });
-  };
-
   const handlePlayPause = () => {
     if (generatedAudio === "generated") {
-      // Use Web Speech API to replay
       speakText(ttsText);
       setIsPlaying(true);
-      // Check when speech ends
       const checkSpeaking = setInterval(() => {
         if (!window.speechSynthesis.speaking) {
           setIsPlaying(false);
@@ -169,13 +175,6 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
     setIsPlaying(false);
   };
 
-  const handleDownloadAudio = () => {
-    toast({
-      title: "သတိပြုရန်",
-      description: "Web Speech API သည် download ကို support မလုပ်ပါ။ Recording app သုံးပါ။",
-    });
-  };
-
   const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -193,19 +192,14 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
       return;
     }
 
-    const geminiKey = localStorage.getItem("gemini_api_key");
-    if (!geminiKey || geminiKey.trim() === "") {
+    if (!userId) {
       toast({
-        title: "API Key မရှိပါ",
-        description: "စာသားပြောင်းရန် Google Gemini API Key ထည့်သွင်းပါ",
+        title: "လော့ဂ်အင်လုပ်ပါ",
+        description: "စာသားပြောင်းရန် အကောင့်ဝင်ပါ",
         variant: "destructive",
       });
       return;
     }
-
-    // Check and deduct credits
-    const success = await deductCredits(1, "စာသားပြောင်းခြင်း");
-    if (!success) return;
 
     setIsTranscribing(true);
     setTranscribedText("");
@@ -216,21 +210,47 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
       reader.onload = async (event) => {
         const base64Audio = (event.target?.result as string).split(",")[1];
 
+        // Call the secure Edge Function - no API key passed
         const { data, error } = await supabase.functions.invoke("speech-to-text", {
           body: {
             audioBase64: base64Audio,
             language: sttLanguage,
-            apiKey: geminiKey,
           },
         });
 
-        if (error) throw error;
+        if (error) {
+          throw new Error(error.message || "စာသားပြောင်းရာတွင် အမှားရှိပါသည်");
+        }
+
+        if (data?.error) {
+          if (data.error === "Insufficient credits") {
+            toast({
+              title: "ခရက်ဒစ် မလုံလောက်ပါ",
+              description: `စာသားပြောင်းရန် ${data.required} Credits လိုအပ်ပါသည်`,
+              variant: "destructive",
+            });
+          } else if (data.error === "Speech service not configured") {
+            toast({
+              title: "ဝန်ဆောင်မှု မပြင်ဆင်ရသေးပါ",
+              description: "Admin မှ API Key ထည့်သွင်းရန် လိုအပ်ပါသည်",
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "အမှားရှိပါသည်",
+              description: data.error,
+              variant: "destructive",
+            });
+          }
+          setIsTranscribing(false);
+          return;
+        }
 
         if (data?.text) {
           setTranscribedText(data.text);
           toast({
             title: "အောင်မြင်ပါသည်",
-            description: "စာသားပြောင်းပြီးပါပြီ",
+            description: `စာသားပြောင်းပြီးပါပြီ။ ကျန် Credits: ${data.newBalance}`,
           });
         }
         setIsTranscribing(false);
@@ -263,7 +283,6 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
 
         {/* Text-to-Speech Tab */}
         <TabsContent value="tts" className="space-y-4">
-          {/* Text Input */}
           <div className="gradient-card rounded-2xl p-4 border border-primary/20">
             <label className="block text-sm font-medium text-primary mb-2">
               စာသားထည့်ပါ
@@ -276,7 +295,6 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
             />
           </div>
 
-          {/* Voice & Language Selection */}
           <div className="grid grid-cols-2 gap-3">
             <div className="gradient-card rounded-xl p-3 border border-primary/20">
               <label className="block text-xs font-medium text-primary mb-2">
@@ -320,7 +338,6 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
             </div>
           </div>
 
-          {/* Generate Button */}
           <Button
             onClick={handleGenerateTTS}
             disabled={isGeneratingTTS || !ttsText.trim()}
@@ -339,7 +356,6 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
             )}
           </Button>
 
-          {/* Audio Player */}
           {generatedAudio && (
             <div className="gradient-card rounded-2xl p-4 border border-success/30 animate-scale-in">
               <div className="flex items-center justify-between mb-3">
@@ -384,7 +400,6 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
 
         {/* Speech-to-Text Tab */}
         <TabsContent value="stt" className="space-y-4">
-          {/* Audio Upload */}
           <div className="gradient-card rounded-2xl p-4 border border-primary/20">
             <label className="block text-sm font-medium text-primary mb-3">
               အသံဖိုင်ထည့်ပါ
@@ -409,7 +424,6 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
             />
           </div>
 
-          {/* Language Selection */}
           <div className="gradient-card rounded-xl p-3 border border-primary/20">
             <label className="block text-xs font-medium text-primary mb-2">
               အသံဘာသာစကား
@@ -428,7 +442,6 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
             </Select>
           </div>
 
-          {/* Transcribe Button */}
           <Button
             onClick={handleTranscribe}
             disabled={isTranscribing || !audioFile}
@@ -447,7 +460,6 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
             )}
           </Button>
 
-          {/* Transcribed Text */}
           {transcribedText && (
             <div className="gradient-card rounded-2xl p-4 border border-success/30 animate-scale-in">
               <h3 className="text-sm font-semibold text-primary mb-2">ရလဒ်</h3>

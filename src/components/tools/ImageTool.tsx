@@ -3,7 +3,7 @@ import { Image, Plus, Sparkles, Download, Loader2, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { useCredits } from "@/hooks/useCredits";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ImageToolProps {
   userId?: string;
@@ -11,7 +11,6 @@ interface ImageToolProps {
 
 export const ImageTool = ({ userId }: ImageToolProps) => {
   const { toast } = useToast();
-  const { credits, deductCredits } = useCredits(userId);
   const [prompt, setPrompt] = useState("");
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
@@ -46,56 +45,72 @@ export const ImageTool = ({ userId }: ImageToolProps) => {
       return;
     }
 
-    const stabilityKey = localStorage.getItem("stability_api_key");
-    if (!stabilityKey || stabilityKey.trim() === "") {
+    if (!userId) {
       toast({
-        title: "API Key မရှိပါ",
-        description: "ပုံထုတ်ရန် Stability AI API Key ထည့်သွင်းပါ",
+        title: "လော့ဂ်အင်လုပ်ပါ",
+        description: "ပုံထုတ်ရန် အကောင့်ဝင်ပါ",
         variant: "destructive",
       });
       return;
     }
 
-    // Check and deduct credits
-    const success = await deductCredits(2, "ပုံဆွဲခြင်း");
-    if (!success) return;
-
     setIsLoading(true);
     setGeneratedImage(null);
 
     try {
-      // Call Stability AI API
-      const response = await fetch(
-        "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            Authorization: `Bearer ${stabilityKey}`,
-          },
-          body: JSON.stringify({
-            text_prompts: [{ text: prompt, weight: 1 }],
-            cfg_scale: 7,
-            height: 1024,
-            width: 1024,
-            steps: 30,
-            samples: 1,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "ပုံထုတ်ရာတွင် အမှားရှိပါသည်");
+      // Get current session for authentication
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.access_token) {
+        toast({
+          title: "လော့ဂ်အင်လုပ်ပါ",
+          description: "ပုံထုတ်ရန် အကောင့်ဝင်ပါ",
+          variant: "destructive",
+        });
+        return;
       }
 
-      const data = await response.json();
-      if (data.artifacts && data.artifacts[0]) {
-        setGeneratedImage(`data:image/png;base64,${data.artifacts[0].base64}`);
+      // Call the secure Edge Function
+      const { data, error } = await supabase.functions.invoke("generate-image", {
+        body: { 
+          prompt, 
+          referenceImage 
+        },
+      });
+
+      if (error) {
+        throw new Error(error.message || "ပုံထုတ်ရာတွင် အမှားရှိပါသည်");
+      }
+
+      if (data?.error) {
+        // Handle specific error cases
+        if (data.error === "Insufficient credits") {
+          toast({
+            title: "ခရက်ဒစ် မလုံလောက်ပါ",
+            description: `ပုံထုတ်ရန် ${data.required} Credits လိုအပ်ပါသည်။ ထပ်မံဖြည့်သွင်းပါ။`,
+            variant: "destructive",
+          });
+        } else if (data.error === "Image generation service not configured") {
+          toast({
+            title: "ဝန်ဆောင်မှု မပြင်ဆင်ရသေးပါ",
+            description: "Admin မှ API Key ထည့်သွင်းရန် လိုအပ်ပါသည်",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "အမှားရှိပါသည်",
+            description: data.error,
+            variant: "destructive",
+          });
+        }
+        return;
+      }
+
+      if (data?.success && data?.image) {
+        setGeneratedImage(data.image);
         toast({
           title: "အောင်မြင်ပါသည်",
-          description: "ပုံထုတ်ပြီးပါပြီ",
+          description: `ပုံထုတ်ပြီးပါပြီ။ ကျန် Credits: ${data.newBalance}`,
         });
       }
     } catch (error: any) {

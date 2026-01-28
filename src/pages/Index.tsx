@@ -9,9 +9,10 @@ import { CreditDisplay } from "@/components/CreditDisplay";
 import { AIToolsTab } from "@/components/AIToolsTab";
 import { DosDontsTab } from "@/components/DosDontsTab";
 import { CourseTab } from "@/components/CourseTab";
-import { LogOut, User as UserIcon, Settings, HelpCircle, Shield } from "lucide-react";
+import { LogOut, User as UserIcon, HelpCircle, Shield } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useCredits } from "@/hooks/useCredits";
+import { useUserRole } from "@/hooks/useUserRole";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,33 +26,22 @@ const Index = () => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { credits, isLoading: creditsLoading } = useCredits(user?.id);
+  const { isAdmin } = useUserRole(user?.id);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);
-      
-      // Check admin status
-      if (session?.user) {
-        const adminEmails = ["timew3343@gmail.com", "youtrubezarni@gmail.com"];
-        setIsAdmin(adminEmails.includes(session.user.email || ""));
-      }
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);
-      
-      if (session?.user) {
-        const adminEmails = ["timew3343@gmail.com", "youtrubezarni@gmail.com"];
-        setIsAdmin(adminEmails.includes(session.user.email || ""));
-      }
     });
 
     return () => subscription.unsubscribe();
