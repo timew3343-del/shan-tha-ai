@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Upload, CreditCard, CheckCircle, X, ZoomIn, Sparkles, MessageCircle, Send, Clock, Package } from "lucide-react";
+import { ArrowLeft, Upload, CreditCard, CheckCircle, X, ZoomIn, Sparkles, MessageCircle, Send, Clock, Package, Building } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,14 +13,23 @@ interface PricingPackage {
   credits: number;
   price: number;
   priceDisplay: string;
+  currency: "MMK" | "THB";
   isBestValue?: boolean;
 }
 
-const packages: PricingPackage[] = [
-  { id: "starter", name: "Starter", credits: 300, price: 20000, priceDisplay: "၂၀,၀၀၀ MMK" },
-  { id: "professional", name: "Professional", credits: 700, price: 40000, priceDisplay: "၄၀,၀၀၀ MMK", isBestValue: true },
-  { id: "enterprise", name: "Enterprise", credits: 2000, price: 100000, priceDisplay: "၁၀၀,၀၀၀ MMK" },
+const mmkPackages: PricingPackage[] = [
+  { id: "starter", name: "Starter", credits: 300, price: 20000, priceDisplay: "၂၀,၀၀၀ MMK", currency: "MMK" },
+  { id: "professional", name: "Professional", credits: 700, price: 40000, priceDisplay: "၄၀,၀၀၀ MMK", currency: "MMK", isBestValue: true },
+  { id: "enterprise", name: "Enterprise", credits: 2000, price: 100000, priceDisplay: "၁၀၀,၀၀၀ MMK", currency: "MMK" },
 ];
+
+const thbPackages: PricingPackage[] = [
+  { id: "starter-thb", name: "Starter", credits: 300, price: 250, priceDisplay: "฿250 THB", currency: "THB" },
+  { id: "professional-thb", name: "Professional", credits: 700, price: 500, priceDisplay: "฿500 THB", currency: "THB", isBestValue: true },
+  { id: "enterprise-thb", name: "Enterprise", credits: 2000, price: 1200, priceDisplay: "฿1,200 THB", currency: "THB" },
+];
+
+type PaymentMethod = "kbzpay" | "wavepay" | "thai_bank";
 
 export const TopUp = () => {
   const navigate = useNavigate();
@@ -32,6 +41,47 @@ export const TopUp = () => {
   const [showSuccess, setShowSuccess] = useState(false);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [isFirstPurchase, setIsFirstPurchase] = useState(true);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("kbzpay");
+
+  // SCB Bank details from settings
+  const [scbAccount, setScbAccount] = useState("399-459002-6");
+  const [scbNameTh, setScbNameTh] = useState("เงินฝากออมทรัพย์ (ไม่มีสมุดคู่ฝาก)");
+  const [scbNameEn, setScbNameEn] = useState("ATASIT KANTHA");
+
+  // Show Thai packages only when Thai Bank is selected
+  const packages = paymentMethod === "thai_bank" ? thbPackages : mmkPackages;
+
+  useEffect(() => {
+    // Load SCB bank settings
+    const loadBankSettings = async () => {
+      try {
+        const { data } = await supabase
+          .from("app_settings")
+          .select("key, value")
+          .in("key", ["bank_scb_account", "bank_scb_name_th", "bank_scb_name_en"]);
+
+        if (data) {
+          data.forEach((setting) => {
+            switch (setting.key) {
+              case "bank_scb_account":
+                setScbAccount(setting.value || "399-459002-6");
+                break;
+              case "bank_scb_name_th":
+                setScbNameTh(setting.value || "เงินฝากออมทรัพย์ (ไม่มีสมุดคู่ฝาก)");
+                break;
+              case "bank_scb_name_en":
+                setScbNameEn(setting.value || "ATASIT KANTHA");
+                break;
+            }
+          });
+        }
+      } catch (error) {
+        console.error("Error loading bank settings:", error);
+      }
+    };
+
+    loadBankSettings();
+  }, []);
 
   useEffect(() => {
     // Check if user has any completed transactions
@@ -51,6 +101,11 @@ export const TopUp = () => {
 
     checkFirstPurchase();
   }, []);
+
+  // Reset selected package when payment method changes
+  useEffect(() => {
+    setSelectedPackage(null);
+  }, [paymentMethod]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -93,9 +148,9 @@ export const TopUp = () => {
         .from("transactions")
         .insert({
           user_id: user.id,
-          amount_mmk: selectedPackage.price,
+          amount_mmk: selectedPackage.currency === "MMK" ? selectedPackage.price : 0,
           credits: selectedPackage.credits,
-          package_name: selectedPackage.name,
+          package_name: `${selectedPackage.name} (${selectedPackage.currency})`,
           status: "pending",
           is_first_purchase: isFirstPurchase,
           bonus_credits: bonusCredits,
@@ -192,11 +247,144 @@ export const TopUp = () => {
           </div>
         </div>
 
+        {/* Payment Methods */}
+        <div className="space-y-3 animate-fade-up" style={{ animationDelay: "0.1s" }}>
+          <h3 className="font-semibold text-foreground text-sm">ငွေပေးချေနည်း ရွေးချယ်ပါ</h3>
+
+          <div className="grid grid-cols-3 gap-2">
+            {/* KBZPay */}
+            <button
+              onClick={() => setPaymentMethod("kbzpay")}
+              className={`gradient-card rounded-xl p-3 border transition-all ${
+                paymentMethod === "kbzpay"
+                  ? "border-primary shadow-gold"
+                  : "border-border/30 hover:border-primary/30"
+              }`}
+            >
+              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center mx-auto mb-2">
+                <span className="text-white text-xs font-bold">K</span>
+              </div>
+              <p className="text-xs text-foreground text-center">KBZPay</p>
+            </button>
+
+            {/* WaveMoney */}
+            <button
+              onClick={() => setPaymentMethod("wavepay")}
+              className={`gradient-card rounded-xl p-3 border transition-all ${
+                paymentMethod === "wavepay"
+                  ? "border-primary shadow-gold"
+                  : "border-border/30 hover:border-primary/30"
+              }`}
+            >
+              <div className="w-8 h-8 bg-yellow-500 rounded-lg flex items-center justify-center mx-auto mb-2">
+                <span className="text-black text-xs font-bold">W</span>
+              </div>
+              <p className="text-xs text-foreground text-center">WaveMoney</p>
+            </button>
+
+            {/* Thai Bank */}
+            <button
+              onClick={() => setPaymentMethod("thai_bank")}
+              className={`gradient-card rounded-xl p-3 border transition-all ${
+                paymentMethod === "thai_bank"
+                  ? "border-primary shadow-gold"
+                  : "border-border/30 hover:border-primary/30"
+              }`}
+            >
+              <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center mx-auto mb-2">
+                <Building className="w-4 h-4 text-white" />
+              </div>
+              <p className="text-xs text-foreground text-center">Thai Bank</p>
+            </button>
+          </div>
+
+          {/* Payment Details Based on Selected Method */}
+          {paymentMethod === "kbzpay" && (
+            <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+              <div className="flex items-start gap-4">
+                <button 
+                  onClick={() => setZoomedImage(kbzpayQr)}
+                  className="relative flex-shrink-0 group"
+                >
+                  <img 
+                    src={kbzpayQr} 
+                    alt="KBZPay QR" 
+                    className="w-20 h-20 rounded-xl object-cover border-2 border-blue-500"
+                  />
+                  <div className="absolute inset-0 bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <ZoomIn className="w-5 h-5 text-white" />
+                  </div>
+                </button>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-6 h-6 bg-blue-600 rounded-lg flex items-center justify-center">
+                      <span className="text-white text-xs font-bold">K</span>
+                    </div>
+                    <span className="font-semibold text-foreground text-sm">KBZPay</span>
+                  </div>
+                  <p className="text-sm text-foreground">Zarni Pyae Phyo Aung</p>
+                  <p className="text-primary font-semibold">09771048901</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {paymentMethod === "wavepay" && (
+            <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+              <div className="flex items-start gap-4">
+                <button 
+                  onClick={() => setZoomedImage(wavepayQr)}
+                  className="relative flex-shrink-0 group"
+                >
+                  <img 
+                    src={wavepayQr} 
+                    alt="WavePay QR" 
+                    className="w-20 h-20 rounded-xl object-cover border-2 border-yellow-500"
+                  />
+                  <div className="absolute inset-0 bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <ZoomIn className="w-5 h-5 text-white" />
+                  </div>
+                </button>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-6 h-6 bg-yellow-500 rounded-lg flex items-center justify-center">
+                      <span className="text-black text-xs font-bold">W</span>
+                    </div>
+                    <span className="font-semibold text-foreground text-sm">WaveMoney</span>
+                  </div>
+                  <p className="text-sm text-foreground">Zarni Pyae Phyo Aung</p>
+                  <p className="text-primary font-semibold">09771048901</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {paymentMethod === "thai_bank" && (
+            <div className="gradient-card rounded-2xl p-4 border border-purple-500/30">
+              <div className="flex items-start gap-4">
+                <div className="w-16 h-16 bg-purple-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Building className="w-8 h-8 text-white" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-semibold text-foreground text-sm">SCB Bank (Thailand)</span>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Account: <span className="text-foreground font-medium">{scbAccount}</span></p>
+                    <p className="text-sm text-muted-foreground">Name (TH): <span className="text-foreground font-medium">{scbNameTh}</span></p>
+                    <p className="text-sm text-muted-foreground">Name (EN): <span className="text-foreground font-medium">{scbNameEn}</span></p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Pricing Packages */}
         <div className="space-y-3 animate-fade-up" style={{ animationDelay: "0.05s" }}>
           <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
             <Package className="w-4 h-4 text-primary" />
-            ဈေးနှုန်းများ
+            ဈေးနှုန်းများ {paymentMethod === "thai_bank" && "(Thai Baht)"}
           </h3>
           
           {packages.map((pkg) => (
@@ -231,82 +419,6 @@ export const TopUp = () => {
               </div>
             </button>
           ))}
-        </div>
-
-        {/* Payment Methods */}
-        <div className="space-y-3 animate-fade-up" style={{ animationDelay: "0.1s" }}>
-          <h3 className="font-semibold text-foreground text-sm">ငွေပေးချေနည်း</h3>
-
-          {/* KBZPay */}
-          <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-            <div className="flex items-start gap-4">
-              <button 
-                onClick={() => setZoomedImage(kbzpayQr)}
-                className="relative flex-shrink-0 group"
-              >
-                <img 
-                  src={kbzpayQr} 
-                  alt="KBZPay QR" 
-                  className="w-20 h-20 rounded-xl object-cover border-2 border-blue-500"
-                />
-                <div className="absolute inset-0 bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <ZoomIn className="w-5 h-5 text-white" />
-                </div>
-              </button>
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-6 h-6 bg-blue-600 rounded-lg flex items-center justify-center">
-                    <span className="text-white text-xs font-bold">K</span>
-                  </div>
-                  <span className="font-semibold text-foreground text-sm">KBZPay</span>
-                </div>
-                <p className="text-sm text-foreground">Zarni Pyae Phyo Aung</p>
-                <p className="text-primary font-semibold">09771048901</p>
-              </div>
-            </div>
-          </div>
-
-          {/* WaveMoney */}
-          <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-            <div className="flex items-start gap-4">
-              <button 
-                onClick={() => setZoomedImage(wavepayQr)}
-                className="relative flex-shrink-0 group"
-              >
-                <img 
-                  src={wavepayQr} 
-                  alt="WavePay QR" 
-                  className="w-20 h-20 rounded-xl object-cover border-2 border-yellow-500"
-                />
-                <div className="absolute inset-0 bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <ZoomIn className="w-5 h-5 text-white" />
-                </div>
-              </button>
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-6 h-6 bg-yellow-500 rounded-lg flex items-center justify-center">
-                    <span className="text-black text-xs font-bold">W</span>
-                  </div>
-                  <span className="font-semibold text-foreground text-sm">WaveMoney</span>
-                </div>
-                <p className="text-sm text-foreground">Zarni Pyae Phyo Aung</p>
-                <p className="text-primary font-semibold">09771048901</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Thai Bank Coming Soon */}
-          <div className="gradient-card rounded-2xl p-4 border border-border/30 opacity-60">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-muted rounded-xl flex items-center justify-center">
-                <CreditCard className="w-6 h-6 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="font-semibold text-muted-foreground text-sm">Thai Bank</p>
-                <p className="text-xs text-muted-foreground">မကြာမီ လာမည်...</p>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Upload Section */}
@@ -420,23 +532,25 @@ export const TopUp = () => {
         </div>
       )}
 
-      {/* Zoom Modal */}
+      {/* Image Zoom Modal */}
       {zoomedImage && (
         <div 
           className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
           onClick={() => setZoomedImage(null)}
         >
-          <button
-            onClick={() => setZoomedImage(null)}
-            className="absolute top-4 right-4 p-2 bg-white/20 rounded-full"
-          >
-            <X className="w-6 h-6 text-white" />
-          </button>
-          <img 
-            src={zoomedImage} 
-            alt="QR Code" 
-            className="max-w-full max-h-[80vh] rounded-2xl"
-          />
+          <div className="relative max-w-md w-full">
+            <img 
+              src={zoomedImage} 
+              alt="QR Code" 
+              className="w-full rounded-2xl"
+            />
+            <button
+              onClick={() => setZoomedImage(null)}
+              className="absolute top-4 right-4 p-2 bg-black/50 rounded-full"
+            >
+              <X className="w-6 h-6 text-white" />
+            </button>
+          </div>
         </div>
       )}
     </div>
