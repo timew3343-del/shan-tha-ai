@@ -83,22 +83,15 @@ serve(async (req) => {
       );
     }
 
-    // Fetch Stability AI API key from app_settings (server-side only)
-    const { data: settings, error: settingsError } = await supabaseAdmin
-      .from("app_settings")
-      .select("value")
-      .eq("key", "stability_api_key")
-      .single();
-
-    if (settingsError || !settings?.value) {
-      console.error("API key not configured:", settingsError);
+    // Get Lovable API key (auto-provisioned)
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      console.error("LOVABLE_API_KEY not configured");
       return new Response(
         JSON.stringify({ error: "Image generation service not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    const stabilityKey = settings.value;
 
     // Parse request body
     const { prompt, referenceImage }: GenerateImageRequest = await req.json();
@@ -112,30 +105,57 @@ serve(async (req) => {
 
     console.log(`Generating image for prompt: "${prompt.substring(0, 50)}..."`);
 
-    // Call Stability AI API server-side
-    const response = await fetch(
-      "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: `Bearer ${stabilityKey}`,
-        },
-        body: JSON.stringify({
-          text_prompts: [{ text: prompt, weight: 1 }],
-          cfg_scale: 7,
-          height: 1024,
-          width: 1024,
-          steps: 30,
-          samples: 1,
-        }),
-      }
-    );
+    // Build messages array for Lovable AI
+    const messages: any[] = [];
+    
+    if (referenceImage) {
+      // If reference image provided, include it for image editing
+      messages.push({
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          { type: "image_url", image_url: { url: referenceImage } }
+        ]
+      });
+    } else {
+      // Text-to-image generation
+      messages.push({
+        role: "user",
+        content: `Generate an image: ${prompt}`
+      });
+    }
+
+    // Call Lovable AI Gateway with image generation model
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-image",
+        messages: messages,
+        modalities: ["image", "text"]
+      }),
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Stability AI error:", errorText);
+      console.error("Lovable AI error:", response.status, errorText);
+      
+      if (response.status === 429) {
+        return new Response(
+          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      if (response.status === 402) {
+        return new Response(
+          JSON.stringify({ error: "AI service quota exceeded." }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
       return new Response(
         JSON.stringify({ error: "Image generation failed" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -144,7 +164,11 @@ serve(async (req) => {
 
     const data = await response.json();
     
-    if (!data.artifacts || !data.artifacts[0]) {
+    // Extract generated image from response
+    const generatedImage = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    
+    if (!generatedImage) {
+      console.error("No image in response:", JSON.stringify(data));
       return new Response(
         JSON.stringify({ error: "No image generated" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -167,7 +191,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        image: `data:image/png;base64,${data.artifacts[0].base64}`,
+        image: generatedImage,
         creditsUsed: creditCost,
         newBalance: profile.credit_balance - creditCost,
       }),
