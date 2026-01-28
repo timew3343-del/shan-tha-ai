@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Image, Video, Volume2, Loader2, Sparkles, Crown, Settings, Wallet } from "lucide-react";
-import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
-import { useCredits } from "@/hooks/useCredits";
+import { Image, Video, Volume2, Crown, Settings, Wallet } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ImageTool } from "./tools/ImageTool";
+import { VideoTool } from "./tools/VideoTool";
+import { SpeechTool } from "./tools/SpeechTool";
 
 interface AIToolsTabProps {
   userId?: string;
@@ -11,111 +12,18 @@ interface AIToolsTabProps {
 
 export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const navigate = useNavigate();
-  const { toast } = useToast();
-  const [inputText, setInputText] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [activeAction, setActiveAction] = useState<string | null>(null);
-  const [result, setResult] = useState<{ type: string; content: string } | null>(null);
-  const { credits, deductCredits } = useCredits(userId);
-
-  const getCreditCost = (action: string): number => {
-    switch (action) {
-      case "image": return 2;
-      case "video": return 5;
-      case "speech": return 1;
-      default: return 0;
-    }
-  };
-
-  const handleAction = async (action: string) => {
-    if (!inputText.trim()) return;
-    
-    // Check for API keys
-    const geminiKey = localStorage.getItem("gemini_api_key");
-    const stabilityKey = localStorage.getItem("stability_api_key");
-    
-    if (action === "image" && !stabilityKey) {
-      toast({
-        title: "API Key မရှိပါ",
-        description: "ပုံထုတ်ရန် Stability AI API Key ထည့်သွင်းပါ",
-        variant: "destructive",
-      });
-      navigate("/api-settings");
-      return;
-    }
-    
-    if (action === "speech" && !geminiKey) {
-      toast({
-        title: "API Key မရှိပါ",
-        description: "အသံပြောင်းရန် Google Gemini API Key ထည့်သွင်းပါ",
-        variant: "destructive",
-      });
-      navigate("/api-settings");
-      return;
-    }
-
-    const creditCost = getCreditCost(action);
-    const actionName = action === "image" ? "ပုံဆွဲခြင်း" : action === "video" ? "ဗီဒီယို" : "အသံပြောင်းခြင်း";
-
-    // Check and deduct credits
-    const success = await deductCredits(creditCost, actionName);
-    if (!success) return;
-    
-    setIsLoading(true);
-    setActiveAction(action);
-    setResult(null);
-    
-    // Simulate AI processing
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    
-    setResult({
-      type: action,
-      content: `${action === "image" ? "🖼️ ပုံထုတ်ပြီးပါပြီ" : action === "video" ? "🎬 ဗီဒီယိုထုတ်ပြီးပါပြီ" : "🔊 အသံပြောင်းပြီးပါပြီ"}: "${inputText.substring(0, 50)}${inputText.length > 50 ? "..." : ""}"`,
-    });
-
-    toast({
-      title: "အောင်မြင်ပါသည်",
-      description: `${creditCost} Credits အသုံးပြုပြီးပါပြီ။ ကျန်ရှိ ${credits - creditCost} Credits`,
-    });
-    
-    setIsLoading(false);
-    setActiveAction(null);
-  };
-
-  const actionButtons = [
-    {
-      id: "image",
-      label: "ပုံထုတ်မည်",
-      sublabel: "2 Credits",
-      icon: Image,
-      gradient: "btn-gradient-blue",
-    },
-    {
-      id: "video",
-      label: "ဗီဒီယိုလုပ်မည်",
-      sublabel: "5 Credits",
-      icon: Video,
-      gradient: "btn-gradient-red",
-    },
-    {
-      id: "speech",
-      label: "အသံပြောင်းမည်",
-      sublabel: "1 Credit",
-      icon: Volume2,
-      gradient: "btn-gradient-green",
-    },
-  ];
+  const [activeTab, setActiveTab] = useState("image");
 
   return (
     <div className="flex flex-col gap-4 p-4 pb-24">
       {/* Header */}
-      <div className="text-center pt-4">
-        <div className="inline-flex items-center gap-2 mb-2">
+      <div className="text-center pt-2">
+        <div className="inline-flex items-center gap-2 mb-1">
           <Crown className="w-5 h-5 text-primary animate-pulse-soft" />
           <h1 className="text-xl font-bold text-glow-gold text-primary">Myanmar AI</h1>
           <Crown className="w-5 h-5 text-primary animate-pulse-soft" />
         </div>
-        <p className="text-muted-foreground text-sm">
+        <p className="text-muted-foreground text-xs">
           သင့်စိတ်ကူးကို AI ဖြင့် အကောင်အထည်ဖော်ပါ
         </p>
       </div>
@@ -124,82 +32,63 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
       <div className="flex gap-2 animate-fade-up">
         <button
           onClick={() => navigate("/api-settings")}
-          className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-secondary/50 border border-border hover:bg-secondary transition-colors"
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-secondary/50 border border-border hover:bg-secondary transition-colors"
         >
           <Settings className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm text-muted-foreground">API ဆက်တင်</span>
+          <span className="text-xs text-muted-foreground">API ဆက်တင်</span>
         </button>
         <button
           onClick={() => navigate("/top-up")}
-          className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-primary/10 border border-primary/30 hover:bg-primary/20 transition-colors"
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-primary/10 border border-primary/30 hover:bg-primary/20 transition-colors"
         >
           <Wallet className="w-4 h-4 text-primary" />
-          <span className="text-sm text-primary font-medium">ငွေဖြည့်မည်</span>
+          <span className="text-xs text-primary font-medium">ငွေဖြည့်မည်</span>
         </button>
       </div>
 
-      {/* Text Input */}
-      <div className="gradient-card rounded-2xl p-4 border border-primary/20 shadow-gold animate-fade-up" style={{ animationDelay: "0.05s" }}>
-        <label className="block text-sm font-medium text-primary mb-2">
-          စာသားထည့်ပါ
-        </label>
-        <Textarea
-          placeholder="ဥပမာ - နေဝင်ချိန် ပင်လယ်ကမ်းခြေ ပုံဆွဲပေးပါ..."
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          className="min-h-[100px] bg-background/50 border-primary/30 rounded-xl resize-none text-foreground placeholder:text-muted-foreground/50 focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm"
-        />
-        <div className="text-right mt-2">
-          <span className="text-xs text-muted-foreground">
-            {inputText.length} စာလုံး
-          </span>
-        </div>
-      </div>
+      {/* Tool Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full animate-fade-up">
+        <TabsList className="grid w-full grid-cols-3 h-auto p-1 bg-secondary/50 rounded-xl">
+          <TabsTrigger 
+            value="image" 
+            className="flex flex-col items-center gap-1 py-3 px-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-lg"
+          >
+            <Image className="w-5 h-5" />
+            <span className="text-[10px] font-medium">ပုံထုတ်ရန်</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="video" 
+            className="flex flex-col items-center gap-1 py-3 px-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-lg"
+          >
+            <Video className="w-5 h-5" />
+            <span className="text-[10px] font-medium">ဗီဒီယိုထုတ်ရန်</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="speech" 
+            className="flex flex-col items-center gap-1 py-3 px-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-lg"
+          >
+            <Volume2 className="w-5 h-5" />
+            <span className="text-[10px] font-medium leading-tight">အသံ/စာ</span>
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Action Buttons */}
-      <div className="grid grid-cols-1 gap-3 animate-fade-up" style={{ animationDelay: "0.1s" }}>
-        {actionButtons.map((btn) => {
-          const Icon = btn.icon;
-          const isActive = activeAction === btn.id;
-          return (
-            <button
-              key={btn.id}
-              onClick={() => handleAction(btn.id)}
-              disabled={isLoading || !inputText.trim()}
-              className={`${btn.gradient} flex items-center justify-between py-4 px-5 rounded-2xl font-semibold text-base transition-all duration-300 hover:scale-[1.02] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 text-foreground shadow-lg`}
-            >
-              <div className="flex items-center gap-2">
-                {isActive ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <Icon className="w-5 h-5" />
-                )}
-                <span>{btn.label}</span>
-              </div>
-              <span className="text-xs opacity-80">{btn.sublabel}</span>
-            </button>
-          );
-        })}
-      </div>
+        <div className="mt-4">
+          <TabsContent value="image" className="mt-0">
+            <ImageTool userId={userId} />
+          </TabsContent>
 
-      {/* Result Display */}
-      {result && (
-        <div className="gradient-card rounded-2xl p-4 border border-primary/30 shadow-gold animate-scale-in">
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="w-4 h-4 text-primary" />
-            <h3 className="text-base font-semibold text-primary">ရလဒ်</h3>
-          </div>
-          <div className="bg-background/50 rounded-xl p-3 border border-border">
-            <p className="text-foreground text-sm">{result.content}</p>
-          </div>
-          <p className="text-xs text-muted-foreground mt-2 text-center">
-            AI မှ ထုတ်လုပ်ထားသော ရလဒ်ဖြစ်ပါသည်
-          </p>
+          <TabsContent value="video" className="mt-0">
+            <VideoTool userId={userId} />
+          </TabsContent>
+
+          <TabsContent value="speech" className="mt-0">
+            <SpeechTool userId={userId} />
+          </TabsContent>
         </div>
-      )}
+      </Tabs>
 
       {/* Info Card */}
-      <div className="gradient-card rounded-2xl p-3 border border-primary/20 animate-fade-up" style={{ animationDelay: "0.15s" }}>
+      <div className="gradient-card rounded-2xl p-3 border border-primary/20 animate-fade-up mt-2">
         <h3 className="text-sm font-semibold text-primary mb-1">💡 အကြံပြုချက်</h3>
         <p className="text-xs text-muted-foreground leading-relaxed">
           အကောင်းဆုံး ရလဒ်ရရှိရန် အသေးစိတ် ဖော်ပြချက်များ ထည့်သွင်းပါ။ ဥပမာ - အရောင်၊ ပုံစံ၊ ခံစားချက် စသည်တို့ ပါဝင်စေပါ။
