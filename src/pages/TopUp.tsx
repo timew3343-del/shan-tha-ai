@@ -261,7 +261,8 @@ export const TopUp = () => {
                   : "border-border/30 hover:border-primary/30"
               }`}
             >
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center mx-auto mb-2">
+              <div className="text-lg mb-1">🇲🇲</div>
+              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center mx-auto mb-1">
                 <span className="text-white text-xs font-bold">K</span>
               </div>
               <p className="text-xs text-foreground text-center">KBZPay</p>
@@ -276,7 +277,8 @@ export const TopUp = () => {
                   : "border-border/30 hover:border-primary/30"
               }`}
             >
-              <div className="w-8 h-8 bg-yellow-500 rounded-lg flex items-center justify-center mx-auto mb-2">
+              <div className="text-lg mb-1">🇲🇲</div>
+              <div className="w-8 h-8 bg-yellow-500 rounded-lg flex items-center justify-center mx-auto mb-1">
                 <span className="text-black text-xs font-bold">W</span>
               </div>
               <p className="text-xs text-foreground text-center">WaveMoney</p>
@@ -291,7 +293,8 @@ export const TopUp = () => {
                   : "border-border/30 hover:border-primary/30"
               }`}
             >
-              <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center mx-auto mb-2">
+              <div className="text-lg mb-1">🇹🇭</div>
+              <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center mx-auto mb-1">
                 <Building className="w-4 h-4 text-white" />
               </div>
               <p className="text-xs text-foreground text-center">Thai Bank</p>

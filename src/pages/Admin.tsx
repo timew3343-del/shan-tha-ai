@@ -4,7 +4,7 @@ import {
   ArrowLeft, Users, CreditCard, CheckCircle, XCircle, Clock, 
   BarChart3, Download, Settings, Activity, Sun, Moon, 
   Bell, TrendingUp, DollarSign, Image, Video, Volume2,
-  Save, Key, Building
+  Save, Key, Building, Plus, Trash2, Wallet, CreditCard as CardIcon
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,15 @@ interface PricingPackage {
   price: number;
 }
 
+interface PaymentMethod {
+  id: string;
+  type: "pay" | "bank";
+  name: string;
+  number: string;
+  holder: string;
+  country?: string;
+}
+
 export const Admin = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -58,11 +67,16 @@ export const Admin = () => {
   const [stabilityApiKey, setStabilityApiKey] = useState("");
   const [isSavingApiKeys, setIsSavingApiKeys] = useState(false);
 
-  // Bank Details state
-  const [bankScbAccount, setBankScbAccount] = useState("399-459002-6");
-  const [bankScbNameTh, setBankScbNameTh] = useState("เงินฝากออมทรัพย์ (ไม่มีสมุดคู่ฝาก)");
-  const [bankScbNameEn, setBankScbNameEn] = useState("ATASIT KANTHA");
-  const [isSavingBank, setIsSavingBank] = useState(false);
+  // Payment Methods state
+  const [activePaymentTab, setActivePaymentTab] = useState("scb");
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([
+    { id: "scb", type: "bank", name: "SCB Bank", number: "399-459002-6", holder: "ATASIT KANTHA", country: "🇹🇭 Thailand" },
+    { id: "kpay", type: "pay", name: "KBZPay", number: "09771048901", holder: "Zarni Pyae Phyo Aung", country: "🇲🇲 Myanmar" },
+    { id: "wavepay", type: "pay", name: "WavePay", number: "09771048901", holder: "Zarni Pyae Phyo Aung", country: "🇲🇲 Myanmar" },
+  ]);
+  const [isSavingPayment, setIsSavingPayment] = useState(false);
+  const [showAddForm, setShowAddForm] = useState<"pay" | "bank" | null>(null);
+  const [newPayment, setNewPayment] = useState({ name: "", number: "", holder: "", country: "🇲🇲 Myanmar" });
 
   // Analytics state
   const [analytics, setAnalytics] = useState({
@@ -122,6 +136,8 @@ export const Admin = () => {
       }
 
       if (data) {
+        const loadedPayments: PaymentMethod[] = [];
+        
         data.forEach((setting) => {
           switch (setting.key) {
             case "gemini_api_key":
@@ -130,17 +146,22 @@ export const Admin = () => {
             case "stability_api_key":
               setStabilityApiKey(setting.value || "");
               break;
-            case "bank_scb_account":
-              setBankScbAccount(setting.value || "399-459002-6");
-              break;
-            case "bank_scb_name_th":
-              setBankScbNameTh(setting.value || "เงินฝากออมทรัพย์ (ไม่มีสมุดคู่ฝาก)");
-              break;
-            case "bank_scb_name_en":
-              setBankScbNameEn(setting.value || "ATASIT KANTHA");
-              break;
+          }
+          
+          // Load payment methods
+          if (setting.key.startsWith("payment_")) {
+            try {
+              const parsed = JSON.parse(setting.value || "{}");
+              if (parsed.id) {
+                loadedPayments.push(parsed);
+              }
+            } catch {}
           }
         });
+        
+        if (loadedPayments.length > 0) {
+          setPaymentMethods(loadedPayments);
+        }
       }
     } catch (error) {
       console.error("Error loading settings:", error);
@@ -197,7 +218,6 @@ export const Admin = () => {
   };
 
   const checkApiHealth = async () => {
-    // Check Gemini API from stored settings
     const geminiKey = geminiApiKey || localStorage.getItem("gemini_api_key");
     if (geminiKey) {
       try {
@@ -221,7 +241,6 @@ export const Admin = () => {
       }));
     }
 
-    // Check Stability API
     const stabilityKey = stabilityApiKey || localStorage.getItem("stability_api_key");
     if (stabilityKey) {
       setApiHealth(prev => ({
@@ -239,7 +258,6 @@ export const Admin = () => {
   const saveApiKeys = async () => {
     setIsSavingApiKeys(true);
     try {
-      // Save to database
       const updates = [
         { key: "gemini_api_key", value: geminiApiKey },
         { key: "stability_api_key", value: stabilityApiKey },
@@ -253,7 +271,6 @@ export const Admin = () => {
         if (error) throw error;
       }
 
-      // Also save to localStorage for immediate use
       localStorage.setItem("gemini_api_key", geminiApiKey);
       localStorage.setItem("stability_api_key", stabilityApiKey);
 
@@ -275,43 +292,87 @@ export const Admin = () => {
     }
   };
 
-  const saveBankDetails = async () => {
-    setIsSavingBank(true);
+  const savePaymentMethod = async (payment: PaymentMethod) => {
+    setIsSavingPayment(true);
     try {
-      const updates = [
-        { key: "bank_scb_account", value: bankScbAccount },
-        { key: "bank_scb_name_th", value: bankScbNameTh },
-        { key: "bank_scb_name_en", value: bankScbNameEn },
-      ];
-
-      for (const update of updates) {
-        const { error } = await supabase
-          .from("app_settings")
-          .upsert({ key: update.key, value: update.value }, { onConflict: "key" });
-        
-        if (error) throw error;
-      }
+      const { error } = await supabase
+        .from("app_settings")
+        .upsert({ 
+          key: `payment_${payment.id}`, 
+          value: JSON.stringify(payment) 
+        }, { onConflict: "key" });
+      
+      if (error) throw error;
 
       toast({
         title: "သိမ်းဆည်းပြီးပါပြီ",
-        description: "Bank Details များကို အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ",
+        description: `${payment.name} အချက်အလက်များကို သိမ်းဆည်းပြီးပါပြီ`,
       });
     } catch (error) {
-      console.error("Error saving bank details:", error);
+      console.error("Error saving payment:", error);
       toast({
         title: "အမှား",
-        description: "Bank Details သိမ်းဆည်းရာတွင် ပြဿနာရှိပါသည်။",
+        description: "သိမ်းဆည်းရာတွင် ပြဿနာရှိပါသည်။",
         variant: "destructive",
       });
     } finally {
-      setIsSavingBank(false);
+      setIsSavingPayment(false);
+    }
+  };
+
+  const addNewPayment = async () => {
+    if (!newPayment.name || !newPayment.number || !newPayment.holder) {
+      toast({
+        title: "အချက်အလက်မပြည့်စုံပါ",
+        description: "အားလုံးဖြည့်စွက်ပါ",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const newId = `${showAddForm}_${Date.now()}`;
+    const newMethod: PaymentMethod = {
+      id: newId,
+      type: showAddForm!,
+      name: newPayment.name,
+      number: newPayment.number,
+      holder: newPayment.holder,
+      country: newPayment.country,
+    };
+
+    setPaymentMethods(prev => [...prev, newMethod]);
+    await savePaymentMethod(newMethod);
+    setNewPayment({ name: "", number: "", holder: "", country: "🇲🇲 Myanmar" });
+    setShowAddForm(null);
+  };
+
+  const updatePaymentField = (id: string, field: keyof PaymentMethod, value: string) => {
+    setPaymentMethods(prev => prev.map(p => 
+      p.id === id ? { ...p, [field]: value } : p
+    ));
+  };
+
+  const deletePayment = async (id: string) => {
+    try {
+      await supabase
+        .from("app_settings")
+        .delete()
+        .eq("key", `payment_${id}`);
+      
+      setPaymentMethods(prev => prev.filter(p => p.id !== id));
+      
+      toast({
+        title: "ဖျက်သိမ်းပြီးပါပြီ",
+        description: "Payment method ကို ဖျက်သိမ်းပြီးပါပြီ",
+      });
+    } catch (error) {
+      console.error("Error deleting payment:", error);
     }
   };
 
   const savePricingChanges = async () => {
     setIsSavingPricing(true);
     try {
-      // Save pricing to localStorage for now (can be migrated to DB later)
       localStorage.setItem("pricing_packages", JSON.stringify(packages));
       
       toast({
@@ -368,7 +429,7 @@ export const Admin = () => {
 
       toast({
         title: "အတည်ပြုပြီး ✓",
-        description: `${totalCredits} Credits ထည့်သွင်းပေးပြီးပါပြီ။ User အား အကြောင်းကြားပြီးပါပြီ။`,
+        description: `${totalCredits} Credits ထည့်သွင်းပေးပြီးပါပြီ။`,
       });
 
       fetchTransactions();
@@ -462,6 +523,8 @@ export const Admin = () => {
   const pendingTransactions = transactions.filter(tx => tx.status === "pending");
   const completedTransactions = transactions.filter(tx => tx.status !== "pending");
 
+  const currentPayment = paymentMethods.find(p => p.id === activePaymentTab);
+
   return (
     <div className="min-h-screen gradient-navy pb-8">
       {/* Header */}
@@ -539,10 +602,7 @@ export const Admin = () => {
               ) : (
                 <div className="space-y-3">
                   {pendingTransactions.map((tx) => (
-                    <div
-                      key={tx.id}
-                      className="gradient-card rounded-2xl p-4 border border-warning/30"
-                    >
+                    <div key={tx.id} className="gradient-card rounded-2xl p-4 border border-warning/30">
                       <div className="flex items-start justify-between mb-3">
                         <div>
                           <p className="font-semibold text-foreground">{tx.package_name}</p>
@@ -588,7 +648,6 @@ export const Admin = () => {
                         </Button>
                       </div>
 
-                      {/* Reject Modal */}
                       {showRejectModal === tx.id && (
                         <div className="mt-3 p-3 bg-destructive/10 rounded-xl border border-destructive/30">
                           <label className="block text-xs font-medium text-destructive mb-2">
@@ -802,7 +861,6 @@ export const Admin = () => {
                     placeholder="AIzaSy..."
                     className="bg-background/50"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">အသံပြောင်းခြင်းအတွက် အသုံးပြုပါသည်</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-foreground mb-2 block">Stability AI API Key</label>
@@ -813,7 +871,6 @@ export const Admin = () => {
                     placeholder="sk-..."
                     className="bg-background/50"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">ပုံထုတ်ခြင်းအတွက် အသုံးပြုပါသည်</p>
                 </div>
                 <Button 
                   onClick={saveApiKeys} 
@@ -832,55 +889,179 @@ export const Admin = () => {
               </div>
             </div>
 
-            {/* Bank Details Settings */}
+            {/* Payment Methods Settings */}
             <div className="gradient-card rounded-2xl p-4 border border-primary/20">
               <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-                <Building className="w-5 h-5 text-primary" />
-                SCB Bank Details
+                <Wallet className="w-5 h-5 text-primary" />
+                Payment Methods
               </h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-foreground mb-2 block">Account Number</label>
-                  <Input
-                    value={bankScbAccount}
-                    onChange={(e) => setBankScbAccount(e.target.value)}
-                    placeholder="399-459002-6"
-                    className="bg-background/50"
-                  />
+
+              {/* Payment Tabs */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                {paymentMethods.map((payment) => (
+                  <button
+                    key={payment.id}
+                    onClick={() => setActivePaymentTab(payment.id)}
+                    className={`px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                      activePaymentTab === payment.id
+                        ? "gradient-gold text-primary-foreground"
+                        : "bg-secondary/50 text-foreground hover:bg-secondary"
+                    }`}
+                  >
+                    {payment.country?.split(" ")[0]} {payment.name}
+                  </button>
+                ))}
+              </div>
+
+              {/* Active Payment Form */}
+              {currentPayment && (
+                <div className="p-4 bg-secondary/30 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-foreground flex items-center gap-2">
+                      {currentPayment.type === "bank" ? <Building className="w-4 h-4" /> : <CardIcon className="w-4 h-4" />}
+                      {currentPayment.name}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{currentPayment.country}</span>
+                  </div>
+                  
+                  <div>
+                    <label className="text-xs text-muted-foreground">
+                      {currentPayment.type === "bank" ? "Bank Name" : "Pay Name"}
+                    </label>
+                    <Input
+                      value={currentPayment.name}
+                      onChange={(e) => updatePaymentField(currentPayment.id, "name", e.target.value)}
+                      className="mt-1 bg-background/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">
+                      {currentPayment.type === "bank" ? "Account Number" : "Phone Number"}
+                    </label>
+                    <Input
+                      value={currentPayment.number}
+                      onChange={(e) => updatePaymentField(currentPayment.id, "number", e.target.value)}
+                      className="mt-1 bg-background/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Holder Name</label>
+                    <Input
+                      value={currentPayment.holder}
+                      onChange={(e) => updatePaymentField(currentPayment.id, "holder", e.target.value)}
+                      className="mt-1 bg-background/50"
+                    />
+                  </div>
+                  
+                  <div className="flex gap-2 pt-2">
+                    <Button 
+                      onClick={() => savePaymentMethod(currentPayment)} 
+                      disabled={isSavingPayment}
+                      className="flex-1 gradient-gold text-primary-foreground"
+                    >
+                      {isSavingPayment ? (
+                        <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4 mr-2" />
+                          Save
+                        </>
+                      )}
+                    </Button>
+                    {!["scb", "kpay", "wavepay"].includes(currentPayment.id) && (
+                      <Button 
+                        onClick={() => deletePayment(currentPayment.id)}
+                        variant="destructive"
+                        size="icon"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-foreground mb-2 block">Account Name (TH)</label>
-                  <Input
-                    value={bankScbNameTh}
-                    onChange={(e) => setBankScbNameTh(e.target.value)}
-                    placeholder="เงินฝากออมทรัพย์"
-                    className="bg-background/50"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-foreground mb-2 block">Account Name (EN)</label>
-                  <Input
-                    value={bankScbNameEn}
-                    onChange={(e) => setBankScbNameEn(e.target.value)}
-                    placeholder="ATASIT KANTHA"
-                    className="bg-background/50"
-                  />
-                </div>
-                <Button 
-                  onClick={saveBankDetails} 
-                  disabled={isSavingBank}
-                  className="w-full gradient-gold text-primary-foreground"
+              )}
+
+              {/* Add Payment Buttons */}
+              <div className="flex gap-2 mt-4">
+                <Button
+                  onClick={() => setShowAddForm("pay")}
+                  variant="outline"
+                  className="flex-1"
                 >
-                  {isSavingBank ? (
-                    <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4 mr-2" />
-                      Save Bank Details
-                    </>
-                  )}
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Pay
+                </Button>
+                <Button
+                  onClick={() => setShowAddForm("bank")}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Bank
                 </Button>
               </div>
+
+              {/* Add New Form */}
+              {showAddForm && (
+                <div className="mt-4 p-4 border border-primary/30 rounded-xl bg-secondary/20">
+                  <h4 className="font-medium text-foreground mb-3">
+                    {showAddForm === "pay" ? "Add New Payment" : "Add New Bank"}
+                  </h4>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground">
+                        {showAddForm === "pay" ? "Pay Name" : "Bank Name"}
+                      </label>
+                      <Input
+                        value={newPayment.name}
+                        onChange={(e) => setNewPayment(p => ({ ...p, name: e.target.value }))}
+                        placeholder={showAddForm === "pay" ? "e.g. AYAPay" : "e.g. KBZ Bank"}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">
+                        {showAddForm === "pay" ? "Phone Number" : "Account Number"}
+                      </label>
+                      <Input
+                        value={newPayment.number}
+                        onChange={(e) => setNewPayment(p => ({ ...p, number: e.target.value }))}
+                        placeholder="09xxxxxxxxx"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Holder Name</label>
+                      <Input
+                        value={newPayment.holder}
+                        onChange={(e) => setNewPayment(p => ({ ...p, holder: e.target.value }))}
+                        placeholder="Account holder name"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Country</label>
+                      <select
+                        value={newPayment.country}
+                        onChange={(e) => setNewPayment(p => ({ ...p, country: e.target.value }))}
+                        className="mt-1 w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                      >
+                        <option value="🇲🇲 Myanmar">🇲🇲 Myanmar</option>
+                        <option value="🇹🇭 Thailand">🇹🇭 Thailand</option>
+                      </select>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button onClick={addNewPayment} className="flex-1 gradient-gold text-primary-foreground">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add
+                      </Button>
+                      <Button onClick={() => setShowAddForm(null)} variant="outline" className="flex-1">
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </TabsContent>
         </Tabs>
