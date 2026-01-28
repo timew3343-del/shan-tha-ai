@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
+import { useCreditCosts } from "@/hooks/useCreditCosts";
 
 interface SpeechToolProps {
   userId?: string;
@@ -37,6 +38,7 @@ const LANGUAGES = [
 
 export const SpeechTool = ({ userId }: SpeechToolProps) => {
   const { toast } = useToast();
+  const { costs } = useCreditCosts();
   
   // Text-to-Speech state
   const [ttsText, setTtsText] = useState("");
@@ -351,7 +353,7 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
             ) : (
               <>
                 <Volume2 className="w-5 h-5 mr-2" />
-                အသံထုတ်မည် (1 Credit)
+                အသံထုတ်မည် ({costs.text_to_speech} Credits)
               </>
             )}
           </Button>
@@ -455,7 +457,7 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
             ) : (
               <>
                 <Mic className="w-5 h-5 mr-2" />
-                စာသားပြောင်းမည် (1 Credit)
+                စာသားပြောင်းမည် ({costs.speech_to_text} Credits)
               </>
             )}
           </Button>
