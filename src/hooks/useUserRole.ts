@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 type AppRole = "admin" | "moderator" | "user";
@@ -6,7 +6,7 @@ type AppRole = "admin" | "moderator" | "user";
 export const useUserRole = (userId?: string) => {
   const [role, setRole] = useState<AppRole>("user");
   const [isLoading, setIsLoading] = useState(true);
-  const previousUserId = useRef<string | undefined>(undefined);
+  const [hasFetched, setHasFetched] = useState(false);
 
   const fetchRole = useCallback(async () => {
     if (!userId) {
@@ -14,8 +14,8 @@ export const useUserRole = (userId?: string) => {
       return;
     }
 
-    // Reset loading when userId changes
     setIsLoading(true);
+    setHasFetched(false);
 
     try {
       const { data, error } = await supabase
@@ -35,25 +35,19 @@ export const useUserRole = (userId?: string) => {
       setRole("user");
     } finally {
       setIsLoading(false);
+      setHasFetched(true);
     }
   }, [userId]);
 
   useEffect(() => {
-    // Track userId changes and ensure loading state
-    if (userId !== previousUserId.current) {
-      previousUserId.current = userId;
-      if (userId) {
-        setIsLoading(true);
-      }
-    }
     fetchRole();
-  }, [fetchRole, userId]);
+  }, [fetchRole]);
 
   return {
     role,
     isAdmin: role === "admin",
     isModerator: role === "moderator",
-    isLoading: isLoading || (!!userId && role === "user" && previousUserId.current !== userId),
+    isLoading: !hasFetched || isLoading,
     refetch: fetchRole,
   };
 };
