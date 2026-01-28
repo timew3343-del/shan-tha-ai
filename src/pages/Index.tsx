@@ -107,12 +107,6 @@ const Index = () => {
                 </p>
               </div>
               <DropdownMenuSeparator className="bg-border/50" />
-              {isAdmin && (
-                <DropdownMenuItem onClick={() => navigate("/api-settings")} className="cursor-pointer">
-                  <Settings className="w-4 h-4 mr-2" />
-                  API Settings
-                </DropdownMenuItem>
-              )}
               <DropdownMenuItem onClick={() => navigate("/support")} className="cursor-pointer">
                 <HelpCircle className="w-4 h-4 mr-2" />
                 Help & Support
