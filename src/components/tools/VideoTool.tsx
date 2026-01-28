@@ -1,10 +1,11 @@
 import { useState, useRef } from "react";
-import { Video, Upload, Sparkles, Download, Loader2, X, Play } from "lucide-react";
+import { Video, Upload, Sparkles, Download, Loader2, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
+import { supabase } from "@/integrations/supabase/client";
 
 interface VideoToolProps {
   userId?: string;
@@ -12,7 +13,7 @@ interface VideoToolProps {
 
 export const VideoTool = ({ userId }: VideoToolProps) => {
   const { toast } = useToast();
-  const { credits, deductCredits } = useCredits(userId);
+  const { credits, refetch: refetchCredits } = useCredits(userId);
   const { costs } = useCreditCosts();
   const [prompt, setPrompt] = useState("");
   const [speechText, setSpeechText] = useState("");
@@ -52,23 +53,76 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
     // Determine credit cost based on whether speech text is included
     const creditCost = speechText.trim() ? costs.video_with_speech : costs.video_generation;
     
-    // Check and deduct credits
-    const success = await deductCredits(creditCost, "ဗီဒီယိုထုတ်ခြင်း");
-    if (!success) return;
+    // Check credits locally first
+    if (credits < creditCost) {
+      toast({
+        title: "ခရက်ဒစ် မလုံလောက်ပါ",
+        description: `ဗီဒီယိုထုတ်ခြင်း အတွက် ${creditCost} Credits လိုအပ်ပါသည်။ ထပ်မံဖြည့်သွင်းပါ။`,
+        variant: "destructive",
+      });
+      return;
+    }
 
     setIsLoading(true);
     setGeneratedVideo(null);
 
     try {
-      // Simulate video generation (replace with actual API)
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-      
-      // For demo, use a placeholder video
-      setGeneratedVideo("https://www.w3schools.com/html/mov_bbb.mp4");
+      // Get auth session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({
+          title: "အကောင့်ဝင်ရန်လိုအပ်သည်",
+          description: "ဗီဒီယိုထုတ်ရန် အကောင့်ဝင်ပါ",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      // Call the edge function
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-video`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            prompt: prompt.trim(),
+            image: uploadedImage,
+            speechText: speechText.trim() || undefined,
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 402) {
+          toast({
+            title: "ခရက်ဒစ် မလုံလောက်ပါ",
+            description: result.error || "Credits ထပ်မံဖြည့်သွင်းပါ",
+            variant: "destructive",
+          });
+        } else if (response.status === 429) {
+          toast({
+            title: "ခဏစောင့်ပါ",
+            description: "နှုန်းကန့်သတ်ချက်ပြည့်သွားပါပြီ။ ခဏစောင့်ပြီး ထပ်ကြိုးစားပါ။",
+            variant: "destructive",
+          });
+        } else {
+          throw new Error(result.error || "Video generation failed");
+        }
+        return;
+      }
+
+      setGeneratedVideo(result.video);
+      refetchCredits();
       
       toast({
         title: "အောင်မြင်ပါသည်",
-        description: "ဗီဒီယိုထုတ်ပြီးပါပြီ",
+        description: `ဗီဒီယိုထုတ်ပြီးပါပြီ (${result.creditsUsed} Credits သုံးစွဲခဲ့သည်)`,
       });
     } catch (error: any) {
       console.error("Video generation error:", error);
