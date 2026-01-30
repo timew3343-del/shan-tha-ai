@@ -7,12 +7,15 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { useCredits } from "@/hooks/useCredits";
+import { ToolHeader } from "@/components/ToolHeader";
+import { motion } from "framer-motion";
 
 interface ImageToolProps {
   userId?: string;
+  onBack: () => void;
 }
 
-export const ImageTool = ({ userId }: ImageToolProps) => {
+export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
   const { toast } = useToast();
   const { costs } = useCreditCosts();
   const { refetch: refetchCredits } = useCredits(userId);
@@ -21,21 +24,40 @@ export const ImageTool = ({ userId }: ImageToolProps) => {
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [statusText, setStatusText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Simulate progress during loading
+  // Progress simulation with status updates
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isLoading) {
       setProgress(0);
+      const statuses = [
+        "Prompt ကို ပြင်ဆင်နေသည်...",
+        "AI မော်ဒယ်သို့ ပို့နေသည်...",
+        "ပုံထုတ်နေသည်...",
+        "အပြီးသတ်နေသည်...",
+      ];
+      let statusIndex = 0;
+      setStatusText(statuses[0]);
+      
       interval = setInterval(() => {
         setProgress(prev => {
-          if (prev >= 90) return prev;
-          return prev + Math.random() * 15;
+          const newProgress = prev + Math.random() * 20;
+          if (newProgress >= 90) return 90;
+          
+          const newStatusIndex = Math.min(Math.floor(newProgress / 25), statuses.length - 1);
+          if (newStatusIndex !== statusIndex) {
+            statusIndex = newStatusIndex;
+            setStatusText(statuses[statusIndex]);
+          }
+          
+          return newProgress;
         });
-      }, 500);
+      }, 400);
     } else {
       setProgress(100);
+      setStatusText("");
       const timeout = setTimeout(() => setProgress(0), 500);
       return () => clearTimeout(timeout);
     }
@@ -83,7 +105,6 @@ export const ImageTool = ({ userId }: ImageToolProps) => {
     setGeneratedImage(null);
 
     try {
-      // Get current session for authentication
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session?.access_token) {
@@ -95,7 +116,6 @@ export const ImageTool = ({ userId }: ImageToolProps) => {
         return;
       }
 
-      // Call the secure Edge Function
       const { data, error } = await supabase.functions.invoke("generate-image", {
         body: { 
           prompt, 
@@ -103,30 +123,17 @@ export const ImageTool = ({ userId }: ImageToolProps) => {
         },
       });
 
-      if (error) {
-        throw new Error(error.message || "ပုံထုတ်ရာတွင် အမှားရှိပါသည်");
-      }
+      if (error) throw new Error(error.message);
 
       if (data?.error) {
-        // Handle specific error cases
         if (data.error === "Insufficient credits") {
           toast({
             title: "ခရက်ဒစ် မလုံလောက်ပါ",
-            description: `ပုံထုတ်ရန် ${data.required} Credits လိုအပ်ပါသည်။ ထပ်မံဖြည့်သွင်းပါ။`,
-            variant: "destructive",
-          });
-        } else if (data.error === "Image generation service not configured") {
-          toast({
-            title: "ဝန်ဆောင်မှု မပြင်ဆင်ရသေးပါ",
-            description: "Admin မှ API Key ထည့်သွင်းရန် လိုအပ်ပါသည်",
+            description: `ပုံထုတ်ရန် ${data.required} Credits လိုအပ်ပါသည်`,
             variant: "destructive",
           });
         } else {
-          toast({
-            title: "အမှားရှိပါသည်",
-            description: data.error,
-            variant: "destructive",
-          });
+          toast({ title: "အမှားရှိပါသည်", description: data.error, variant: "destructive" });
         }
         return;
       }
@@ -160,10 +167,21 @@ export const ImageTool = ({ userId }: ImageToolProps) => {
   };
 
   return (
-    <div className="space-y-4">
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="space-y-4 p-4 pb-24"
+    >
+      <ToolHeader 
+        title="ပုံထုတ်ရန်" 
+        subtitle="AI ဖြင့် ပုံဆွဲခြင်း"
+        onBack={onBack} 
+      />
+
       {/* Reference Image Upload */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-        <label className="block text-sm font-medium text-primary mb-3">
+        <label className="block text-sm font-medium text-primary mb-3 font-myanmar">
           ရည်ညွှန်းပုံ (Optional)
         </label>
         
@@ -187,7 +205,7 @@ export const ImageTool = ({ userId }: ImageToolProps) => {
             className="w-24 h-24 border-2 border-dashed border-primary/30 rounded-xl flex flex-col items-center justify-center gap-1 hover:bg-primary/5 transition-colors"
           >
             <Plus className="w-6 h-6 text-primary" />
-            <span className="text-xs text-muted-foreground">ပုံထည့်ရန်</span>
+            <span className="text-xs text-muted-foreground font-myanmar">ပုံထည့်ရန်</span>
           </button>
         )}
         
@@ -202,7 +220,7 @@ export const ImageTool = ({ userId }: ImageToolProps) => {
 
       {/* Prompt Input */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-        <label className="block text-sm font-medium text-primary mb-2">
+        <label className="block text-sm font-medium text-primary mb-2 font-myanmar">
           ပုံဖော်ပြချက်
         </label>
         <Textarea
@@ -213,22 +231,26 @@ export const ImageTool = ({ userId }: ImageToolProps) => {
         />
       </div>
 
-      {/* Progress Bar */}
+      {/* Progress Bar with Status */}
       {isLoading && (
-        <div className="space-y-2 animate-fade-in">
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="space-y-2"
+        >
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>ပုံထုတ်နေသည်...</span>
+            <span className="font-myanmar">{statusText || "ပုံထုတ်နေသည်..."}</span>
             <span>{Math.round(progress)}%</span>
           </div>
           <Progress value={progress} className="h-2" />
-        </div>
+        </motion.div>
       )}
 
       {/* Generate Button */}
       <Button
         onClick={handleGenerate}
         disabled={isLoading || !prompt.trim()}
-        className="w-full btn-gradient-blue py-4 rounded-2xl font-semibold"
+        className="w-full btn-gradient-blue py-4 rounded-2xl font-semibold font-myanmar"
       >
         {isLoading ? (
           <>
@@ -245,17 +267,21 @@ export const ImageTool = ({ userId }: ImageToolProps) => {
 
       {/* Result Preview */}
       {generatedImage && (
-        <div className="gradient-card rounded-2xl p-4 border border-primary/30 animate-scale-in">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="gradient-card rounded-2xl p-4 border border-primary/30"
+        >
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-primary" />
-              <h3 className="text-sm font-semibold text-primary">ရလဒ်</h3>
+              <h3 className="text-sm font-semibold text-primary font-myanmar">ရလဒ်</h3>
             </div>
             <Button
               onClick={handleDownload}
               size="sm"
               variant="outline"
-              className="text-xs"
+              className="text-xs font-myanmar"
             >
               <Download className="w-3 h-3 mr-1" />
               Download
@@ -266,8 +292,8 @@ export const ImageTool = ({ userId }: ImageToolProps) => {
             alt="Generated"
             className="w-full rounded-xl border border-border"
           />
-        </div>
+        </motion.div>
       )}
-    </div>
+    </motion.div>
   );
 };
