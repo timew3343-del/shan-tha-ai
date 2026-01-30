@@ -7,6 +7,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
+import { ToolHeader } from "@/components/ToolHeader";
+import { motion } from "framer-motion";
 import {
   Select,
   SelectContent,
@@ -17,9 +19,10 @@ import {
 
 interface VideoToolProps {
   userId?: string;
+  onBack: () => void;
 }
 
-export const VideoTool = ({ userId }: VideoToolProps) => {
+export const VideoTool = ({ userId, onBack }: VideoToolProps) => {
   const { toast } = useToast();
   const { credits, refetch: refetchCredits } = useCredits(userId);
   const { costs } = useCreditCosts();
@@ -33,7 +36,7 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
   const [statusText, setStatusText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Simulate progress during loading with status updates
+  // Optimized progress with faster polling simulation
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isLoading) {
@@ -42,17 +45,16 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
         "ပုံကို ပြင်ဆင်နေသည်...",
         "AI မော်ဒယ်သို့ ပို့နေသည်...",
         "ဗီဒီယိုထုတ်နေသည်...",
-        "ပြီးဆုံးအောင် စောင့်ဆိုင်းနေသည်...",
+        "အပြီးသတ်နေသည်...",
       ];
       let statusIndex = 0;
       setStatusText(statuses[0]);
       
       interval = setInterval(() => {
         setProgress(prev => {
-          const newProgress = prev + Math.random() * 3;
-          if (newProgress >= 90) return 90;
+          const newProgress = prev + Math.random() * 5;
+          if (newProgress >= 95) return 95;
           
-          // Update status text based on progress
           const newStatusIndex = Math.min(Math.floor(newProgress / 25), statuses.length - 1);
           if (newStatusIndex !== statusIndex) {
             statusIndex = newStatusIndex;
@@ -61,7 +63,7 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
           
           return newProgress;
         });
-      }, 1000);
+      }, 800);
     } else {
       setProgress(100);
       setStatusText("");
@@ -93,20 +95,18 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
     if (!uploadedImage) {
       toast({
         title: "ပုံထည့်ရန်လိုအပ်ပါသည်",
-        description: "ဗီဒီယိုထုတ်ရန် ပုံတစ်ပုံထည့်ပေးပါ (Image-to-Video)",
+        description: "ဗီဒီယိုထုတ်ရန် ပုံတစ်ပုံထည့်ပေးပါ",
         variant: "destructive",
       });
       return;
     }
 
-    // Determine credit cost based on whether speech text is included
     const creditCost = speechText.trim() ? costs.video_with_speech : costs.video_generation;
     
-    // Check credits locally first
     if (credits < creditCost) {
       toast({
         title: "ခရက်ဒစ် မလုံလောက်ပါ",
-        description: `ဗီဒီယိုထုတ်ခြင်း အတွက် ${creditCost} Credits လိုအပ်ပါသည်။ ထပ်မံဖြည့်သွင်းပါ။`,
+        description: `ဗီဒီယိုထုတ်ခြင်း အတွက် ${creditCost} Credits လိုအပ်ပါသည်`,
         variant: "destructive",
       });
       return;
@@ -116,7 +116,6 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
     setGeneratedVideo(null);
 
     try {
-      // Get auth session
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         toast({
@@ -128,7 +127,6 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
         return;
       }
 
-      // Call the edge function
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-video`,
         {
@@ -149,7 +147,6 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
       const result = await response.json();
 
       if (!response.ok) {
-        // Handle refunded credits message
         if (result.refunded) {
           toast({
             title: "ဗီဒီယိုထုတ်ခြင်း မအောင်မြင်ပါ",
@@ -160,22 +157,7 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
           return;
         }
         
-        if (response.status === 402) {
-          toast({
-            title: "ခရက်ဒစ် မလုံလောက်ပါ",
-            description: result.error || "Credits ထပ်မံဖြည့်သွင်းပါ",
-            variant: "destructive",
-          });
-        } else if (response.status === 429) {
-          toast({
-            title: "ခဏစောင့်ပါ",
-            description: "နှုန်းကန့်သတ်ချက်ပြည့်သွားပါပြီ။ ခဏစောင့်ပြီး ထပ်ကြိုးစားပါ။",
-            variant: "destructive",
-          });
-        } else {
-          throw new Error(result.error || "Video generation failed");
-        }
-        return;
+        throw new Error(result.error || "Video generation failed");
       }
 
       setGeneratedVideo(result.video);
@@ -198,14 +180,25 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
   };
 
   return (
-    <div className="space-y-4">
-      {/* Image Upload - Required for Image-to-Video */}
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="space-y-4 p-4 pb-24"
+    >
+      <ToolHeader 
+        title="ဗီဒီယိုထုတ်ရန်" 
+        subtitle="ပုံမှ ဗီဒီယိုသို့ ပြောင်းလဲခြင်း"
+        onBack={onBack} 
+      />
+
+      {/* Image Upload */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-        <label className="block text-sm font-medium text-primary mb-3">
+        <label className="block text-sm font-medium text-primary mb-3 font-myanmar">
           ပုံထည့်ရန် (လိုအပ်သည်)
         </label>
-        <p className="text-xs text-muted-foreground mb-3">
-          Stability AI Image-to-Video API သုံးပြီး ပုံကို ဗီဒီယိုအဖြစ် ပြောင်းပေးပါမည်
+        <p className="text-xs text-muted-foreground mb-3 font-myanmar">
+          ပုံကို ဗီဒီယိုအဖြစ် ပြောင်းပေးပါမည်
         </p>
         
         {uploadedImage ? (
@@ -228,7 +221,7 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
             className="w-full h-32 border-2 border-dashed border-primary/30 rounded-xl flex flex-col items-center justify-center gap-2 hover:bg-primary/5 transition-colors"
           >
             <Upload className="w-8 h-8 text-primary" />
-            <span className="text-sm text-muted-foreground">ပုံထည့်ရန် နှိပ်ပါ</span>
+            <span className="text-sm text-muted-foreground font-myanmar">ပုံထည့်ရန် နှိပ်ပါ</span>
           </button>
         )}
         
@@ -243,7 +236,7 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
 
       {/* Duration Selector */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-        <label className="block text-sm font-medium text-primary mb-2">
+        <label className="block text-sm font-medium text-primary mb-2 font-myanmar">
           <Clock className="w-4 h-4 inline mr-1" />
           ဗီဒီယိုအရှည်
         </label>
@@ -261,7 +254,7 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
 
       {/* Prompt Input */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-        <label className="block text-sm font-medium text-primary mb-2">
+        <label className="block text-sm font-medium text-primary mb-2 font-myanmar">
           ဗီဒီယိုဖော်ပြချက် (Optional)
         </label>
         <Textarea
@@ -274,10 +267,10 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
 
       {/* Speech Overlay Text */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-        <label className="block text-sm font-medium text-primary mb-2">
+        <label className="block text-sm font-medium text-primary mb-2 font-myanmar">
           စကားပြောစေချင်သော စာသား (Optional)
         </label>
-        <p className="text-xs text-muted-foreground mb-2">
+        <p className="text-xs text-muted-foreground mb-2 font-myanmar">
           ဗီဒီယိုတွင် အသံထည့်လိုပါက +{costs.video_with_speech - costs.video_generation} Credits ပိုကုန်ပါမည်
         </p>
         <Textarea
@@ -290,23 +283,24 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
 
       {/* Progress Bar */}
       {isLoading && (
-        <div className="space-y-2 animate-fade-in">
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="space-y-2"
+        >
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{statusText || "ဗီဒီယိုထုတ်နေသည်..."}</span>
+            <span className="font-myanmar">{statusText || "ဗီဒီယိုထုတ်နေသည်..."}</span>
             <span>{Math.round(progress)}%</span>
           </div>
           <Progress value={progress} className="h-2" />
-          <p className="text-xs text-center text-muted-foreground">
-            ၃ မိနစ်ခန့် ကြာနိုင်ပါသည်
-          </p>
-        </div>
+        </motion.div>
       )}
 
       {/* Generate Button */}
       <Button
         onClick={handleGenerate}
         disabled={isLoading || !uploadedImage}
-        className="w-full btn-gradient-red py-4 rounded-2xl font-semibold"
+        className="w-full btn-gradient-red py-4 rounded-2xl font-semibold font-myanmar"
       >
         {isLoading ? (
           <>
@@ -323,11 +317,15 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
 
       {/* Result Preview */}
       {generatedVideo && (
-        <div className="gradient-card rounded-2xl p-4 border border-primary/30 animate-scale-in">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="gradient-card rounded-2xl p-4 border border-primary/30"
+        >
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-primary" />
-              <h3 className="text-sm font-semibold text-primary">ရလဒ်</h3>
+              <h3 className="text-sm font-semibold text-primary font-myanmar">ရလဒ်</h3>
             </div>
             <Button
               onClick={() => {
@@ -338,7 +336,7 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
               }}
               size="sm"
               variant="outline"
-              className="text-xs"
+              className="text-xs font-myanmar"
             >
               <Download className="w-3 h-3 mr-1" />
               Download
@@ -351,8 +349,8 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
             muted
             className="w-full rounded-xl border border-border"
           />
-        </div>
+        </motion.div>
       )}
-    </div>
+    </motion.div>
   );
 };

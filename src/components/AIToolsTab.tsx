@@ -1,92 +1,123 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Image, Video, Volume2, Crown, Wallet } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ImageTool } from "./tools/ImageTool";
 import { VideoTool } from "./tools/VideoTool";
 import { SpeechTool } from "./tools/SpeechTool";
+import { ToolCard } from "./ToolCard";
+import { useCreditCosts } from "@/hooks/useCreditCosts";
+import { AnimatePresence, motion } from "framer-motion";
 
 interface AIToolsTabProps {
   userId?: string;
 }
 
+type ActiveTool = "home" | "image" | "video" | "speech";
+
 export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("image");
+  const [activeTool, setActiveTool] = useState<ActiveTool>("home");
+  const { costs } = useCreditCosts();
+
+  const handleBack = () => {
+    setActiveTool("home");
+  };
 
   return (
-    <div className="flex flex-col gap-4 p-4 pb-24">
-      {/* Header */}
-      <div className="text-center pt-2">
-        <div className="inline-flex items-center gap-2 mb-1">
-          <Crown className="w-5 h-5 text-primary animate-pulse-soft" />
-          <h1 className="text-xl font-bold text-glow-gold text-primary">Myanmar AI</h1>
-          <Crown className="w-5 h-5 text-primary animate-pulse-soft" />
-        </div>
-        <p className="text-muted-foreground text-xs">
-          သင့်စိတ်ကူးကို AI ဖြင့် အကောင်အထည်ဖော်ပါ
-        </p>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="flex gap-2 animate-fade-up">
-        <button
-          onClick={() => navigate("/top-up")}
-          className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-primary/10 border border-primary/30 hover:bg-primary/20 transition-colors"
-        >
-          <Wallet className="w-4 h-4 text-primary" />
-          <span className="text-xs text-primary font-medium">ငွေဖြည့်မည်</span>
-        </button>
-      </div>
-
-      {/* Tool Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full animate-fade-up">
-        <TabsList className="grid w-full grid-cols-3 h-auto p-1 bg-secondary/50 rounded-xl">
-          <TabsTrigger 
-            value="image" 
-            className="flex flex-col items-center gap-1 py-3 px-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-lg"
+    <div className="min-h-screen">
+      <AnimatePresence mode="wait">
+        {activeTool === "home" && (
+          <motion.div
+            key="home"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="flex flex-col gap-4 p-4 pb-24"
           >
-            <Image className="w-5 h-5" />
-            <span className="text-[10px] font-medium">ပုံထုတ်ရန်</span>
-          </TabsTrigger>
-          <TabsTrigger 
-            value="video" 
-            className="flex flex-col items-center gap-1 py-3 px-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-lg"
-          >
-            <Video className="w-5 h-5" />
-            <span className="text-[10px] font-medium">ဗီဒီယိုထုတ်ရန်</span>
-          </TabsTrigger>
-          <TabsTrigger 
-            value="speech" 
-            className="flex flex-col items-center gap-1 py-3 px-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-lg"
-          >
-            <Volume2 className="w-5 h-5" />
-            <span className="text-[10px] font-medium leading-tight">အသံ/စာ</span>
-          </TabsTrigger>
-        </TabsList>
+            {/* Header */}
+            <div className="text-center pt-2">
+              <div className="inline-flex items-center gap-2 mb-1">
+                <Crown className="w-5 h-5 text-primary animate-pulse" />
+                <h1 className="text-xl font-bold text-primary font-myanmar">Myanmar AI</h1>
+                <Crown className="w-5 h-5 text-primary animate-pulse" />
+              </div>
+              <p className="text-muted-foreground text-xs font-myanmar">
+                သင့်စိတ်ကူးကို AI ဖြင့် အကောင်အထည်ဖော်ပါ
+              </p>
+            </div>
 
-        <div className="mt-4">
-          <TabsContent value="image" className="mt-0">
-            <ImageTool userId={userId} />
-          </TabsContent>
+            {/* Quick Actions */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+            >
+              <button
+                onClick={() => navigate("/top-up")}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-primary/10 border border-primary/30 hover:bg-primary/20 transition-all"
+              >
+                <Wallet className="w-5 h-5 text-primary" />
+                <span className="text-sm text-primary font-medium font-myanmar">ငွေဖြည့်မည်</span>
+              </button>
+            </motion.div>
 
-          <TabsContent value="video" className="mt-0">
-            <VideoTool userId={userId} />
-          </TabsContent>
+            {/* Premium Tool Cards */}
+            <div className="space-y-3">
+              <ToolCard
+                icon={Image}
+                title="ပုံထုတ်ရန်"
+                description="AI ဖြင့် ပုံဆွဲခြင်း"
+                gradient="bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700"
+                onClick={() => setActiveTool("image")}
+                credits={costs.image_generation}
+              />
 
-          <TabsContent value="speech" className="mt-0">
-            <SpeechTool userId={userId} />
-          </TabsContent>
-        </div>
-      </Tabs>
+              <ToolCard
+                icon={Video}
+                title="ဗီဒီယိုထုတ်ရန်"
+                description="ပုံမှ ဗီဒီယိုသို့ ပြောင်းလဲခြင်း"
+                gradient="bg-gradient-to-br from-red-500 via-rose-600 to-pink-700"
+                onClick={() => setActiveTool("video")}
+                credits={costs.video_generation}
+              />
 
-      {/* Info Card */}
-      <div className="gradient-card rounded-2xl p-3 border border-primary/20 animate-fade-up mt-2">
-        <h3 className="text-sm font-semibold text-primary mb-1">💡 အကြံပြုချက်</h3>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          အကောင်းဆုံး ရလဒ်ရရှိရန် အသေးစိတ် ဖော်ပြချက်များ ထည့်သွင်းပါ။ ဥပမာ - အရောင်၊ ပုံစံ၊ ခံစားချက် စသည်တို့ ပါဝင်စေပါ။
-        </p>
-      </div>
+              <ToolCard
+                icon={Volume2}
+                title="အသံ/စာ"
+                description="Text ↔ Speech ပြောင်းလဲခြင်း"
+                gradient="bg-gradient-to-br from-emerald-500 via-green-600 to-teal-700"
+                onClick={() => setActiveTool("speech")}
+                credits={costs.text_to_speech}
+              />
+            </div>
+
+            {/* Info Card */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="gradient-card rounded-2xl p-4 border border-primary/20"
+            >
+              <h3 className="text-sm font-semibold text-primary mb-1 font-myanmar">💡 အကြံပြုချက်</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed font-myanmar">
+                အကောင်းဆုံး ရလဒ်ရရှိရန် အသေးစိတ် ဖော်ပြချက်များ ထည့်သွင်းပါ။ ဥပမာ - အရောင်၊ ပုံစံ၊ ခံစားချက် စသည်တို့ ပါဝင်စေပါ။
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {activeTool === "image" && (
+          <ImageTool key="image" userId={userId} onBack={handleBack} />
+        )}
+
+        {activeTool === "video" && (
+          <VideoTool key="video" userId={userId} onBack={handleBack} />
+        )}
+
+        {activeTool === "speech" && (
+          <SpeechTool key="speech" userId={userId} onBack={handleBack} />
+        )}
+      </AnimatePresence>
     </div>
   );
 };
