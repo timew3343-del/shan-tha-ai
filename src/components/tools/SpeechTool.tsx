@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Volume2, Mic, Loader2, Play, Pause, Square, Download, X, Circle } from "lucide-react";
+import { Volume2, Mic, Loader2, Play, Pause, Square, Download, X, Circle, Upload, FileAudio } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -56,13 +56,14 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
   const [generatedAudio, setGeneratedAudio] = useState<string | null>(null);
   const [isGeneratingTTS, setIsGeneratingTTS] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Speech-to-Text state
   const [sttLanguage, setSttLanguage] = useState("my");
   const [transcribedText, setTranscribedText] = useState("");
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [sttProgress, setSttProgress] = useState(0);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Live recording hook
   const { 
@@ -101,7 +102,7 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
     return () => clearInterval(interval);
   }, [isTranscribing]);
 
-  // Web Speech API for TTS
+  // Web Speech API for TTS with my-MM locale
   const speakText = (text: string) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
@@ -117,12 +118,12 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
         'ko': 'ko-KR',
       };
       
-      utterance.lang = langMap[ttsLanguage] || 'en-US';
+      utterance.lang = langMap[ttsLanguage] || 'my-MM';
       utterance.rate = 1;
       utterance.pitch = 1;
       
       const voices = window.speechSynthesis.getVoices();
-      const matchingVoice = voices.find(v => v.lang.startsWith(langMap[ttsLanguage]?.split('-')[0] || 'en'));
+      const matchingVoice = voices.find(v => v.lang.startsWith(langMap[ttsLanguage]?.split('-')[0] || 'my'));
       if (matchingVoice) {
         utterance.voice = matchingVoice;
       }
@@ -221,8 +222,45 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
     setIsPlaying(false);
   };
 
+  // Handle file upload
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['audio/mp3', 'audio/mpeg', 'audio/wav', 'audio/webm', 'audio/ogg', 'audio/m4a'];
+    if (!validTypes.some(type => file.type.includes(type.split('/')[1]))) {
+      toast({
+        title: "ဖိုင်အမျိုးအစား မမှန်ပါ",
+        description: "MP3, WAV, WebM, OGG, M4A ဖိုင်များသာ ရွေးပါ",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (file.size > 25 * 1024 * 1024) {
+      toast({
+        title: "ဖိုင်ကြီးလွန်းပါသည်",
+        description: "25MB အောက် ဖိုင်ရွေးပါ",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUploadedFile(file);
+    resetRecording();
+  };
+
+  const removeUploadedFile = () => {
+    setUploadedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const handleTranscribe = async () => {
-    if (!audioBlob) {
+    const audioSource = uploadedFile || audioBlob;
+    
+    if (!audioSource) {
       toast({
         title: "အသံဖိုင်ထည့်ပါ",
         description: "ဦးစွာ အသံဖမ်းပါ သို့မဟုတ် ဖိုင်ထည့်ပါ",
@@ -281,7 +319,12 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
         }
         setIsTranscribing(false);
       };
-      reader.readAsDataURL(audioBlob);
+      
+      if (uploadedFile) {
+        reader.readAsDataURL(uploadedFile);
+      } else if (audioBlob) {
+        reader.readAsDataURL(audioBlob);
+      }
     } catch (error: any) {
       console.error("STT error:", error);
       toast({
@@ -299,6 +342,7 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
     } else {
       try {
         resetRecording();
+        removeUploadedFile();
         await startRecording();
       } catch (error) {
         toast({
@@ -317,6 +361,8 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
       description: "စာသားကို clipboard သို့ ကူးယူပြီးပါပြီ",
     });
   };
+
+  const hasAudioSource = audioBlob || uploadedFile;
 
   return (
     <motion.div
@@ -479,81 +525,121 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
             exit={{ opacity: 0, y: -10 }}
             className="space-y-4"
           >
-            {/* STT Content with Live Recording */}
+            {/* STT Content with Live Recording AND File Upload */}
             <div className="gradient-card rounded-2xl p-4 border border-primary/20">
               <label className="block text-sm font-medium text-primary mb-3 font-myanmar">
-                အသံဖမ်းရန်
+                အသံရယူရန်
               </label>
               
-              {/* Recording Button with Visualizer */}
-              <div className="flex flex-col items-center gap-4">
+              {/* Recording and Upload buttons side by side */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                {/* Record Button */}
                 <motion.button
                   onClick={handleRecordClick}
-                  className={`w-24 h-24 rounded-full flex items-center justify-center transition-all ${
+                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-dashed transition-all ${
                     isRecording 
-                      ? 'bg-destructive text-destructive-foreground' 
-                      : 'bg-primary text-primary-foreground'
+                      ? 'border-destructive bg-destructive/10' 
+                      : audioBlob && !uploadedFile
+                        ? 'border-success bg-success/10'
+                        : 'border-primary/30 hover:border-primary/50 hover:bg-primary/5'
                   }`}
                   animate={{
-                    scale: isRecording ? [1, 1.1, 1] : 1,
-                    boxShadow: isRecording 
-                      ? [`0 0 0 0 rgba(239, 68, 68, 0.4)`, `0 0 0 20px rgba(239, 68, 68, 0)`, `0 0 0 0 rgba(239, 68, 68, 0.4)`]
-                      : `0 0 0 0 rgba(0, 0, 0, 0)`,
+                    scale: isRecording ? [1, 1.02, 1] : 1,
                   }}
                   transition={{
-                    duration: 1.5,
+                    duration: 1,
                     repeat: isRecording ? Infinity : 0,
                   }}
                 >
-                  {isRecording ? (
-                    <Square className="w-8 h-8" />
-                  ) : (
-                    <Mic className="w-8 h-8" />
-                  )}
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                    isRecording ? 'bg-destructive' : 'bg-primary'
+                  }`}>
+                    {isRecording ? (
+                      <Square className="w-5 h-5 text-white" />
+                    ) : (
+                      <Mic className="w-5 h-5 text-white" />
+                    )}
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs font-medium text-foreground font-myanmar">
+                      {isRecording ? "ရပ်မည်" : "အသံဖမ်းမည်"}
+                    </p>
+                    {isRecording && (
+                      <p className="text-lg font-mono font-bold text-destructive">
+                        {formatTime(recordingTime)}
+                      </p>
+                    )}
+                    {audioBlob && !isRecording && !uploadedFile && (
+                      <p className="text-xs text-success font-myanmar">ဖမ်းပြီး ✓</p>
+                    )}
+                  </div>
                 </motion.button>
 
-                {/* Timer */}
-                <div className="text-center">
-                  <p className="text-2xl font-mono font-bold text-foreground">
-                    {formatTime(recordingTime)}
-                  </p>
-                  <p className="text-xs text-muted-foreground font-myanmar">
-                    {isRecording ? "အသံဖမ်းနေသည်..." : audioBlob ? "အသံဖမ်းပြီး" : "နှိပ်၍ အသံဖမ်းပါ"}
-                  </p>
-                </div>
-
-                {/* Audio Level Visualizer */}
-                {isRecording && (
-                  <div className="flex items-center gap-1 h-8">
-                    {[...Array(20)].map((_, i) => (
-                      <motion.div
-                        key={i}
-                        className="w-1 bg-primary rounded-full"
-                        animate={{
-                          height: Math.max(4, audioLevel * 32 * (1 + Math.sin(i * 0.5 + Date.now() * 0.01) * 0.3)),
-                        }}
-                        transition={{ duration: 0.1 }}
-                      />
-                    ))}
+                {/* File Upload Button */}
+                <label className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-dashed cursor-pointer transition-all ${
+                  uploadedFile 
+                    ? 'border-success bg-success/10'
+                    : 'border-primary/30 hover:border-primary/50 hover:bg-primary/5'
+                }`}>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="audio/*"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <div className="w-12 h-12 rounded-full flex items-center justify-center bg-secondary">
+                    <Upload className="w-5 h-5 text-foreground" />
                   </div>
-                )}
-
-                {/* Recorded Audio Preview */}
-                {audioBlob && !isRecording && (
-                  <div className="w-full flex items-center gap-2 bg-background/50 rounded-xl p-3">
-                    <Circle className="w-3 h-3 text-success fill-success" />
-                    <span className="text-sm text-foreground flex-1 font-myanmar">အသံဖမ်းထားပြီး</span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={resetRecording}
-                      className="text-destructive"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
+                  <div className="text-center">
+                    <p className="text-xs font-medium text-foreground font-myanmar">ဖိုင်ရွေးရန်</p>
+                    {uploadedFile ? (
+                      <p className="text-xs text-success font-myanmar truncate max-w-[80px]">
+                        {uploadedFile.name}
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-muted-foreground">MP3, WAV, etc.</p>
+                    )}
                   </div>
-                )}
+                </label>
               </div>
+
+              {/* Audio Level Visualizer */}
+              {isRecording && (
+                <div className="flex items-center justify-center gap-1 h-8 mb-3">
+                  {[...Array(20)].map((_, i) => (
+                    <motion.div
+                      key={i}
+                      className="w-1 bg-primary rounded-full"
+                      animate={{
+                        height: Math.max(4, audioLevel * 32 * (1 + Math.sin(i * 0.5 + Date.now() * 0.01) * 0.3)),
+                      }}
+                      transition={{ duration: 0.1 }}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Source Preview */}
+              {hasAudioSource && !isRecording && (
+                <div className="flex items-center gap-2 bg-background/50 rounded-xl p-3">
+                  <FileAudio className="w-4 h-4 text-primary" />
+                  <span className="text-sm text-foreground flex-1 font-myanmar truncate">
+                    {uploadedFile ? uploadedFile.name : "အသံဖမ်းထားပြီး"}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      resetRecording();
+                      removeUploadedFile();
+                    }}
+                    className="text-destructive h-8 w-8 p-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
             </div>
 
             <div className="gradient-card rounded-xl p-3 border border-primary/20">
@@ -587,7 +673,7 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
 
             <Button
               onClick={handleTranscribe}
-              disabled={isTranscribing || !audioBlob}
+              disabled={isTranscribing || !hasAudioSource}
               className="w-full btn-gradient-green py-4 rounded-2xl font-semibold font-myanmar"
             >
               {isTranscribing ? (
