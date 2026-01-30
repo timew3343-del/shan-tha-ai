@@ -20,3 +20,9 @@ verify_jwt = false
 
 [functions.face-swap]
 verify_jwt = false
+
+[functions.upscale-image]
+verify_jwt = false
+
+[functions.remove-bg]
+verify_jwt = false

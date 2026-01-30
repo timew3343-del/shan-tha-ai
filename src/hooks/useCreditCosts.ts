@@ -9,6 +9,9 @@ export interface CreditCosts {
   speech_to_text: number;
   ai_chat: number;
   face_swap: number;
+  upscale: number;
+  bg_remove: number;
+  live_camera: number;
 }
 
 const DEFAULT_COSTS: CreditCosts = {
@@ -19,6 +22,9 @@ const DEFAULT_COSTS: CreditCosts = {
   speech_to_text: 5,
   ai_chat: 1,
   face_swap: 15,
+  upscale: 1,
+  bg_remove: 1,
+  live_camera: 15,
 };
 
 export const useCreditCosts = () => {

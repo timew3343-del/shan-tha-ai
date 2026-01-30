@@ -146,6 +146,98 @@ export type Database = {
         }
         Relationships: []
       }
+      referral_codes: {
+        Row: {
+          code: string
+          created_at: string
+          credits_earned: number
+          id: string
+          user_id: string
+          uses_count: number
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          credits_earned?: number
+          id?: string
+          user_id: string
+          uses_count?: number
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          credits_earned?: number
+          id?: string
+          user_id?: string
+          uses_count?: number
+        }
+        Relationships: []
+      }
+      referral_uses: {
+        Row: {
+          code_id: string
+          created_at: string
+          credits_awarded: number
+          id: string
+          used_by_user_id: string
+        }
+        Insert: {
+          code_id: string
+          created_at?: string
+          credits_awarded?: number
+          id?: string
+          used_by_user_id: string
+        }
+        Update: {
+          code_id?: string
+          created_at?: string
+          credits_awarded?: number
+          id?: string
+          used_by_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_uses_code_id_fkey"
+            columns: ["code_id"]
+            isOneToOne: false
+            referencedRelation: "referral_codes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscription_plans: {
+        Row: {
+          created_at: string
+          credits: number
+          duration_days: number
+          id: string
+          is_active: boolean | null
+          name: string
+          price_mmk: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          credits: number
+          duration_days?: number
+          id?: string
+          is_active?: boolean | null
+          name: string
+          price_mmk?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          credits?: number
+          duration_days?: number
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          price_mmk?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           amount_mmk: number
