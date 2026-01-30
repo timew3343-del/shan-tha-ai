@@ -12,6 +12,7 @@ export interface CreditCosts {
   upscale: number;
   bg_remove: number;
   live_camera: number;
+  video_export: number;
 }
 
 const DEFAULT_COSTS: CreditCosts = {
@@ -25,6 +26,7 @@ const DEFAULT_COSTS: CreditCosts = {
   upscale: 1,
   bg_remove: 1,
   live_camera: 15,
+  video_export: 3,
 };
 
 export const useCreditCosts = () => {

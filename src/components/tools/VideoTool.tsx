@@ -8,6 +8,7 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { Watermark } from "@/components/Watermark";
 import { motion } from "framer-motion";
 import {
   Select,
@@ -342,13 +343,15 @@ export const VideoTool = ({ userId, onBack }: VideoToolProps) => {
               Download
             </Button>
           </div>
-          <video
-            src={generatedVideo}
-            controls
-            autoPlay
-            muted
-            className="w-full rounded-xl border border-border"
-          />
+          <Watermark userId={userId} type="video">
+            <video
+              src={generatedVideo}
+              controls
+              autoPlay
+              muted
+              className="w-full rounded-xl border border-border"
+            />
+          </Watermark>
         </motion.div>
       )}
     </motion.div>

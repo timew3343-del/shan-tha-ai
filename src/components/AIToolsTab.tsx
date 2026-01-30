@@ -16,6 +16,7 @@ import { CampaignModal } from "./CampaignModal";
 import { ReferralSection } from "./ReferralSection";
 import { LowCreditAlert } from "./LowCreditAlert";
 import { CreditDisplay } from "./CreditDisplay";
+import { VideoEditor } from "./VideoEditor";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { useCredits } from "@/hooks/useCredits";
 import { AnimatePresence, motion } from "framer-motion";
@@ -96,6 +97,15 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                 <Gift className="w-5 h-5 text-green-600" />
                 <span className="text-sm text-green-600 font-medium font-myanmar">Campaign</span>
               </button>
+            </motion.div>
+
+            {/* === VIDEO EDITOR SECTION === */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.12 }}
+            >
+              <VideoEditor userId={userId} />
             </motion.div>
 
             {/* === MIDDLE SECTION: AI Chatbot === */}

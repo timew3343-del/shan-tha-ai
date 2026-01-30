@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { useCredits } from "@/hooks/useCredits";
 import { ToolHeader } from "@/components/ToolHeader";
+import { Watermark, addWatermarkToImage } from "@/components/Watermark";
 import { motion } from "framer-motion";
 
 interface ImageToolProps {
@@ -139,7 +140,16 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
       }
 
       if (data?.success && data?.image) {
-        setGeneratedImage(data.image);
+        // Add watermark to the generated image
+        let finalImage = data.image;
+        if (userId) {
+          try {
+            finalImage = await addWatermarkToImage(data.image, userId);
+          } catch (e) {
+            console.warn("Watermark failed, using original:", e);
+          }
+        }
+        setGeneratedImage(finalImage);
         refetchCredits();
         toast({
           title: "အောင်မြင်ပါသည်",
@@ -287,11 +297,13 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
               Download
             </Button>
           </div>
-          <img
-            src={generatedImage}
-            alt="Generated"
-            className="w-full rounded-xl border border-border"
-          />
+          <Watermark userId={userId}>
+            <img
+              src={generatedImage}
+              alt="Generated"
+              className="w-full rounded-xl border border-border"
+            />
+          </Watermark>
         </motion.div>
       )}
     </motion.div>
