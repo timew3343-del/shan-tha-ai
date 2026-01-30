@@ -13,6 +13,7 @@ export interface CreditCosts {
   bg_remove: number;
   live_camera: number;
   video_export: number;
+  youtube_to_text: number;
 }
 
 const DEFAULT_COSTS: CreditCosts = {
@@ -27,6 +28,7 @@ const DEFAULT_COSTS: CreditCosts = {
   bg_remove: 1,
   live_camera: 15,
   video_export: 3,
+  youtube_to_text: 10,
 };
 
 export const useCreditCosts = () => {

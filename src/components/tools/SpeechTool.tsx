@@ -24,13 +24,20 @@ interface SpeechToolProps {
   onBack: () => void;
 }
 
+// Enhanced voice options with gender and style
 const VOICES = [
-  { id: "alloy", name: "Alloy", description: "ကြည်လင်သော အသံ" },
-  { id: "echo", name: "Echo", description: "တည်ငြိမ်သော အသံ" },
-  { id: "fable", name: "Fable", description: "ပျော်ရွှင်သော အသံ" },
-  { id: "onyx", name: "Onyx", description: "နက်ရှိုင်းသော အသံ" },
-  { id: "nova", name: "Nova", description: "သဘာဝကျသော အသံ" },
-  { id: "shimmer", name: "Shimmer", description: "ချိုမြိန်သော အသံ" },
+  // Male voices
+  { id: "roger", name: "Roger", gender: "male", style: "professional", description: "Professional ကျယ်ကျယ်" },
+  { id: "george", name: "George", gender: "male", style: "casual", description: "သဘာဝကျသော အသံ" },
+  { id: "brian", name: "Brian", gender: "male", style: "storytelling", description: "ပုံပြင်ပြော အသံ" },
+  { id: "daniel", name: "Daniel", gender: "male", style: "professional", description: "News Anchor အသံ" },
+  { id: "liam", name: "Liam", gender: "male", style: "casual", description: "ပျော်ရွှင်သော အသံ" },
+  // Female voices
+  { id: "sarah", name: "Sarah", gender: "female", style: "professional", description: "Professional မိန်းကလေး" },
+  { id: "laura", name: "Laura", gender: "female", style: "casual", description: "ချိုမြိန်သော အသံ" },
+  { id: "jessica", name: "Jessica", gender: "female", style: "storytelling", description: "ပုံပြင်ပြော အသံ" },
+  { id: "lily", name: "Lily", gender: "female", style: "professional", description: "သတင်းပြော အသံ" },
+  { id: "alice", name: "Alice", gender: "female", style: "casual", description: "ဖော်ရွေသော အသံ" },
 ];
 
 const LANGUAGES = [
@@ -40,6 +47,16 @@ const LANGUAGES = [
   { code: "zh", name: "中文" },
   { code: "ja", name: "日本語" },
   { code: "ko", name: "한국어" },
+  { code: "hi", name: "हिन्दी" },
+  { code: "vi", name: "Tiếng Việt" },
+  { code: "id", name: "Bahasa Indonesia" },
+  { code: "tl", name: "Filipino" },
+  { code: "es", name: "Español" },
+  { code: "fr", name: "Français" },
+  { code: "de", name: "Deutsch" },
+  { code: "pt", name: "Português" },
+  { code: "ru", name: "Русский" },
+  { code: "ar", name: "العربية" },
 ];
 
 export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
@@ -47,26 +64,26 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
   const { costs } = useCreditCosts();
   const { refetch: refetchCredits } = useCredits(userId);
   
-  // Mode toggle - side by side buttons
   const [activeMode, setActiveMode] = useState<"tts" | "stt">("tts");
   
-  // Text-to-Speech state
+  // TTS state
   const [ttsText, setTtsText] = useState("");
-  const [selectedVoice, setSelectedVoice] = useState("alloy");
+  const [selectedVoice, setSelectedVoice] = useState("sarah");
   const [ttsLanguage, setTtsLanguage] = useState("my");
   const [generatedAudio, setGeneratedAudio] = useState<string | null>(null);
   const [isGeneratingTTS, setIsGeneratingTTS] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Speech-to-Text state
+  // STT state
   const [sttLanguage, setSttLanguage] = useState("my");
   const [transcribedText, setTranscribedText] = useState("");
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [sttProgress, setSttProgress] = useState(0);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [genderFilter, setGenderFilter] = useState<"all" | "male" | "female">("all");
   
-  // Live recording hook
   const { 
     isRecording, 
     recordingTime, 
@@ -77,14 +94,12 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
     audioLevel 
   } = useLiveRecording();
 
-  // Format recording time
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Simulate STT progress
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isTranscribing) {
@@ -103,7 +118,7 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
     return () => clearInterval(interval);
   }, [isTranscribing]);
 
-  // Web Speech API for TTS with my-MM locale
+  // Web Speech API for TTS
   const speakText = (text: string) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
@@ -117,6 +132,16 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
         'zh': 'zh-CN',
         'ja': 'ja-JP',
         'ko': 'ko-KR',
+        'hi': 'hi-IN',
+        'vi': 'vi-VN',
+        'id': 'id-ID',
+        'tl': 'fil-PH',
+        'es': 'es-ES',
+        'fr': 'fr-FR',
+        'de': 'de-DE',
+        'pt': 'pt-BR',
+        'ru': 'ru-RU',
+        'ar': 'ar-SA',
       };
       
       utterance.lang = langMap[ttsLanguage] || 'my-MM';
@@ -124,7 +149,22 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
       utterance.pitch = 1;
       
       const voices = window.speechSynthesis.getVoices();
-      const matchingVoice = voices.find(v => v.lang.startsWith(langMap[ttsLanguage]?.split('-')[0] || 'my'));
+      const selectedVoiceData = VOICES.find(v => v.id === selectedVoice);
+      
+      // Try to find a matching voice by gender and language
+      const matchingVoice = voices.find(v => {
+        const langMatch = v.lang.startsWith(langMap[ttsLanguage]?.split('-')[0] || 'my');
+        if (!langMatch) return false;
+        
+        // Try to match gender by voice name (heuristic)
+        if (selectedVoiceData?.gender === 'female') {
+          return v.name.toLowerCase().includes('female') || 
+                 v.name.toLowerCase().includes('woman') ||
+                 !v.name.toLowerCase().includes('male');
+        }
+        return true;
+      }) || voices.find(v => v.lang.startsWith(langMap[ttsLanguage]?.split('-')[0] || 'my'));
+      
       if (matchingVoice) {
         utterance.voice = matchingVoice;
       }
@@ -185,7 +225,7 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
 
       if (data?.useWebSpeech) {
         speakText(ttsText);
-        setGeneratedAudio("generated");
+        setGeneratedAudio("web-speech");
         refetchCredits();
         toast({
           title: "အောင်မြင်ပါသည်",
@@ -223,7 +263,6 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
     setIsPlaying(false);
   };
 
-  // Handle file upload
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -337,7 +376,6 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
     }
   };
 
-  // Mic permission state
   const [showMicPermission, setShowMicPermission] = useState(false);
 
   const handleRecordClick = async () => {
@@ -349,7 +387,6 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
         removeUploadedFile();
         await startRecording();
       } catch (error) {
-        // Show instructional popup instead of just a toast
         setShowMicPermission(true);
       }
     }
@@ -369,6 +406,7 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
   };
 
   const hasAudioSource = audioBlob || uploadedFile;
+  const filteredVoices = genderFilter === "all" ? VOICES : VOICES.filter(v => v.gender === genderFilter);
 
   return (
     <motion.div
@@ -383,7 +421,7 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
         onBack={onBack} 
       />
 
-      {/* Mode Toggle - Side by Side */}
+      {/* Mode Toggle */}
       <div className="grid grid-cols-2 gap-2">
         <Button
           variant={activeMode === "tts" ? "default" : "outline"}
@@ -412,7 +450,7 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
             exit={{ opacity: 0, y: -10 }}
             className="space-y-4"
           >
-            {/* TTS Content */}
+            {/* TTS Text Input */}
             <div className="gradient-card rounded-2xl p-4 border border-primary/20">
               <label className="block text-sm font-medium text-primary mb-2 font-myanmar">
                 စာသားထည့်ပါ
@@ -425,6 +463,22 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
               />
             </div>
 
+            {/* Gender Filter */}
+            <div className="flex gap-2">
+              {(["all", "male", "female"] as const).map((g) => (
+                <Button
+                  key={g}
+                  variant={genderFilter === g ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setGenderFilter(g)}
+                  className="flex-1 text-xs font-myanmar"
+                >
+                  {g === "all" ? "အားလုံး" : g === "male" ? "အမျိုးသား" : "အမျိုးသမီး"}
+                </Button>
+              ))}
+            </div>
+
+            {/* Voice & Language Selection */}
             <div className="grid grid-cols-2 gap-3">
               <div className="gradient-card rounded-xl p-3 border border-primary/20">
                 <label className="block text-xs font-medium text-primary mb-2 font-myanmar">
@@ -435,10 +489,10 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {VOICES.map((voice) => (
+                    {filteredVoices.map((voice) => (
                       <SelectItem key={voice.id} value={voice.id}>
                         <div className="flex flex-col">
-                          <span>{voice.name}</span>
+                          <span>{voice.name} ({voice.style})</span>
                           <span className="text-xs text-muted-foreground font-myanmar">
                             {voice.description}
                           </span>
@@ -493,32 +547,35 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
                 className="gradient-card rounded-2xl p-4 border border-success/30"
               >
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-primary font-myanmar">အသံဖိုင်</h3>
-                  <span className="text-xs text-muted-foreground">Web Speech API</span>
+                  <h3 className="text-sm font-semibold text-primary font-myanmar">အသံထိန်းချုပ်</h3>
                 </div>
                 
                 <div className="flex items-center gap-3 bg-background/50 rounded-xl p-4">
                   <Button
                     onClick={handlePlayPause}
-                    size="sm"
-                    className="rounded-full w-12 h-12 p-0"
+                    size="icon"
+                    className="h-12 w-12 rounded-full"
                   >
                     {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
                   </Button>
+                  
                   <div className="flex-1">
-                    <p className="text-sm text-foreground font-medium font-myanmar">
-                      {isPlaying ? "အသံဖတ်နေသည်..." : "ပြန်ဖတ်ရန် Play နှိပ်ပါ"}
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate max-w-[200px] font-myanmar">
-                      {ttsText.substring(0, 50)}...
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div className={`h-full bg-primary transition-all ${isPlaying ? 'animate-pulse' : ''}`} style={{ width: isPlaying ? '50%' : '0%' }} />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1 font-myanmar">
+                      {isPlaying ? 'ဖွင့်နေသည်...' : 'Play နှိပ်ပါ'}
                     </p>
                   </div>
-                  {isPlaying && (
-                    <Button onClick={handleStopSpeech} size="sm" variant="outline" className="text-xs font-myanmar">
-                      <Square className="w-3 h-3 mr-1" />
-                      ရပ်မည်
-                    </Button>
-                  )}
+                  
+                  <Button
+                    onClick={handleStopSpeech}
+                    size="icon"
+                    variant="outline"
+                    className="h-10 w-10 rounded-full"
+                  >
+                    <Square className="w-4 h-4" />
+                  </Button>
                 </div>
               </motion.div>
             )}
@@ -531,126 +588,100 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
             exit={{ opacity: 0, y: -10 }}
             className="space-y-4"
           >
-            {/* STT Content with Live Recording AND File Upload */}
+            {/* Recording Section */}
             <div className="gradient-card rounded-2xl p-4 border border-primary/20">
               <label className="block text-sm font-medium text-primary mb-3 font-myanmar">
-                အသံရယူရန်
+                အသံဖမ်းရန်
               </label>
               
-              {/* Recording and Upload buttons side by side */}
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                {/* Record Button */}
-                <motion.button
-                  onClick={handleRecordClick}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-dashed transition-all ${
-                    isRecording 
-                      ? 'border-destructive bg-destructive/10' 
-                      : audioBlob && !uploadedFile
-                        ? 'border-success bg-success/10'
-                        : 'border-primary/30 hover:border-primary/50 hover:bg-primary/5'
-                  }`}
-                  animate={{
-                    scale: isRecording ? [1, 1.02, 1] : 1,
-                  }}
-                  transition={{
-                    duration: 1,
-                    repeat: isRecording ? Infinity : 0,
-                  }}
-                >
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                    isRecording ? 'bg-destructive' : 'bg-primary'
-                  }`}>
-                    {isRecording ? (
-                      <Square className="w-5 h-5 text-white" />
-                    ) : (
-                      <Mic className="w-5 h-5 text-white" />
-                    )}
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs font-medium text-foreground font-myanmar">
-                      {isRecording ? "ရပ်မည်" : "အသံဖမ်းမည်"}
-                    </p>
-                    {isRecording && (
-                      <p className="text-lg font-mono font-bold text-destructive">
-                        {formatTime(recordingTime)}
-                      </p>
-                    )}
-                    {audioBlob && !isRecording && !uploadedFile && (
-                      <p className="text-xs text-success font-myanmar">ဖမ်းပြီး ✓</p>
-                    )}
-                  </div>
-                </motion.button>
-
-                {/* File Upload Button */}
-                <label className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-dashed cursor-pointer transition-all ${
-                  uploadedFile 
-                    ? 'border-success bg-success/10'
-                    : 'border-primary/30 hover:border-primary/50 hover:bg-primary/5'
-                }`}>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="audio/*"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center bg-secondary">
-                    <Upload className="w-5 h-5 text-foreground" />
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs font-medium text-foreground font-myanmar">ဖိုင်ရွေးရန်</p>
-                    {uploadedFile ? (
-                      <p className="text-xs text-success font-myanmar truncate max-w-[80px]">
-                        {uploadedFile.name}
-                      </p>
-                    ) : (
-                      <p className="text-[10px] text-muted-foreground">MP3, WAV, etc.</p>
-                    )}
-                  </div>
-                </label>
-              </div>
-
-              {/* Audio Level Visualizer */}
-              {isRecording && (
-                <div className="flex items-center justify-center gap-1 h-8 mb-3">
-                  {[...Array(20)].map((_, i) => (
-                    <motion.div
+              <div className="flex flex-col items-center gap-4">
+                {/* Audio Visualizer */}
+                <div className="flex items-end justify-center gap-1 h-16 w-full bg-background/30 rounded-xl p-2">
+                  {Array.from({ length: 20 }).map((_, i) => (
+                    <div
                       key={i}
-                      className="w-1 bg-primary rounded-full"
-                      animate={{
-                        height: Math.max(4, audioLevel * 32 * (1 + Math.sin(i * 0.5 + Date.now() * 0.01) * 0.3)),
+                      className={`w-2 rounded-full transition-all duration-100 ${
+                        isRecording ? 'bg-red-500' : 'bg-primary/30'
+                      }`}
+                      style={{
+                        height: isRecording
+                          ? `${Math.max(10, Math.random() * audioLevel * 100)}%`
+                          : '10%',
                       }}
-                      transition={{ duration: 0.1 }}
                     />
                   ))}
                 </div>
-              )}
 
-              {/* Source Preview */}
-              {hasAudioSource && !isRecording && (
-                <div className="flex items-center gap-2 bg-background/50 rounded-xl p-3">
-                  <FileAudio className="w-4 h-4 text-primary" />
-                  <span className="text-sm text-foreground flex-1 font-myanmar truncate">
-                    {uploadedFile ? uploadedFile.name : "အသံဖမ်းထားပြီး"}
-                  </span>
+                {/* Recording Time */}
+                <span className="text-2xl font-mono text-primary">
+                  {formatTime(recordingTime)}
+                </span>
+
+                {/* Record Button */}
+                <Button
+                  onClick={handleRecordClick}
+                  className={`h-16 w-16 rounded-full ${
+                    isRecording ? 'bg-red-500 hover:bg-red-600' : 'btn-gradient-red'
+                  }`}
+                >
+                  {isRecording ? (
+                    <Square className="w-6 h-6" />
+                  ) : (
+                    <Circle className="w-6 h-6" />
+                  )}
+                </Button>
+
+                <p className="text-xs text-muted-foreground font-myanmar">
+                  {isRecording ? 'ရပ်ရန် နှိပ်ပါ' : 'အသံဖမ်းရန် နှိပ်ပါ'}
+                </p>
+              </div>
+            </div>
+
+            {/* File Upload Section */}
+            <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+              <label className="block text-sm font-medium text-primary mb-3 font-myanmar">
+                <FileAudio className="w-4 h-4 inline mr-1" />
+                ဖိုင်ရွေးရန်
+              </label>
+              
+              {uploadedFile ? (
+                <div className="flex items-center gap-3 bg-background/50 rounded-xl p-3">
+                  <FileAudio className="w-5 h-5 text-primary" />
+                  <span className="flex-1 text-sm truncate">{uploadedFile.name}</span>
                   <Button
-                    size="sm"
+                    onClick={removeUploadedFile}
+                    size="icon"
                     variant="ghost"
-                    onClick={() => {
-                      resetRecording();
-                      removeUploadedFile();
-                    }}
-                    className="text-destructive h-8 w-8 p-0"
+                    className="h-8 w-8"
                   >
                     <X className="w-4 h-4" />
                   </Button>
                 </div>
+              ) : (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full h-20 border-2 border-dashed border-primary/30 rounded-xl flex flex-col items-center justify-center gap-1 hover:bg-primary/5 transition-colors"
+                >
+                  <Upload className="w-6 h-6 text-primary" />
+                  <span className="text-xs text-muted-foreground font-myanmar">
+                    MP3, WAV, WebM, M4A ဖိုင်ထည့်ပါ
+                  </span>
+                </button>
               )}
+              
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="audio/*"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
             </div>
 
+            {/* Language Selection */}
             <div className="gradient-card rounded-xl p-3 border border-primary/20">
               <label className="block text-xs font-medium text-primary mb-2 font-myanmar">
-                အသံဘာသာစကား
+                ဘာသာစကား
               </label>
               <Select value={sttLanguage} onValueChange={setSttLanguage}>
                 <SelectTrigger className="bg-background/50 border-primary/30 text-sm">
@@ -666,21 +697,25 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
               </Select>
             </div>
 
-            {/* Progress Bar */}
+            {/* Progress */}
             {isTranscribing && (
-              <div className="space-y-2">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="space-y-2"
+              >
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span className="font-myanmar">စာသားပြောင်းနေသည်...</span>
                   <span>{Math.round(sttProgress)}%</span>
                 </div>
                 <Progress value={sttProgress} className="h-2" />
-              </div>
+              </motion.div>
             )}
 
             <Button
               onClick={handleTranscribe}
               disabled={isTranscribing || !hasAudioSource}
-              className="w-full btn-gradient-green py-4 rounded-2xl font-semibold font-myanmar"
+              className="w-full btn-gradient-blue py-4 rounded-2xl font-semibold font-myanmar"
             >
               {isTranscribing ? (
                 <>
@@ -695,24 +730,29 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
               )}
             </Button>
 
+            {/* Result */}
             {transcribedText && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="gradient-card rounded-2xl p-4 border border-success/30"
+                className="gradient-card rounded-2xl p-4 border border-primary/30"
               >
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-semibold text-primary font-myanmar">ရလဒ်</h3>
-                  <Button onClick={copyToClipboard} size="sm" variant="outline" className="text-xs font-myanmar">
-                    <Download className="w-3 h-3 mr-1" />
-                    ကူးယူမည်
+                  <Button
+                    onClick={copyToClipboard}
+                    size="sm"
+                    variant="outline"
+                    className="text-xs font-myanmar"
+                  >
+                    Copy
                   </Button>
                 </div>
-                <div className="bg-background/50 rounded-xl p-3 border border-border">
-                  <p className="text-sm text-foreground whitespace-pre-wrap font-myanmar leading-relaxed">
-                    {transcribedText}
-                  </p>
-                </div>
+                <Textarea
+                  value={transcribedText}
+                  readOnly
+                  className="min-h-[100px] bg-background/50 border-primary/30 rounded-xl font-myanmar"
+                />
               </motion.div>
             )}
           </motion.div>

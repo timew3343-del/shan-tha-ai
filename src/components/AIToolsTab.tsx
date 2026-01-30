@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Image, Video, Volume2, Crown, Wallet, Users, Gift, 
-  ZoomIn, Eraser, Sparkles 
+  ZoomIn, Eraser, Sparkles, Youtube 
 } from "lucide-react";
 import { ImageTool } from "./tools/ImageTool";
 import { VideoTool } from "./tools/VideoTool";
@@ -10,6 +10,7 @@ import { SpeechTool } from "./tools/SpeechTool";
 import { FaceSwapTool } from "./tools/FaceSwapTool";
 import { UpscaleTool } from "./tools/UpscaleTool";
 import { BgRemoveTool } from "./tools/BgRemoveTool";
+import { YouTubeToTextTool } from "./tools/YouTubeToTextTool";
 import { ToolCardCompact } from "./ToolCardCompact";
 import { AIChatbot } from "./AIChatbot";
 import { CampaignModal } from "./CampaignModal";
@@ -25,7 +26,7 @@ interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "youtube";
 
 export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const navigate = useNavigate();
@@ -199,14 +200,22 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                 <Volume2 className="w-4 h-4 text-primary" />
                 <h2 className="text-sm font-semibold text-foreground font-myanmar">အသံ/စာ Tools</h2>
               </div>
-              <div className="grid grid-cols-1 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <ToolCardCompact
                   icon={Volume2}
                   title="အသံ ↔ စာ"
-                  description="Text-to-Speech & Speech-to-Text"
+                  description="Text-to-Speech & STT"
                   gradient="bg-gradient-to-br from-emerald-500 via-green-600 to-teal-700"
                   onClick={() => setActiveTool("speech")}
                   credits={costs.text_to_speech}
+                />
+                <ToolCardCompact
+                  icon={Youtube}
+                  title="YouTube → စာ"
+                  description="ဗီဒီယိုမှ စာထုတ်"
+                  gradient="bg-gradient-to-br from-red-500 via-red-600 to-rose-700"
+                  onClick={() => setActiveTool("youtube")}
+                  credits={costs.youtube_to_text}
                 />
               </div>
             </motion.div>
@@ -257,6 +266,10 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
 
         {activeTool === "bgremove" && (
           <BgRemoveTool key="bgremove" userId={userId} onBack={handleBack} />
+        )}
+
+        {activeTool === "youtube" && (
+          <YouTubeToTextTool key="youtube" userId={userId} onBack={handleBack} />
         )}
       </AnimatePresence>
 
