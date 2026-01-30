@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Image, Video, Volume2, Crown, Wallet } from "lucide-react";
+import { Image, Video, Volume2, Crown, Wallet, Users, Gift } from "lucide-react";
 import { ImageTool } from "./tools/ImageTool";
 import { VideoTool } from "./tools/VideoTool";
 import { SpeechTool } from "./tools/SpeechTool";
+import { FaceSwapTool } from "./tools/FaceSwapTool";
 import { ToolCardCompact } from "./ToolCardCompact";
 import { AIChatbot } from "./AIChatbot";
+import { CampaignModal } from "./CampaignModal";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -13,11 +15,12 @@ interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap";
 
 export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const navigate = useNavigate();
   const [activeTool, setActiveTool] = useState<ActiveTool>("home");
+  const [showCampaign, setShowCampaign] = useState(false);
   const { costs } = useCreditCosts();
 
   const handleBack = () => {
@@ -52,13 +55,21 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
+              className="flex gap-2"
             >
               <button
                 onClick={() => navigate("/top-up")}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-primary/10 border border-primary/30 hover:bg-primary/20 transition-all"
+                className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-primary/10 border border-primary/30 hover:bg-primary/20 transition-all"
               >
                 <Wallet className="w-5 h-5 text-primary" />
                 <span className="text-sm text-primary font-medium font-myanmar">ငွေဖြည့်မည်</span>
+              </button>
+              <button
+                onClick={() => setShowCampaign(true)}
+                className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 transition-all"
+              >
+                <Gift className="w-5 h-5 text-green-600" />
+                <span className="text-sm text-green-600 font-medium font-myanmar">Campaign</span>
               </button>
             </motion.div>
 
@@ -68,7 +79,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.15 }}
             >
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <ToolCardCompact
                   icon={Image}
                   title="ပုံထုတ်ရန်"
@@ -94,6 +105,15 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                   gradient="bg-gradient-to-br from-emerald-500 via-green-600 to-teal-700"
                   onClick={() => setActiveTool("speech")}
                   credits={costs.text_to_speech}
+                />
+
+                <ToolCardCompact
+                  icon={Users}
+                  title="Face Swap"
+                  description="မျက်နှာပြောင်း"
+                  gradient="bg-gradient-to-br from-purple-500 via-violet-600 to-indigo-700"
+                  onClick={() => setActiveTool("faceswap")}
+                  credits={costs.face_swap}
                 />
               </div>
             </motion.div>
@@ -133,7 +153,18 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
         {activeTool === "speech" && (
           <SpeechTool key="speech" userId={userId} onBack={handleBack} />
         )}
+
+        {activeTool === "faceswap" && (
+          <FaceSwapTool key="faceswap" userId={userId} onBack={handleBack} />
+        )}
       </AnimatePresence>
+
+      {/* Campaign Modal */}
+      <CampaignModal
+        isOpen={showCampaign}
+        onClose={() => setShowCampaign(false)}
+        userId={userId}
+      />
     </div>
   );
 };
