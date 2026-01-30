@@ -76,7 +76,16 @@ export const Admin = () => {
     speech_to_text: 5,
     ai_chat: 1,
     face_swap: 15,
+    upscale: 1,
+    bg_remove: 1,
+    live_camera: 15,
   });
+
+  // Manual credit management state
+  const [manualCreditEmail, setManualCreditEmail] = useState("");
+  const [manualCreditAmount, setManualCreditAmount] = useState("");
+  const [manualCreditAction, setManualCreditAction] = useState<"add" | "subtract">("add");
+  const [isProcessingManualCredit, setIsProcessingManualCredit] = useState(false);
 
   // Users state
   const [users, setUsers] = useState<{ user_id: string; email: string; credit_balance: number; created_at: string }[]>([]);
@@ -242,6 +251,105 @@ export const Admin = () => {
     await supabase.from("campaigns").update({ status: "rejected" }).eq("id", campaignId);
     toast({ title: "Campaign ငြင်းပယ်ပြီး" });
     loadCampaigns();
+  };
+
+  // Manual credit management
+  const handleManualCredit = async () => {
+    if (!manualCreditEmail || !manualCreditAmount) {
+      toast({
+        title: "အချက်အလက်မပြည့်စုံပါ",
+        description: "Email နှင့် Credit ပမာဏ ထည့်ပါ",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const amount = parseInt(manualCreditAmount, 10);
+    if (isNaN(amount) || amount <= 0) {
+      toast({
+        title: "Credit ပမာဏ မှားယွင်းနေပါသည်",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsProcessingManualCredit(true);
+    try {
+      // Find user by email - search in profiles with a more direct approach
+      // Since we can't use admin.listUsers from client, we'll search profiles
+      const { data: profilesData } = await supabase
+        .from("profiles")
+        .select("user_id");
+      
+      // We need to match by looking up user emails through a service function
+      // For now, let's use the email the admin provides and trust it
+      // In production, you'd want a secure lookup function
+      
+      // Try to find user_id from users list that we already loaded
+      const matchedUser = users.find(u => u.email === manualCreditEmail);
+      let targetUserId = matchedUser?.user_id;
+      
+      // If not found in loaded users, we can't proceed without admin API
+      if (!targetUserId) {
+        // Fallback: search by partial user_id if it looks like UUID
+        if (manualCreditEmail.includes("-") && manualCreditEmail.length === 36) {
+          targetUserId = manualCreditEmail;
+        } else {
+          toast({
+            title: "User မတွေ့ပါ",
+            description: `${manualCreditEmail} ဖြင့် အကောင့်မတွေ့ပါ။ User ID ကို တိုက်ရိုက်ထည့်ကြည့်ပါ။`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      if (manualCreditAction === "add") {
+        const { data: result, error } = await supabase.rpc("add_user_credits", { 
+          _user_id: targetUserId, 
+          _amount: amount 
+        });
+        
+        const resultObj = result as { success?: boolean; error?: string } | null;
+        if (error || !resultObj?.success) {
+          throw new Error(resultObj?.error || "Failed to add credits");
+        }
+        
+        toast({
+          title: "အောင်မြင်ပါသည်",
+          description: `${manualCreditEmail} သို့ ${amount} Credits ထည့်သွင်းပြီးပါပြီ`,
+        });
+      } else {
+        const { data: result, error } = await supabase.rpc("deduct_user_credits", { 
+          _user_id: targetUserId, 
+          _amount: amount,
+          _action: "admin_deduct"
+        });
+        
+        const resultObj = result as { success?: boolean; error?: string } | null;
+        if (error || !resultObj?.success) {
+          throw new Error(resultObj?.error || "Failed to deduct credits");
+        }
+        
+        toast({
+          title: "အောင်မြင်ပါသည်",
+          description: `${manualCreditEmail} မှ ${amount} Credits နုတ်ယူပြီးပါပြီ`,
+        });
+      }
+
+      setManualCreditEmail("");
+      setManualCreditAmount("");
+      loadUsers();
+    } catch (error: any) {
+      console.error("Manual credit error:", error);
+      toast({
+        title: "အမှားရှိပါသည်",
+        description: error.message || "Credit ပြောင်းလဲရာတွင် ပြဿနာရှိပါသည်",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessingManualCredit(false);
+    }
   };
 
   const fetchTransactions = async () => {
@@ -1037,6 +1145,58 @@ export const Admin = () => {
                     className="w-20 text-center bg-background/50"
                   />
                 </div>
+
+                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                  <div>
+                    <span className="text-sm font-medium text-foreground">Face Swap</span>
+                    <p className="text-xs text-muted-foreground">မျက်နှာပြောင်း ဗီဒီယို</p>
+                  </div>
+                  <Input
+                    type="number"
+                    value={creditCosts.face_swap}
+                    onChange={(e) => setCreditCosts(prev => ({ ...prev, face_swap: parseInt(e.target.value) || 0 }))}
+                    className="w-20 text-center bg-background/50"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                  <div>
+                    <span className="text-sm font-medium text-foreground">4K Upscale</span>
+                    <p className="text-xs text-muted-foreground">ပုံ Resolution မြှင့်တင်</p>
+                  </div>
+                  <Input
+                    type="number"
+                    value={creditCosts.upscale}
+                    onChange={(e) => setCreditCosts(prev => ({ ...prev, upscale: parseInt(e.target.value) || 0 }))}
+                    className="w-20 text-center bg-background/50"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                  <div>
+                    <span className="text-sm font-medium text-foreground">Background Remove</span>
+                    <p className="text-xs text-muted-foreground">နောက်ခံ ဖယ်ရှားခြင်း</p>
+                  </div>
+                  <Input
+                    type="number"
+                    value={creditCosts.bg_remove}
+                    onChange={(e) => setCreditCosts(prev => ({ ...prev, bg_remove: parseInt(e.target.value) || 0 }))}
+                    className="w-20 text-center bg-background/50"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                  <div>
+                    <span className="text-sm font-medium text-foreground">Live Camera</span>
+                    <p className="text-xs text-muted-foreground">ကင်မရာ တိုက်ရိုက်</p>
+                  </div>
+                  <Input
+                    type="number"
+                    value={creditCosts.live_camera}
+                    onChange={(e) => setCreditCosts(prev => ({ ...prev, live_camera: parseInt(e.target.value) || 0 }))}
+                    className="w-20 text-center bg-background/50"
+                  />
+                </div>
               </div>
 
               <Button 
@@ -1053,6 +1213,69 @@ export const Admin = () => {
                   </>
                 )}
               </Button>
+            </div>
+
+            {/* Manual Credit Management */}
+            <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                <Wallet className="w-5 h-5 text-primary" />
+                Manual Credit Management
+              </h3>
+              <p className="text-xs text-muted-foreground mb-4">
+                User ID (UUID) ထည့်၍ Credit များ တိုက်ရိုက် ထည့်/နုတ်ယူနိုင်ပါသည်
+              </p>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">User ID (UUID)</label>
+                  <Input
+                    type="text"
+                    value={manualCreditEmail}
+                    onChange={(e) => setManualCreditEmail(e.target.value)}
+                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                    className="bg-background/50"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Credits ပမာဏ</label>
+                    <Input
+                      type="number"
+                      value={manualCreditAmount}
+                      onChange={(e) => setManualCreditAmount(e.target.value)}
+                      placeholder="100"
+                      className="bg-background/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Action</label>
+                    <select
+                      value={manualCreditAction}
+                      onChange={(e) => setManualCreditAction(e.target.value as "add" | "subtract")}
+                      className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                    >
+                      <option value="add">ထည့်မည် (+)</option>
+                      <option value="subtract">နုတ်မည် (-)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={handleManualCredit}
+                  disabled={isProcessingManualCredit || !manualCreditEmail || !manualCreditAmount}
+                  className={`w-full ${manualCreditAction === "add" ? "btn-gradient-green" : "btn-gradient-red"}`}
+                >
+                  {isProcessingManualCredit ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      {manualCreditAction === "add" ? <Plus className="w-4 h-4 mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
+                      {manualCreditAction === "add" ? "Credits ထည့်မည်" : "Credits နုတ်မည်"}
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
 
             {/* API Health */}

@@ -1,27 +1,45 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Image, Video, Volume2, Crown, Wallet, Users, Gift } from "lucide-react";
+import { 
+  Image, Video, Volume2, Crown, Wallet, Users, Gift, 
+  ZoomIn, Eraser, Sparkles 
+} from "lucide-react";
 import { ImageTool } from "./tools/ImageTool";
 import { VideoTool } from "./tools/VideoTool";
 import { SpeechTool } from "./tools/SpeechTool";
 import { FaceSwapTool } from "./tools/FaceSwapTool";
+import { UpscaleTool } from "./tools/UpscaleTool";
+import { BgRemoveTool } from "./tools/BgRemoveTool";
 import { ToolCardCompact } from "./ToolCardCompact";
 import { AIChatbot } from "./AIChatbot";
 import { CampaignModal } from "./CampaignModal";
+import { ReferralSection } from "./ReferralSection";
+import { LowCreditAlert } from "./LowCreditAlert";
+import { CreditDisplay } from "./CreditDisplay";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
+import { useCredits } from "@/hooks/useCredits";
 import { AnimatePresence, motion } from "framer-motion";
 
 interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove";
 
 export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const navigate = useNavigate();
   const [activeTool, setActiveTool] = useState<ActiveTool>("home");
   const [showCampaign, setShowCampaign] = useState(false);
+  const [showLowCreditAlert, setShowLowCreditAlert] = useState(false);
   const { costs } = useCreditCosts();
+  const { credits, isLoading: creditsLoading } = useCredits(userId);
+
+  // Show low credit alert when credits fall below 5
+  useEffect(() => {
+    if (!creditsLoading && credits <= 5 && credits > 0) {
+      setShowLowCreditAlert(true);
+    }
+  }, [credits, creditsLoading]);
 
   const handleBack = () => {
     setActiveTool("home");
@@ -29,6 +47,13 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
 
   return (
     <div className="min-h-screen">
+      {/* Low Credit Alert */}
+      <LowCreditAlert 
+        credits={credits} 
+        show={showLowCreditAlert} 
+        onClose={() => setShowLowCreditAlert(false)} 
+      />
+
       <AnimatePresence mode="wait">
         {activeTool === "home" && (
           <motion.div
@@ -38,7 +63,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
             exit={{ opacity: 0, x: -20 }}
             className="flex flex-col gap-4 p-4 pb-24"
           >
-            {/* Header */}
+            {/* === TOP SECTION: Header & Credits === */}
             <div className="text-center pt-2">
               <div className="inline-flex items-center gap-2 mb-1">
                 <Crown className="w-5 h-5 text-primary animate-pulse" />
@@ -50,7 +75,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               </p>
             </div>
 
-            {/* Quick Actions */}
+            {/* Top-up and Campaign Buttons */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -73,22 +98,68 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               </button>
             </motion.div>
 
-            {/* Premium Tool Cards - Horizontal Grid */}
+            {/* === MIDDLE SECTION: AI Chatbot === */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.15 }}
             >
-              <div className="grid grid-cols-2 gap-2">
+              <AIChatbot userId={userId} />
+            </motion.div>
+
+            {/* === BOTTOM SECTION: Tool Categories === */}
+            {/* Image Tools Category */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Image className="w-4 h-4 text-primary" />
+                <h2 className="text-sm font-semibold text-foreground font-myanmar">ပုံ Tools</h2>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
                 <ToolCardCompact
                   icon={Image}
                   title="ပုံထုတ်ရန်"
-                  description="AI ဖြင့် ပုံဆွဲခြင်း"
+                  description="AI ပုံဆွဲ"
                   gradient="bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700"
                   onClick={() => setActiveTool("image")}
                   credits={costs.image_generation}
+                  size="small"
                 />
+                <ToolCardCompact
+                  icon={ZoomIn}
+                  title="4K Upscale"
+                  description="Resolution မြှင့်"
+                  gradient="bg-gradient-to-br from-cyan-500 via-cyan-600 to-blue-700"
+                  onClick={() => setActiveTool("upscale")}
+                  credits={costs.upscale}
+                  size="small"
+                />
+                <ToolCardCompact
+                  icon={Eraser}
+                  title="BG Remove"
+                  description="Background ဖယ်"
+                  gradient="bg-gradient-to-br from-teal-500 via-teal-600 to-emerald-700"
+                  onClick={() => setActiveTool("bgremove")}
+                  credits={costs.bg_remove}
+                  size="small"
+                />
+              </div>
+            </motion.div>
 
+            {/* Video Tools Category */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Video className="w-4 h-4 text-primary" />
+                <h2 className="text-sm font-semibold text-foreground font-myanmar">ဗီဒီယို Tools</h2>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
                 <ToolCardCompact
                   icon={Video}
                   title="ဗီဒီယိုထုတ်ရန်"
@@ -97,16 +168,6 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                   onClick={() => setActiveTool("video")}
                   credits={costs.video_generation}
                 />
-
-                <ToolCardCompact
-                  icon={Volume2}
-                  title="အသံ/စာ"
-                  description="Text ↔ Speech"
-                  gradient="bg-gradient-to-br from-emerald-500 via-green-600 to-teal-700"
-                  onClick={() => setActiveTool("speech")}
-                  credits={costs.text_to_speech}
-                />
-
                 <ToolCardCompact
                   icon={Users}
                   title="Face Swap"
@@ -118,20 +179,42 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               </div>
             </motion.div>
 
-            {/* AI Chatbot Section */}
+            {/* Speech/Text Category */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
+              transition={{ delay: 0.3 }}
             >
-              <AIChatbot userId={userId} />
+              <div className="flex items-center gap-2 mb-2">
+                <Volume2 className="w-4 h-4 text-primary" />
+                <h2 className="text-sm font-semibold text-foreground font-myanmar">အသံ/စာ Tools</h2>
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                <ToolCardCompact
+                  icon={Volume2}
+                  title="အသံ ↔ စာ"
+                  description="Text-to-Speech & Speech-to-Text"
+                  gradient="bg-gradient-to-br from-emerald-500 via-green-600 to-teal-700"
+                  onClick={() => setActiveTool("speech")}
+                  credits={costs.text_to_speech}
+                />
+              </div>
+            </motion.div>
+
+            {/* Referral Section */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.35 }}
+            >
+              <ReferralSection userId={userId} />
             </motion.div>
 
             {/* Info Card */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
+              transition={{ delay: 0.4 }}
               className="gradient-card rounded-2xl p-4 border border-primary/20"
             >
               <h3 className="text-sm font-semibold text-primary mb-1 font-myanmar">💡 အကြံပြုချက်</h3>
@@ -156,6 +239,14 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
 
         {activeTool === "faceswap" && (
           <FaceSwapTool key="faceswap" userId={userId} onBack={handleBack} />
+        )}
+
+        {activeTool === "upscale" && (
+          <UpscaleTool key="upscale" userId={userId} onBack={handleBack} />
+        )}
+
+        {activeTool === "bgremove" && (
+          <BgRemoveTool key="bgremove" userId={userId} onBack={handleBack} />
         )}
       </AnimatePresence>
 
