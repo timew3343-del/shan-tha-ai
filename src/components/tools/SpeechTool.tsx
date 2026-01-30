@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { ToolHeader } from "@/components/ToolHeader";
 import { useLiveRecording } from "@/hooks/useLiveRecording";
+import { MicPermissionPopup } from "@/components/MicPermissionPopup";
 import {
   Select,
   SelectContent,
@@ -336,6 +337,9 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
     }
   };
 
+  // Mic permission state
+  const [showMicPermission, setShowMicPermission] = useState(false);
+
   const handleRecordClick = async () => {
     if (isRecording) {
       stopRecording();
@@ -345,13 +349,15 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
         removeUploadedFile();
         await startRecording();
       } catch (error) {
-        toast({
-          title: "မိုက်ခရိုဖုန်းအသုံးပြုခွင့် မရှိပါ",
-          description: "Browser settings မှ microphone permission ပေးပါ",
-          variant: "destructive",
-        });
+        // Show instructional popup instead of just a toast
+        setShowMicPermission(true);
       }
     }
+  };
+
+  const handleRetryMic = () => {
+    setShowMicPermission(false);
+    handleRecordClick();
   };
 
   const copyToClipboard = () => {
@@ -712,6 +718,13 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Mic Permission Popup */}
+      <MicPermissionPopup
+        isOpen={showMicPermission}
+        onClose={() => setShowMicPermission(false)}
+        onRetry={handleRetryMic}
+      />
     </motion.div>
   );
 };

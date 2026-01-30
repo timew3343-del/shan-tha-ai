@@ -38,6 +38,42 @@ export type Database = {
         }
         Relationships: []
       }
+      campaigns: {
+        Row: {
+          admin_notes: string | null
+          created_at: string
+          credits_awarded: number | null
+          id: string
+          link: string
+          platform: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          created_at?: string
+          credits_awarded?: number | null
+          id?: string
+          link: string
+          platform: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          admin_notes?: string | null
+          created_at?: string
+          credits_awarded?: number | null
+          id?: string
+          link?: string
+          platform?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       pricing_packages: {
         Row: {
           created_at: string

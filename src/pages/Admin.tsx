@@ -4,7 +4,8 @@ import {
   ArrowLeft, Users, CreditCard, CheckCircle, XCircle, Clock, 
   BarChart3, Download, Settings, Activity, Sun, Moon,
   Bell, TrendingUp, DollarSign, Building,
-  Save, Key, Plus, Trash2, Wallet, CreditCard as CardIcon, Image, X, Loader2
+  Save, Key, Plus, Trash2, Wallet, CreditCard as CardIcon, Image, X, Loader2,
+  Gift, ExternalLink
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -74,12 +75,20 @@ export const Admin = () => {
     text_to_speech: 2,
     speech_to_text: 5,
     ai_chat: 1,
+    face_swap: 15,
   });
 
   // Users state
   const [users, setUsers] = useState<{ user_id: string; email: string; credit_balance: number; created_at: string }[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isSavingCosts, setIsSavingCosts] = useState(false);
+
+  // Campaigns state
+  const [campaigns, setCampaigns] = useState<{ id: string; user_id: string; link: string; platform: string; status: string; created_at: string; user_email?: string }[]>([]);
+  const [isLoadingCampaigns, setIsLoadingCampaigns] = useState(false);
+  
+  // Face swap enabled state
+  const [faceSwapEnabled, setFaceSwapEnabled] = useState(true);
 
   // API Keys state
   const [geminiApiKey, setGeminiApiKey] = useState("");
@@ -145,6 +154,8 @@ export const Admin = () => {
       calculateAnalytics();
       checkApiHealth();
       loadSettings();
+      loadUsers();
+      loadCampaigns();
       setIsLoading(false);
     }
   }, [roleLoading, isAdmin, userId, navigate, toast]);
@@ -202,6 +213,35 @@ export const Admin = () => {
     } catch (error) {
       console.error("Error loading settings:", error);
     }
+  };
+
+  const loadUsers = async () => {
+    setIsLoadingUsers(true);
+    try {
+      const { data } = await supabase.from("profiles").select("user_id, credit_balance, created_at").order("created_at", { ascending: false });
+      setUsers(data?.map(u => ({ ...u, email: "" })) || []);
+    } finally { setIsLoadingUsers(false); }
+  };
+
+  const loadCampaigns = async () => {
+    setIsLoadingCampaigns(true);
+    try {
+      const { data } = await supabase.from("campaigns").select("*").order("created_at", { ascending: false });
+      setCampaigns(data || []);
+    } finally { setIsLoadingCampaigns(false); }
+  };
+
+  const approveCampaign = async (campaignId: string, campaignUserId: string) => {
+    await supabase.from("campaigns").update({ status: "approved", credits_awarded: 20 }).eq("id", campaignId);
+    await supabase.rpc("add_user_credits", { _user_id: campaignUserId, _amount: 20 });
+    toast({ title: "Campaign အတည်ပြုပြီး", description: "20 Credits ထည့်သွင်းပေးပြီးပါပြီ" });
+    loadCampaigns();
+  };
+
+  const rejectCampaign = async (campaignId: string) => {
+    await supabase.from("campaigns").update({ status: "rejected" }).eq("id", campaignId);
+    toast({ title: "Campaign ငြင်းပယ်ပြီး" });
+    loadCampaigns();
   };
 
   const fetchTransactions = async () => {

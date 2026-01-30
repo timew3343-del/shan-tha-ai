@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.ai-chat]
 verify_jwt = false
+
+[functions.face-swap]
+verify_jwt = false
