@@ -20,19 +20,24 @@ serve(async (req) => {
       });
     }
 
-    const supabase = createClient(
+    const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: authHeader } } }
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
+    // Verify user
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claims, error: claimsError } = await supabaseAdmin.auth.getClaims(token);
+    
+    if (claimsError || !claims?.claims?.sub) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const userId = claims.claims.sub;
+    console.log(`User ${userId} requesting background removal`);
 
     const { imageBase64 } = await req.json();
     if (!imageBase64) {
@@ -43,7 +48,7 @@ serve(async (req) => {
     }
 
     // Get credit cost from settings
-    const { data: costSetting } = await supabase
+    const { data: costSetting } = await supabaseAdmin
       .from("app_settings")
       .select("value")
       .eq("key", "credit_cost_bg_remove")
@@ -51,20 +56,16 @@ serve(async (req) => {
 
     const creditCost = parseInt(costSetting?.value || "1", 10);
 
-    // Use secure database function to deduct credits
-    const serviceClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-    );
+    // Check user credits first
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("credit_balance")
+      .eq("user_id", userId)
+      .single();
 
-    const { data: deductResult, error: deductError } = await serviceClient.rpc(
-      "deduct_user_credits",
-      { _user_id: user.id, _amount: creditCost, _action: "remove_bg" }
-    );
-
-    if (deductError || !deductResult?.success) {
+    if (!profile || profile.credit_balance < creditCost) {
       return new Response(
-        JSON.stringify({ error: deductResult?.error || "Insufficient credits" }),
+        JSON.stringify({ error: "ခရက်ဒစ် မလုံလောက်ပါ", required: creditCost }),
         { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -72,8 +73,7 @@ serve(async (req) => {
     // Use Replicate API for background removal
     const REPLICATE_API_KEY = Deno.env.get("REPLICATE_API_KEY");
     if (!REPLICATE_API_KEY) {
-      await serviceClient.rpc("add_user_credits", { _user_id: user.id, _amount: creditCost });
-      return new Response(JSON.stringify({ error: "Replicate API key not configured" }), {
+      return new Response(JSON.stringify({ error: "API လက်ကျန်ငွေ မလုံလောက်ပါ သို့မဟုတ် API ချိတ်ဆက်မှု ခေတ္တပြတ်တောက်နေပါသည်။" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -99,7 +99,14 @@ serve(async (req) => {
     if (!createResponse.ok) {
       const errorText = await createResponse.text();
       console.error("Replicate create error:", errorText);
-      await serviceClient.rpc("add_user_credits", { _user_id: user.id, _amount: creditCost });
+      
+      if (createResponse.status === 402 || errorText.includes("insufficient") || errorText.includes("balance")) {
+        return new Response(JSON.stringify({ error: "API လက်ကျန်ငွေ မလုံလောက်ပါ သို့မဟုတ် API ချိတ်ဆက်မှု ခေတ္တပြတ်တောက်နေပါသည်။" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      
       return new Response(JSON.stringify({ error: "Background removal initiation failed" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -127,20 +134,24 @@ serve(async (req) => {
 
     if (result.status === "failed") {
       console.error("BG remove failed:", result.error);
-      await serviceClient.rpc("add_user_credits", { _user_id: user.id, _amount: creditCost });
-      return new Response(JSON.stringify({ error: "Background removal processing failed" }), {
+      return new Response(JSON.stringify({ error: "API လက်ကျန်ငွေ မလုံလောက်ပါ သို့မဟုတ် API ချိတ်ဆက်မှု ခေတ္တပြတ်တောက်နေပါသည်။" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (result.status !== "succeeded") {
-      await serviceClient.rpc("add_user_credits", { _user_id: user.id, _amount: creditCost });
-      return new Response(JSON.stringify({ error: "Background removal timed out" }), {
+      return new Response(JSON.stringify({ error: "Background removal timed out. Please try again." }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Deduct credits AFTER success
+    const { data: deductResult } = await supabaseAdmin.rpc(
+      "deduct_user_credits",
+      { _user_id: userId, _amount: creditCost, _action: "remove_bg" }
+    );
 
     console.log("Background removal succeeded!");
 
@@ -148,7 +159,7 @@ serve(async (req) => {
       JSON.stringify({
         image: result.output,
         creditsUsed: creditCost,
-        newBalance: deductResult.new_balance,
+        newBalance: deductResult?.new_balance,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

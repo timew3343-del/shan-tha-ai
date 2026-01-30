@@ -7,6 +7,7 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { Watermark, addWatermarkToImage } from "@/components/Watermark";
 import { motion } from "framer-motion";
 
 interface BgRemoveToolProps {
@@ -233,11 +234,19 @@ export const BgRemoveTool = ({ userId, onBack }: BgRemoveToolProps) => {
               <h3 className="text-sm font-semibold text-primary font-myanmar">ရလဒ်</h3>
             </div>
             <Button
-              onClick={() => {
-                const link = document.createElement("a");
-                link.href = resultImage;
-                link.download = `no-bg-${Date.now()}.png`;
-                link.click();
+              onClick={async () => {
+                try {
+                  const watermarked = await addWatermarkToImage(resultImage, userId || 'unknown');
+                  const link = document.createElement("a");
+                  link.href = watermarked;
+                  link.download = `no-bg-${Date.now()}.png`;
+                  link.click();
+                } catch {
+                  const link = document.createElement("a");
+                  link.href = resultImage;
+                  link.download = `no-bg-${Date.now()}.png`;
+                  link.click();
+                }
               }}
               size="sm"
               variant="outline"
@@ -247,13 +256,15 @@ export const BgRemoveTool = ({ userId, onBack }: BgRemoveToolProps) => {
               Download
             </Button>
           </div>
-          <div className="bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiI+PHJlY3Qgd2lkdGg9IjgiIGhlaWdodD0iOCIgZmlsbD0iI2NjYyIvPjxyZWN0IHg9IjgiIHk9IjgiIHdpZHRoPSI4IiBoZWlnaHQ9IjgiIGZpbGw9IiNjY2MiLz48L3N2Zz4=')] rounded-xl">
-            <img
-              src={resultImage}
-              alt="No Background"
-              className="w-full rounded-xl"
-            />
-          </div>
+          <Watermark userId={userId}>
+            <div className="bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiI+PHJlY3Qgd2lkdGg9IjgiIGhlaWdodD0iOCIgZmlsbD0iI2NjYyIvPjxyZWN0IHg9IjgiIHk9IjgiIHdpZHRoPSI4IiBoZWlnaHQ9IjgiIGZpbGw9IiNjY2MiLz48L3N2Zz4=')] rounded-xl">
+              <img
+                src={resultImage}
+                alt="No Background"
+                className="w-full rounded-xl"
+              />
+            </div>
+          </Watermark>
         </motion.div>
       )}
     </motion.div>
