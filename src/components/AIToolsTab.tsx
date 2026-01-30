@@ -4,7 +4,8 @@ import { Image, Video, Volume2, Crown, Wallet } from "lucide-react";
 import { ImageTool } from "./tools/ImageTool";
 import { VideoTool } from "./tools/VideoTool";
 import { SpeechTool } from "./tools/SpeechTool";
-import { ToolCard } from "./ToolCard";
+import { ToolCardCompact } from "./ToolCardCompact";
+import { AIChatbot } from "./AIChatbot";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -61,35 +62,50 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               </button>
             </motion.div>
 
-            {/* Premium Tool Cards */}
-            <div className="space-y-3">
-              <ToolCard
-                icon={Image}
-                title="ပုံထုတ်ရန်"
-                description="AI ဖြင့် ပုံဆွဲခြင်း"
-                gradient="bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700"
-                onClick={() => setActiveTool("image")}
-                credits={costs.image_generation}
-              />
+            {/* Premium Tool Cards - Horizontal Grid */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+            >
+              <div className="grid grid-cols-3 gap-2">
+                <ToolCardCompact
+                  icon={Image}
+                  title="ပုံထုတ်ရန်"
+                  description="AI ဖြင့် ပုံဆွဲခြင်း"
+                  gradient="bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700"
+                  onClick={() => setActiveTool("image")}
+                  credits={costs.image_generation}
+                />
 
-              <ToolCard
-                icon={Video}
-                title="ဗီဒီယိုထုတ်ရန်"
-                description="ပုံမှ ဗီဒီယိုသို့ ပြောင်းလဲခြင်း"
-                gradient="bg-gradient-to-br from-red-500 via-rose-600 to-pink-700"
-                onClick={() => setActiveTool("video")}
-                credits={costs.video_generation}
-              />
+                <ToolCardCompact
+                  icon={Video}
+                  title="ဗီဒီယိုထုတ်ရန်"
+                  description="ပုံမှ ဗီဒီယို"
+                  gradient="bg-gradient-to-br from-red-500 via-rose-600 to-pink-700"
+                  onClick={() => setActiveTool("video")}
+                  credits={costs.video_generation}
+                />
 
-              <ToolCard
-                icon={Volume2}
-                title="အသံ/စာ"
-                description="Text ↔ Speech ပြောင်းလဲခြင်း"
-                gradient="bg-gradient-to-br from-emerald-500 via-green-600 to-teal-700"
-                onClick={() => setActiveTool("speech")}
-                credits={costs.text_to_speech}
-              />
-            </div>
+                <ToolCardCompact
+                  icon={Volume2}
+                  title="အသံ/စာ"
+                  description="Text ↔ Speech"
+                  gradient="bg-gradient-to-br from-emerald-500 via-green-600 to-teal-700"
+                  onClick={() => setActiveTool("speech")}
+                  credits={costs.text_to_speech}
+                />
+              </div>
+            </motion.div>
+
+            {/* AI Chatbot Section */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <AIChatbot userId={userId} />
+            </motion.div>
 
             {/* Info Card */}
             <motion.div

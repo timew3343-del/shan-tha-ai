@@ -73,7 +73,12 @@ export const Admin = () => {
     video_with_speech: 10,
     text_to_speech: 2,
     speech_to_text: 5,
+    ai_chat: 1,
   });
+
+  // Users state
+  const [users, setUsers] = useState<{ user_id: string; email: string; credit_balance: number; created_at: string }[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isSavingCosts, setIsSavingCosts] = useState(false);
 
   // API Keys state
@@ -976,6 +981,19 @@ export const Admin = () => {
                     type="number"
                     value={creditCosts.speech_to_text}
                     onChange={(e) => setCreditCosts(prev => ({ ...prev, speech_to_text: parseInt(e.target.value) || 0 }))}
+                    className="w-20 text-center bg-background/50"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                  <div>
+                    <span className="text-sm font-medium text-foreground">AI Chatbot</span>
+                    <p className="text-xs text-muted-foreground">AI မေးမြန်းခြင်း</p>
+                  </div>
+                  <Input
+                    type="number"
+                    value={creditCosts.ai_chat}
+                    onChange={(e) => setCreditCosts(prev => ({ ...prev, ai_chat: parseInt(e.target.value) || 0 }))}
                     className="w-20 text-center bg-background/50"
                   />
                 </div>
