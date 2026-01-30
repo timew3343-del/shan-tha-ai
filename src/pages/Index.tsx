@@ -9,10 +9,12 @@ import { CreditDisplay } from "@/components/CreditDisplay";
 import { AIToolsTab } from "@/components/AIToolsTab";
 import { DosDontsTab } from "@/components/DosDontsTab";
 import { CourseTab } from "@/components/CourseTab";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { LogOut, User as UserIcon, HelpCircle, Shield } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useCredits } from "@/hooks/useCredits";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useLanguage } from "@/i18n/LanguageContext";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,6 +30,7 @@ const Index = () => {
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t } = useLanguage();
   const { credits, isLoading: creditsLoading } = useCredits(user?.id);
   const { isAdmin } = useUserRole(user?.id);
 
@@ -56,8 +59,8 @@ const Index = () => {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     toast({
-      title: "အောင်မြင်ပါသည်",
-      description: "အကောင့်မှ ထွက်ပြီးပါပြီ",
+      title: t('status.success'),
+      description: t('logout'),
     });
     navigate("/auth");
   };
@@ -67,7 +70,7 @@ const Index = () => {
       <div className="min-h-screen gradient-navy flex items-center justify-center">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">ခဏစောင့်ပါ...</p>
+          <p className="text-muted-foreground">{t('status.loading')}</p>
         </div>
       </div>
     );
@@ -118,7 +121,10 @@ const Index = () => {
           <CreditDisplay credits={credits} isLoading={creditsLoading} />
         </div>
 
-        <ThemeToggle />
+        <div className="flex items-center gap-2">
+          <LanguageSwitcher />
+          <ThemeToggle />
+        </div>
       </div>
 
       {/* Main Content */}

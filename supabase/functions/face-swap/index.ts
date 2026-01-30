@@ -7,11 +7,11 @@ const corsHeaders = {
 };
 
 interface FaceSwapRequest {
-  targetVideo: string; // base64 video
-  faceImage: string;   // base64 image
+  targetVideo: string;
+  faceImage: string;
+  isLiveCamera?: boolean;
 }
 
-// Helper function to refund credits
 async function refundCredits(supabaseAdmin: any, userId: string, amount: number, reason: string) {
   try {
     const { error } = await supabaseAdmin.rpc("add_user_credits", {
@@ -61,21 +61,7 @@ serve(async (req) => {
     const userId = claims.claims.sub;
     console.log(`User ${userId} requesting face swap`);
 
-    // Check if face swap is enabled
-    const { data: enabledSetting } = await supabaseAdmin
-      .from("app_settings")
-      .select("value")
-      .eq("key", "face_swap_enabled")
-      .maybeSingle();
-
-    if (enabledSetting?.value === "false") {
-      return new Response(
-        JSON.stringify({ error: "Face swap feature is currently disabled" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const { targetVideo, faceImage }: FaceSwapRequest = await req.json();
+    const { targetVideo, faceImage, isLiveCamera }: FaceSwapRequest = await req.json();
 
     if (!targetVideo || !faceImage) {
       return new Response(
@@ -84,11 +70,12 @@ serve(async (req) => {
       );
     }
 
-    // Fetch credit cost
+    // Determine credit cost based on live camera or file upload
+    const costKey = isLiveCamera ? "credit_cost_live_camera" : "credit_cost_face_swap";
     const { data: costSetting } = await supabaseAdmin
       .from("app_settings")
       .select("value")
-      .eq("key", "credit_cost_face_swap")
+      .eq("key", costKey)
       .maybeSingle();
     
     const creditCost = costSetting?.value ? parseInt(costSetting.value, 10) : 15;
@@ -122,14 +109,14 @@ serve(async (req) => {
     if (!REPLICATE_API_KEY) {
       console.error("REPLICATE_API_KEY not configured");
       return new Response(
-        JSON.stringify({ error: "Face swap service not configured" }),
+        JSON.stringify({ error: "API လက်ကျန်ငွေ မလုံလောက်ပါ သို့မဟုတ် API ချိတ်ဆက်မှု ခေတ္တပြတ်တောက်နေပါသည်။" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     console.log("Starting face swap with Replicate API...");
 
-    // Start face swap prediction
+    // Use the correct face swap model
     const startResponse = await fetch("https://api.replicate.com/v1/predictions", {
       method: "POST",
       headers: {
@@ -137,10 +124,10 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        version: "9c76a3a8c2b0e3e7f3e3e3e3e3e3e3e3e3e3e3e3", // face-swap model
+        version: "cdcbfba9b6dbfe7df5b4e6e8ddfd7c0bce2e2fd7dd63cf8d6ba3d7d16bc2d9fb",
         input: {
-          target_video: targetVideo,
-          source_image: faceImage,
+          target: targetVideo.startsWith("data:") ? targetVideo : `data:video/mp4;base64,${targetVideo}`,
+          source: faceImage.startsWith("data:") ? faceImage : `data:image/png;base64,${faceImage}`,
         },
       }),
     });
@@ -148,8 +135,16 @@ serve(async (req) => {
     if (!startResponse.ok) {
       const errorText = await startResponse.text();
       console.error("Replicate start error:", startResponse.status, errorText);
+      
+      if (startResponse.status === 402 || errorText.includes("insufficient") || errorText.includes("balance")) {
+        return new Response(
+          JSON.stringify({ error: "API လက်ကျန်ငွေ မလုံလောက်ပါ သို့မဟုတ် API ချိတ်ဆက်မှု ခေတ္တပြတ်တောက်နေပါသည်။" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
       return new Response(
-        JSON.stringify({ error: `Face swap failed to start: ${startResponse.status}`, details: errorText }),
+        JSON.stringify({ error: `Face swap failed to start: ${startResponse.status}` }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -175,9 +170,7 @@ serve(async (req) => {
       await new Promise(resolve => setTimeout(resolve, 5000));
 
       const pollResponse = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
-        headers: {
-          "Authorization": `Token ${REPLICATE_API_KEY}`,
-        },
+        headers: { "Authorization": `Token ${REPLICATE_API_KEY}` },
       });
 
       if (!pollResponse.ok) {
@@ -197,7 +190,7 @@ serve(async (req) => {
         console.error("Face swap failed:", pollData.error);
         return new Response(
           JSON.stringify({ 
-            error: "Face swap generation failed",
+            error: "API လက်ကျန်ငွေ မလုံလောက်ပါ သို့မဟုတ် API ချိတ်ဆက်မှု ခေတ္တပြတ်တောက်နေပါသည်။",
             details: pollData.error 
           }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -217,7 +210,7 @@ serve(async (req) => {
     const { data: deductResult, error: deductError } = await supabaseAdmin.rpc("deduct_user_credits", {
       _user_id: userId,
       _amount: creditCost,
-      _action: "Face swap"
+      _action: isLiveCamera ? "Face swap (live camera)" : "Face swap"
     });
 
     if (deductError) {
@@ -235,10 +228,7 @@ serve(async (req) => {
         creditsUsed: creditCost,
         newBalance: newBalance,
       }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error: any) {

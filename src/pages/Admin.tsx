@@ -80,6 +80,7 @@ export const Admin = () => {
     bg_remove: 1,
     live_camera: 15,
     video_export: 3,
+    youtube_to_text: 10,
   });
 
   // Manual credit management state
