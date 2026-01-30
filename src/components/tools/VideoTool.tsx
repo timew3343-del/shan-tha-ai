@@ -1,11 +1,19 @@
-import { useState, useRef } from "react";
-import { Video, Upload, Sparkles, Download, Loader2, X } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Video, Upload, Sparkles, Download, Loader2, X, Clock } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface VideoToolProps {
   userId?: string;
@@ -17,10 +25,51 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
   const { costs } = useCreditCosts();
   const [prompt, setPrompt] = useState("");
   const [speechText, setSpeechText] = useState("");
+  const [duration, setDuration] = useState("5");
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [generatedVideo, setGeneratedVideo] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [statusText, setStatusText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Simulate progress during loading with status updates
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isLoading) {
+      setProgress(0);
+      const statuses = [
+        "ပုံကို ပြင်ဆင်နေသည်...",
+        "AI မော်ဒယ်သို့ ပို့နေသည်...",
+        "ဗီဒီယိုထုတ်နေသည်...",
+        "ပြီးဆုံးအောင် စောင့်ဆိုင်းနေသည်...",
+      ];
+      let statusIndex = 0;
+      setStatusText(statuses[0]);
+      
+      interval = setInterval(() => {
+        setProgress(prev => {
+          const newProgress = prev + Math.random() * 3;
+          if (newProgress >= 90) return 90;
+          
+          // Update status text based on progress
+          const newStatusIndex = Math.min(Math.floor(newProgress / 25), statuses.length - 1);
+          if (newStatusIndex !== statusIndex) {
+            statusIndex = newStatusIndex;
+            setStatusText(statuses[statusIndex]);
+          }
+          
+          return newProgress;
+        });
+      }, 1000);
+    } else {
+      setProgress(100);
+      setStatusText("");
+      const timeout = setTimeout(() => setProgress(0), 500);
+      return () => clearTimeout(timeout);
+    }
+    return () => clearInterval(interval);
+  }, [isLoading]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -92,6 +141,7 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
             prompt: prompt.trim(),
             image: uploadedImage,
             speechText: speechText.trim() || undefined,
+            duration: parseInt(duration),
           }),
         }
       );
@@ -133,7 +183,7 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
       
       toast({
         title: "အောင်မြင်ပါသည်",
-        description: `ဗီဒီယိုထုတ်ပြီးပါပြီ (${result.creditsUsed} Credits သုံးစွဲခဲ့သည်)`,
+        description: `ဗီဒီယိုထုတ်ပြီးပါပြီ (${result.creditsUsed} Credits)`,
       });
     } catch (error: any) {
       console.error("Video generation error:", error);
@@ -191,16 +241,34 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
         />
       </div>
 
+      {/* Duration Selector */}
+      <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+        <label className="block text-sm font-medium text-primary mb-2">
+          <Clock className="w-4 h-4 inline mr-1" />
+          ဗီဒီယိုအရှည်
+        </label>
+        <Select value={duration} onValueChange={setDuration}>
+          <SelectTrigger className="bg-background/50 border-primary/30">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="3">၃ စက္ကန့်</SelectItem>
+            <SelectItem value="5">၅ စက္ကန့်</SelectItem>
+            <SelectItem value="10">၁၀ စက္ကန့်</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Prompt Input */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">
         <label className="block text-sm font-medium text-primary mb-2">
-          ဗီဒီယိုဖော်ပြချက်
+          ဗီဒီယိုဖော်ပြချက် (Optional)
         </label>
         <Textarea
           placeholder="ဥပမာ - လှေတစ်စင်း ပင်လယ်ပေါ်မှာ မျှောနေသည်..."
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          className="min-h-[60px] bg-background/50 border-primary/30 rounded-xl resize-none text-sm"
+          className="min-h-[60px] bg-background/50 border-primary/30 rounded-xl resize-none text-sm font-myanmar"
         />
       </div>
 
@@ -209,13 +277,30 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
         <label className="block text-sm font-medium text-primary mb-2">
           စကားပြောစေချင်သော စာသား (Optional)
         </label>
+        <p className="text-xs text-muted-foreground mb-2">
+          ဗီဒီယိုတွင် အသံထည့်လိုပါက +{costs.video_with_speech - costs.video_generation} Credits ပိုကုန်ပါမည်
+        </p>
         <Textarea
           placeholder="ဗီဒီယိုတွင် ထည့်သွင်းစေချင်သော အသံစာသား..."
           value={speechText}
           onChange={(e) => setSpeechText(e.target.value)}
-          className="min-h-[60px] bg-background/50 border-primary/30 rounded-xl resize-none text-sm"
+          className="min-h-[60px] bg-background/50 border-primary/30 rounded-xl resize-none text-sm font-myanmar"
         />
       </div>
+
+      {/* Progress Bar */}
+      {isLoading && (
+        <div className="space-y-2 animate-fade-in">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>{statusText || "ဗီဒီယိုထုတ်နေသည်..."}</span>
+            <span>{Math.round(progress)}%</span>
+          </div>
+          <Progress value={progress} className="h-2" />
+          <p className="text-xs text-center text-muted-foreground">
+            ၃ မိနစ်ခန့် ကြာနိုင်ပါသည်
+          </p>
+        </div>
+      )}
 
       {/* Generate Button */}
       <Button
@@ -226,7 +311,7 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
         {isLoading ? (
           <>
             <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-            ဗီဒီယိုထုတ်နေသည်... (၃ မိနစ်ခန့် ကြာနိုင်သည်)
+            ဗီဒီယိုထုတ်နေသည်...
           </>
         ) : (
           <>
@@ -262,6 +347,8 @@ export const VideoTool = ({ userId }: VideoToolProps) => {
           <video
             src={generatedVideo}
             controls
+            autoPlay
+            muted
             className="w-full rounded-xl border border-border"
           />
         </div>

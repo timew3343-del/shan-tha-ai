@@ -2,9 +2,11 @@ import { useState, useRef, useEffect } from "react";
 import { Image, Plus, Sparkles, Download, Loader2, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
+import { useCredits } from "@/hooks/useCredits";
 
 interface ImageToolProps {
   userId?: string;
@@ -13,11 +15,32 @@ interface ImageToolProps {
 export const ImageTool = ({ userId }: ImageToolProps) => {
   const { toast } = useToast();
   const { costs } = useCreditCosts();
+  const { refetch: refetchCredits } = useCredits(userId);
   const [prompt, setPrompt] = useState("");
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Simulate progress during loading
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isLoading) {
+      setProgress(0);
+      interval = setInterval(() => {
+        setProgress(prev => {
+          if (prev >= 90) return prev;
+          return prev + Math.random() * 15;
+        });
+      }, 500);
+    } else {
+      setProgress(100);
+      const timeout = setTimeout(() => setProgress(0), 500);
+      return () => clearTimeout(timeout);
+    }
+    return () => clearInterval(interval);
+  }, [isLoading]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -110,9 +133,10 @@ export const ImageTool = ({ userId }: ImageToolProps) => {
 
       if (data?.success && data?.image) {
         setGeneratedImage(data.image);
+        refetchCredits();
         toast({
           title: "အောင်မြင်ပါသည်",
-          description: `ပုံထုတ်ပြီးပါပြီ။ ကျန် Credits: ${data.newBalance}`,
+          description: `ပုံထုတ်ပြီးပါပြီ (${data.creditsUsed} Credits)`,
         });
       }
     } catch (error: any) {
@@ -185,9 +209,20 @@ export const ImageTool = ({ userId }: ImageToolProps) => {
           placeholder="ဥပမာ - နေဝင်ချိန် ပင်လယ်ကမ်းခြေ ပုံဆွဲပေးပါ..."
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          className="min-h-[80px] bg-background/50 border-primary/30 rounded-xl resize-none text-sm"
+          className="min-h-[80px] bg-background/50 border-primary/30 rounded-xl resize-none text-sm font-myanmar"
         />
       </div>
+
+      {/* Progress Bar */}
+      {isLoading && (
+        <div className="space-y-2 animate-fade-in">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>ပုံထုတ်နေသည်...</span>
+            <span>{Math.round(progress)}%</span>
+          </div>
+          <Progress value={progress} className="h-2" />
+        </div>
+      )}
 
       {/* Generate Button */}
       <Button

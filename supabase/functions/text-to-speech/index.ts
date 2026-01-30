@@ -12,6 +12,23 @@ interface TTSRequest {
   language: string;
 }
 
+// Helper function to refund credits
+async function refundCredits(supabaseAdmin: any, userId: string, amount: number, reason: string) {
+  try {
+    const { error } = await supabaseAdmin.rpc("add_user_credits", {
+      _user_id: userId,
+      _amount: amount,
+    });
+    if (error) {
+      console.error("Failed to refund credits:", error);
+    } else {
+      console.log(`Refunded ${amount} credits to user ${userId} - Reason: ${reason}`);
+    }
+  } catch (e) {
+    console.error("Refund error:", e);
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -49,6 +66,16 @@ serve(async (req) => {
     const userId = claims.claims.sub;
     console.log(`User ${userId} requesting text-to-speech`);
 
+    // Parse request body
+    const { text, voice, language }: TTSRequest = await req.json();
+
+    if (!text || text.trim() === "") {
+      return new Response(
+        JSON.stringify({ error: "Text is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Check user credits server-side
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
@@ -84,23 +111,17 @@ serve(async (req) => {
       );
     }
 
-    // Parse request body - NO apiKey from client
-    const { text, voice, language }: TTSRequest = await req.json();
-
-    if (!text || text.trim() === "") {
-      return new Response(
-        JSON.stringify({ error: "Text is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     console.log(`Generating TTS for text: "${text.substring(0, 50)}..." with voice: ${voice}`);
 
-    // Deduct credits BEFORE returning (since we're using Web Speech API fallback)
-    const { error: deductError } = await supabaseAdmin
-      .from("profiles")
-      .update({ credit_balance: profile.credit_balance - creditCost })
-      .eq("user_id", userId);
+    // Use Web Speech API on client - deduct credits ONLY after confirming success
+    // The actual audio generation happens client-side with Web Speech API
+    
+    // Deduct credits using secure RPC
+    const { data: deductResult, error: deductError } = await supabaseAdmin.rpc("deduct_user_credits", {
+      _user_id: userId,
+      _amount: creditCost,
+      _action: "Text-to-speech"
+    });
 
     if (deductError) {
       console.error("Credit deduction error:", deductError);
@@ -110,8 +131,8 @@ serve(async (req) => {
       );
     }
 
-    // For now, we'll use Web Speech API on the client side
-    // In production, this could be replaced with a proper TTS API
+    const newBalance = deductResult?.new_balance ?? (profile.credit_balance - creditCost);
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -121,7 +142,7 @@ serve(async (req) => {
         useWebSpeech: true,
         message: "Use Web Speech API for audio generation",
         creditsUsed: creditCost,
-        newBalance: profile.credit_balance - creditCost,
+        newBalance: newBalance,
       }),
       {
         status: 200,

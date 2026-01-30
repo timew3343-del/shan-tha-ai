@@ -4,7 +4,7 @@ import {
   ArrowLeft, Users, CreditCard, CheckCircle, XCircle, Clock, 
   BarChart3, Download, Settings, Activity, Sun, Moon,
   Bell, TrendingUp, DollarSign, Building,
-  Save, Key, Plus, Trash2, Wallet, CreditCard as CardIcon
+  Save, Key, Plus, Trash2, Wallet, CreditCard as CardIcon, Image, X, Loader2
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,8 @@ export const Admin = () => {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectModal, setShowRejectModal] = useState<string | null>(null);
+  const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
+  const [loadingScreenshot, setLoadingScreenshot] = useState<string | null>(null);
   
   // Pricing state
   const [packages, setPackages] = useState<PricingPackage[]>([
@@ -518,6 +520,45 @@ export const Admin = () => {
       console.error("Error rejecting transaction:", error);
     } finally {
       setProcessingId(null);
+    }
+  };
+
+  const handleViewScreenshot = async (screenshotPath: string | null, txId: string) => {
+    if (!screenshotPath) {
+      toast({
+        title: "ပြေစာမရှိပါ",
+        description: "ဤငွေသွင်းမှုတွင် ပြေစာမပါဝင်ပါ",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoadingScreenshot(txId);
+    try {
+      // Extract the path from the full URL if it's a full URL
+      let path = screenshotPath;
+      if (screenshotPath.includes('/storage/v1/object/public/payment-screenshots/')) {
+        path = screenshotPath.split('/payment-screenshots/')[1];
+      }
+
+      const { data, error } = await supabase.functions.invoke("get-signed-url", {
+        body: { path },
+      });
+
+      if (error || data?.error) {
+        throw new Error(data?.error || error?.message || "Failed to get screenshot");
+      }
+
+      setScreenshotUrl(data.signedUrl);
+    } catch (error: any) {
+      console.error("Screenshot error:", error);
+      toast({
+        title: "အမှားရှိပါသည်",
+        description: "ပြေစာကြည့်ရှုရာတွင် ပြဿနာရှိပါသည်",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingScreenshot(null);
     }
   };
 

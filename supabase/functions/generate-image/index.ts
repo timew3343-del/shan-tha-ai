@@ -11,6 +11,23 @@ interface GenerateImageRequest {
   referenceImage?: string;
 }
 
+// Helper function to refund credits on failure
+async function refundCredits(supabaseAdmin: any, userId: string, amount: number, reason: string) {
+  try {
+    const { error } = await supabaseAdmin.rpc("add_user_credits", {
+      _user_id: userId,
+      _amount: amount,
+    });
+    if (error) {
+      console.error("Failed to refund credits:", error);
+    } else {
+      console.log(`Refunded ${amount} credits to user ${userId} - Reason: ${reason}`);
+    }
+  } catch (e) {
+    console.error("Refund error:", e);
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -47,6 +64,16 @@ serve(async (req) => {
 
     const userId = claims.claims.sub;
     console.log(`User ${userId} requesting image generation`);
+
+    // Parse request body first
+    const { prompt, referenceImage }: GenerateImageRequest = await req.json();
+
+    if (!prompt || prompt.trim() === "") {
+      return new Response(
+        JSON.stringify({ error: "Prompt is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // Check user credits server-side
     const { data: profile, error: profileError } = await supabaseAdmin
@@ -93,16 +120,6 @@ serve(async (req) => {
       );
     }
 
-    // Parse request body
-    const { prompt, referenceImage }: GenerateImageRequest = await req.json();
-
-    if (!prompt || prompt.trim() === "") {
-      return new Response(
-        JSON.stringify({ error: "Prompt is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     console.log(`Generating image for prompt: "${prompt.substring(0, 50)}..."`);
 
     // Build messages array for Lovable AI
@@ -125,7 +142,7 @@ serve(async (req) => {
       });
     }
 
-    // Call Lovable AI Gateway with image generation model
+    // Call Lovable AI Gateway with faster flash image model
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -175,25 +192,27 @@ serve(async (req) => {
       );
     }
 
-    // Deduct credits AFTER successful generation
-    const { error: deductError } = await supabaseAdmin
-      .from("profiles")
-      .update({ credit_balance: profile.credit_balance - creditCost })
-      .eq("user_id", userId);
+    // Deduct credits ONLY AFTER successful generation using secure RPC
+    const { data: deductResult, error: deductError } = await supabaseAdmin.rpc("deduct_user_credits", {
+      _user_id: userId,
+      _amount: creditCost,
+      _action: "Image generation"
+    });
 
     if (deductError) {
       console.error("Credit deduction error:", deductError);
-      // Image was generated, so we should still return it but log the error
+      // Image was generated, but credit deduction failed - still return image
     }
 
-    console.log(`Image generated successfully for user ${userId}`);
+    const newBalance = deductResult?.new_balance ?? (profile.credit_balance - creditCost);
+    console.log(`Image generated successfully for user ${userId}, new balance: ${newBalance}`);
 
     return new Response(
       JSON.stringify({
         success: true,
         image: generatedImage,
         creditsUsed: creditCost,
-        newBalance: profile.credit_balance - creditCost,
+        newBalance: newBalance,
       }),
       {
         status: 200,

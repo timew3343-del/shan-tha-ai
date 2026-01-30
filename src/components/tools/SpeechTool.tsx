@@ -1,7 +1,8 @@
-import { useState, useRef } from "react";
-import { Volume2, Mic, Upload, Loader2, Play, Pause } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Volume2, Mic, Upload, Loader2, Play, Pause, Download, Square } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import {
   Select,
@@ -13,6 +14,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
+import { useCredits } from "@/hooks/useCredits";
 
 interface SpeechToolProps {
   userId?: string;
@@ -39,6 +41,7 @@ const LANGUAGES = [
 export const SpeechTool = ({ userId }: SpeechToolProps) => {
   const { toast } = useToast();
   const { costs } = useCreditCosts();
+  const { refetch: refetchCredits } = useCredits(userId);
   
   // Text-to-Speech state
   const [ttsText, setTtsText] = useState("");
@@ -48,17 +51,41 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
   const [isGeneratingTTS, setIsGeneratingTTS] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   // Speech-to-Text state
   const [sttLanguage, setSttLanguage] = useState("my");
   const [transcribedText, setTranscribedText] = useState("");
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [sttProgress, setSttProgress] = useState(0);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Web Speech API for TTS
+  // Simulate STT progress
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isTranscribing) {
+      setSttProgress(0);
+      interval = setInterval(() => {
+        setSttProgress(prev => {
+          if (prev >= 90) return prev;
+          return prev + Math.random() * 20;
+        });
+      }, 500);
+    } else {
+      setSttProgress(100);
+      const timeout = setTimeout(() => setSttProgress(0), 500);
+      return () => clearTimeout(timeout);
+    }
+    return () => clearInterval(interval);
+  }, [isTranscribing]);
+
+  // Web Speech API for TTS with better voice matching
   const speakText = (text: string) => {
     if ('speechSynthesis' in window) {
+      // Cancel any ongoing speech
+      window.speechSynthesis.cancel();
+      
       const utterance = new SpeechSynthesisUtterance(text);
       
       const langMap: Record<string, string> = {
@@ -74,6 +101,18 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
       utterance.rate = 1;
       utterance.pitch = 1;
       
+      // Try to find a matching voice
+      const voices = window.speechSynthesis.getVoices();
+      const matchingVoice = voices.find(v => v.lang.startsWith(langMap[ttsLanguage]?.split('-')[0] || 'en'));
+      if (matchingVoice) {
+        utterance.voice = matchingVoice;
+      }
+      
+      utterance.onstart = () => setIsPlaying(true);
+      utterance.onend = () => setIsPlaying(false);
+      utterance.onerror = () => setIsPlaying(false);
+      
+      utteranceRef.current = utterance;
       window.speechSynthesis.speak(utterance);
     }
   };
@@ -101,7 +140,7 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
     setGeneratedAudio(null);
 
     try {
-      // Call the secure Edge Function - no API key passed
+      // Call the secure Edge Function
       const { data, error } = await supabase.functions.invoke("text-to-speech", {
         body: {
           text: ttsText,
@@ -135,9 +174,10 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
         // Use Web Speech API for immediate audio playback
         speakText(ttsText);
         setGeneratedAudio("generated");
+        refetchCredits();
         toast({
           title: "အောင်မြင်ပါသည်",
-          description: `အသံဖတ်ပြနေပါသည်။ ကျန် Credits: ${data.newBalance}`,
+          description: `အသံထုတ်ပြီးပါပြီ (${data.creditsUsed} Credits)`,
         });
       }
     } catch (error: any) {
@@ -154,14 +194,17 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
 
   const handlePlayPause = () => {
     if (generatedAudio === "generated") {
-      speakText(ttsText);
-      setIsPlaying(true);
-      const checkSpeaking = setInterval(() => {
-        if (!window.speechSynthesis.speaking) {
-          setIsPlaying(false);
-          clearInterval(checkSpeaking);
+      if (isPlaying) {
+        window.speechSynthesis.pause();
+        setIsPlaying(false);
+      } else {
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+          setIsPlaying(true);
+        } else {
+          speakText(ttsText);
         }
-      }, 100);
+      }
     } else if (audioRef.current) {
       if (isPlaying) {
         audioRef.current.pause();
@@ -181,6 +224,7 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
     const file = e.target.files?.[0];
     if (file) {
       setAudioFile(file);
+      setTranscribedText(""); // Clear previous transcription
     }
   };
 
@@ -212,7 +256,7 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
       reader.onload = async (event) => {
         const base64Audio = (event.target?.result as string).split(",")[1];
 
-        // Call the secure Edge Function - no API key passed
+        // Call the secure Edge Function
         const { data, error } = await supabase.functions.invoke("speech-to-text", {
           body: {
             audioBase64: base64Audio,
@@ -234,7 +278,7 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
           } else if (data.error === "Speech service not configured") {
             toast({
               title: "ဝန်ဆောင်မှု မပြင်ဆင်ရသေးပါ",
-              description: "Admin မှ API Key ထည့်သွင်းရန် လိုအပ်ပါသည်",
+              description: "ခဏစောင့်ပြီး ထပ်မံကြိုးစားပါ",
               variant: "destructive",
             });
           } else {
@@ -250,9 +294,10 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
 
         if (data?.text) {
           setTranscribedText(data.text);
+          refetchCredits();
           toast({
             title: "အောင်မြင်ပါသည်",
-            description: `စာသားပြောင်းပြီးပါပြီ။ ကျန် Credits: ${data.newBalance}`,
+            description: `စာသားပြောင်းပြီးပါပြီ (${data.creditsUsed} Credits)`,
           });
         }
         setIsTranscribing(false);
@@ -267,6 +312,14 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
       });
       setIsTranscribing(false);
     }
+  };
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(transcribedText);
+    toast({
+      title: "ကူးယူပြီးပါပြီ",
+      description: "စာသားကို clipboard သို့ ကူးယူပြီးပါပြီ",
+    });
   };
 
   return (
@@ -293,7 +346,7 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
               placeholder="အသံပြောင်းလိုသော စာသားကို ရိုက်ထည့်ပါ..."
               value={ttsText}
               onChange={(e) => setTtsText(e.target.value)}
-              className="min-h-[100px] bg-background/50 border-primary/30 rounded-xl resize-none text-sm"
+              className="min-h-[100px] bg-background/50 border-primary/30 rounded-xl resize-none text-sm font-myanmar"
             />
           </div>
 
@@ -378,10 +431,10 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
                   )}
                 </Button>
                 <div className="flex-1">
-                  <p className="text-sm text-foreground font-medium">
+                  <p className="text-sm text-foreground font-medium font-myanmar">
                     {isPlaying ? "အသံဖတ်နေသည်..." : "ပြန်ဖတ်ရန် Play နှိပ်ပါ"}
                   </p>
-                  <p className="text-xs text-muted-foreground truncate max-w-[200px]">
+                  <p className="text-xs text-muted-foreground truncate max-w-[200px] font-myanmar">
                     {ttsText.substring(0, 50)}...
                   </p>
                 </div>
@@ -392,6 +445,7 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
                     variant="outline"
                     className="text-xs"
                   >
+                    <Square className="w-3 h-3 mr-1" />
                     ရပ်မည်
                   </Button>
                 )}
@@ -412,7 +466,7 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
               className="w-full h-24 border-2 border-dashed border-primary/30 rounded-xl flex flex-col items-center justify-center gap-2 hover:bg-primary/5 transition-colors"
             >
               <Upload className="w-6 h-6 text-primary" />
-              <span className="text-sm text-muted-foreground">
+              <span className="text-sm text-muted-foreground font-myanmar">
                 {audioFile ? audioFile.name : "အသံဖိုင်ရွေးရန် နှိပ်ပါ"}
               </span>
             </button>
@@ -444,6 +498,17 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
             </Select>
           </div>
 
+          {/* Progress Bar */}
+          {isTranscribing && (
+            <div className="space-y-2 animate-fade-in">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>စာသားပြောင်းနေသည်...</span>
+                <span>{Math.round(sttProgress)}%</span>
+              </div>
+              <Progress value={sttProgress} className="h-2" />
+            </div>
+          )}
+
           <Button
             onClick={handleTranscribe}
             disabled={isTranscribing || !audioFile}
@@ -464,9 +529,20 @@ export const SpeechTool = ({ userId }: SpeechToolProps) => {
 
           {transcribedText && (
             <div className="gradient-card rounded-2xl p-4 border border-success/30 animate-scale-in">
-              <h3 className="text-sm font-semibold text-primary mb-2">ရလဒ်</h3>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-primary">ရလဒ်</h3>
+                <Button
+                  onClick={copyToClipboard}
+                  size="sm"
+                  variant="outline"
+                  className="text-xs"
+                >
+                  <Download className="w-3 h-3 mr-1" />
+                  ကူးယူမည်
+                </Button>
+              </div>
               <div className="bg-background/50 rounded-xl p-3 border border-border">
-                <p className="text-sm text-foreground whitespace-pre-wrap">
+                <p className="text-sm text-foreground whitespace-pre-wrap font-myanmar leading-relaxed">
                   {transcribedText}
                 </p>
               </div>
