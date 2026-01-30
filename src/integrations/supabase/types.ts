@@ -186,6 +186,10 @@ export type Database = {
         Args: { _action: string; _amount: number; _user_id: string }
         Returns: Json
       }
+      get_screenshot_signed_url: {
+        Args: { screenshot_path: string }
+        Returns: string
+      }
       get_user_email: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
