@@ -79,6 +79,7 @@ export const Admin = () => {
     upscale: 1,
     bg_remove: 1,
     live_camera: 15,
+    video_export: 3,
   });
 
   // Manual credit management state
@@ -1194,6 +1195,19 @@ export const Admin = () => {
                     type="number"
                     value={creditCosts.live_camera}
                     onChange={(e) => setCreditCosts(prev => ({ ...prev, live_camera: parseInt(e.target.value) || 0 }))}
+                    className="w-20 text-center bg-background/50"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                  <div>
+                    <span className="text-sm font-medium text-foreground">Video Editor Export</span>
+                    <p className="text-xs text-muted-foreground">ဗီဒီယို တည်းဖြတ်ပြီး Export</p>
+                  </div>
+                  <Input
+                    type="number"
+                    value={creditCosts.video_export}
+                    onChange={(e) => setCreditCosts(prev => ({ ...prev, video_export: parseInt(e.target.value) || 0 }))}
                     className="w-20 text-center bg-background/50"
                   />
                 </div>
