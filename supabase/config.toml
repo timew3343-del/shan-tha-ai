@@ -35,3 +35,6 @@ verify_jwt = false
 
 [functions.character-animate]
 verify_jwt = false
+
+[functions.add-ad-credits]
+verify_jwt = false

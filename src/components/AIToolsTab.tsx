@@ -13,7 +13,6 @@ import { BgRemoveTool } from "./tools/BgRemoveTool";
 import { YouTubeToTextTool } from "./tools/YouTubeToTextTool";
 import { ToolCardCompact } from "./ToolCardCompact";
 import { AIChatbot } from "./AIChatbot";
-import { CampaignModal } from "./CampaignModal";
 import { ReferralSection } from "./ReferralSection";
 import { LowCreditAlert } from "./LowCreditAlert";
 import { CreditDisplay } from "./CreditDisplay";
@@ -31,7 +30,6 @@ type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale"
 export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const navigate = useNavigate();
   const [activeTool, setActiveTool] = useState<ActiveTool>("home");
-  const [showCampaign, setShowCampaign] = useState(false);
   const [showLowCreditAlert, setShowLowCreditAlert] = useState(false);
   const { costs } = useCreditCosts();
   const { credits, isLoading: creditsLoading } = useCredits(userId);
@@ -92,11 +90,11 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                 <span className="text-sm text-primary font-medium font-myanmar">ငွေဖြည့်မည်</span>
               </button>
               <button
-                onClick={() => setShowCampaign(true)}
+                onClick={() => navigate("/earn-credits")}
                 className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 transition-all"
               >
                 <Gift className="w-5 h-5 text-green-600" />
-                <span className="text-sm text-green-600 font-medium font-myanmar">Campaign</span>
+                <span className="text-sm text-green-600 font-medium font-myanmar">Earn Credits</span>
               </button>
             </motion.div>
 
@@ -283,13 +281,6 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
           <YouTubeToTextTool key="youtube" userId={userId} onBack={handleBack} />
         )}
       </AnimatePresence>
-
-      {/* Campaign Modal */}
-      <CampaignModal
-        isOpen={showCampaign}
-        onClose={() => setShowCampaign(false)}
-        userId={userId}
-      />
     </div>
   );
 };

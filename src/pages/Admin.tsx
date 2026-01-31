@@ -5,7 +5,7 @@ import {
   BarChart3, Download, Settings, Activity, Sun, Moon,
   Bell, TrendingUp, DollarSign, Building,
   Save, Key, Plus, Trash2, Wallet, CreditCard as CardIcon, Image, X, Loader2,
-  Gift, ExternalLink, AlertTriangle, Power, Eye, EyeOff
+  Gift, ExternalLink, AlertTriangle, Power, Eye, EyeOff, Play
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,8 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useTheme } from "next-themes";
+import { CampaignSubmissionsTab } from "@/components/admin/CampaignSubmissionsTab";
+import { CreditAuditTab } from "@/components/admin/CreditAuditTab";
 
 interface PendingTransaction {
   id: string;
@@ -681,6 +683,14 @@ export const Admin = () => {
           .from("profiles")
           .update({ credit_balance: newBalance })
           .eq("user_id", tx.user_id);
+          
+        // Add to credit audit log for tracking purchased credits
+        await supabase.from("credit_audit_log").insert({
+          user_id: tx.user_id,
+          amount: totalCredits,
+          credit_type: "purchased",
+          description: `${tx.package_name} - ${tx.amount_mmk} MMK`,
+        });
       }
 
       toast({
@@ -844,10 +854,18 @@ export const Admin = () => {
 
       <div className="max-w-2xl mx-auto p-4">
         <Tabs defaultValue="transactions" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-6">
+          <TabsList className="grid w-full grid-cols-6 mb-6">
             <TabsTrigger value="transactions" className="text-xs">
               <CreditCard className="w-4 h-4 mr-1" />
               ငွေသွင်း
+            </TabsTrigger>
+            <TabsTrigger value="campaigns" className="text-xs">
+              <Gift className="w-4 h-4 mr-1" />
+              Campaign
+            </TabsTrigger>
+            <TabsTrigger value="audit" className="text-xs">
+              <Play className="w-4 h-4 mr-1" />
+              Audit
             </TabsTrigger>
             <TabsTrigger value="analytics" className="text-xs">
               <BarChart3 className="w-4 h-4 mr-1" />
@@ -1015,6 +1033,16 @@ export const Admin = () => {
                 </div>
               )}
             </div>
+          </TabsContent>
+
+          {/* Campaign Submissions Tab */}
+          <TabsContent value="campaigns" className="space-y-4">
+            <CampaignSubmissionsTab />
+          </TabsContent>
+
+          {/* Credit Audit Tab */}
+          <TabsContent value="audit" className="space-y-4">
+            <CreditAuditTab />
           </TabsContent>
 
           {/* Analytics Tab */}
