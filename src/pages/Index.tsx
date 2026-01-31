@@ -10,6 +10,7 @@ import { AIToolsTab } from "@/components/AIToolsTab";
 import { DosDontsTab } from "@/components/DosDontsTab";
 import { CourseTab } from "@/components/CourseTab";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { MaintenanceBanner } from "@/components/MaintenanceBanner";
 import { LogOut, User as UserIcon, HelpCircle, Shield } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useCredits } from "@/hooks/useCredits";
@@ -129,6 +130,9 @@ const Index = () => {
 
       {/* Main Content */}
       <div className="max-w-lg mx-auto">
+        {/* Maintenance Banner */}
+        <MaintenanceBanner className="mx-4 mt-4" />
+        
         {activeTab === "ai-tools" && <AIToolsTab userId={user.id} />}
         {activeTab === "dos-donts" && <DosDontsTab />}
         {activeTab === "course" && <CourseTab />}
