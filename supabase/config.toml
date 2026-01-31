@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.elevenlabs-tts]
 verify_jwt = false
+
+[functions.character-animate]
+verify_jwt = false

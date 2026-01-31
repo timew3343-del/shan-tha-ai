@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
 
-interface WatermarkProps {
+export interface WatermarkProps {
   userId?: string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   type?: "image" | "video";
 }
 
@@ -15,6 +15,30 @@ export const Watermark = ({ userId, children, type = "image" }: WatermarkProps) 
     // Show first 8 characters of user ID
     return `ID: ${userId.substring(0, 8)}`;
   };
+
+  // If no children, render just the overlay
+  if (!children) {
+    return (
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-10">
+        {/* Corner watermark */}
+        <div className="absolute bottom-2 right-2 bg-black/40 backdrop-blur-sm px-2 py-1 rounded text-[10px] text-white/80 font-mono">
+          {getWatermarkText()}
+        </div>
+        
+        {/* Diagonal repeating watermark for extra protection */}
+        <div 
+          className="absolute inset-0 flex items-center justify-center opacity-10"
+          style={{
+            transform: "rotate(-30deg)",
+          }}
+        >
+          <div className="text-white text-lg font-bold whitespace-nowrap">
+            {Array(3).fill(getWatermarkText()).join("  •  ")}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className="relative inline-block w-full">

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Image, Video, Volume2, Crown, Wallet, Users, Gift, 
-  ZoomIn, Eraser, Sparkles, Youtube 
+  ZoomIn, Eraser, Sparkles, Youtube, Camera
 } from "lucide-react";
 import { ImageTool } from "./tools/ImageTool";
 import { VideoTool } from "./tools/VideoTool";
@@ -170,7 +170,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                 <Video className="w-4 h-4 text-primary" />
                 <h2 className="text-sm font-semibold text-foreground font-myanmar">ဗီဒီယို Tools</h2>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <ToolCardCompact
                   icon={Video}
                   title="ဗီဒီယိုထုတ်ရန်"
@@ -178,6 +178,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                   gradient="bg-gradient-to-br from-red-500 via-rose-600 to-pink-700"
                   onClick={() => setActiveTool("video")}
                   credits={costs.video_generation}
+                  size="small"
                 />
                 <ToolCardCompact
                   icon={Users}
@@ -186,6 +187,16 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                   gradient="bg-gradient-to-br from-purple-500 via-violet-600 to-indigo-700"
                   onClick={() => setActiveTool("faceswap")}
                   credits={costs.face_swap}
+                  size="small"
+                />
+                <ToolCardCompact
+                  icon={Camera}
+                  title="AI Live Cam"
+                  description="Character Animation"
+                  gradient="bg-gradient-to-br from-amber-500 via-orange-600 to-red-700"
+                  onClick={() => navigate("/ai-live-cam")}
+                  credits={costs.live_camera}
+                  size="small"
                 />
               </div>
             </motion.div>
