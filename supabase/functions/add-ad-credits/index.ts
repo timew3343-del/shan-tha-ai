@@ -5,8 +5,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const DAILY_LIMIT = 10;
-const CREDITS_PER_AD = 5;
+// Default values - will be overridden by database settings
+const DEFAULT_AD_REWARD = 5;
+const DEFAULT_DAILY_LIMIT = 10;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -38,6 +39,28 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Fetch dynamic settings from database
+    const { data: settingsData } = await supabase
+      .from("app_settings")
+      .select("key, value")
+      .in("key", ["ad_reward_amount", "daily_ad_limit"]);
+
+    let adRewardAmount = DEFAULT_AD_REWARD;
+    let dailyLimit = DEFAULT_DAILY_LIMIT;
+
+    if (settingsData) {
+      settingsData.forEach((setting) => {
+        if (setting.key === "ad_reward_amount" && setting.value) {
+          adRewardAmount = parseInt(setting.value, 10) || DEFAULT_AD_REWARD;
+        }
+        if (setting.key === "daily_ad_limit" && setting.value) {
+          dailyLimit = parseInt(setting.value, 10) || DEFAULT_DAILY_LIMIT;
+        }
+      });
+    }
+
+    console.log(`Using settings: reward=${adRewardAmount}, limit=${dailyLimit}`);
+
     // Check daily limit
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -58,13 +81,13 @@ Deno.serve(async (req) => {
 
     const todayTotal = (todayLogs || []).reduce((sum, log) => sum + (log.credits_earned || 0), 0);
 
-    if (todayTotal >= DAILY_LIMIT) {
+    if (todayTotal >= dailyLimit) {
       return new Response(
         JSON.stringify({ 
           success: false, 
           error: "Daily limit reached",
           daily_total: todayTotal,
-          limit: DAILY_LIMIT
+          limit: dailyLimit
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -73,7 +96,7 @@ Deno.serve(async (req) => {
     // Add credits using secure RPC
     const { data: creditResult, error: creditError } = await supabase.rpc("add_user_credits", {
       _user_id: user.id,
-      _amount: CREDITS_PER_AD,
+      _amount: adRewardAmount,
     });
 
     if (creditError) {
@@ -87,7 +110,7 @@ Deno.serve(async (req) => {
     // Log the ad credit
     const { error: logError } = await supabase.from("ad_credit_logs").insert({
       user_id: user.id,
-      credits_earned: CREDITS_PER_AD,
+      credits_earned: adRewardAmount,
       source: "adsterra",
     });
 
@@ -98,19 +121,19 @@ Deno.serve(async (req) => {
     // Add to audit log
     await supabase.from("credit_audit_log").insert({
       user_id: user.id,
-      amount: CREDITS_PER_AD,
+      amount: adRewardAmount,
       credit_type: "ad_reward",
       description: "Adsterra Social Bar ad view reward",
     });
 
-    console.log(`Added ${CREDITS_PER_AD} ad credits to user ${user.id}`);
+    console.log(`Added ${adRewardAmount} ad credits to user ${user.id}`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        credits_added: CREDITS_PER_AD,
-        daily_total: todayTotal + CREDITS_PER_AD,
-        limit: DAILY_LIMIT
+        credits_added: adRewardAmount,
+        daily_total: todayTotal + adRewardAmount,
+        limit: dailyLimit
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
