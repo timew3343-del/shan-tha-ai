@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Save, Gift, Play, Loader2, Settings2 } from "lucide-react";
+import { Save, Gift, Play, Loader2, Settings2, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAppSettings } from "@/hooks/useAppSettings";
@@ -10,12 +10,14 @@ export const AppSettingsTab = () => {
   const [adRewardAmount, setAdRewardAmount] = useState(5);
   const [dailyAdLimit, setDailyAdLimit] = useState(10);
   const [campaignReward, setCampaignReward] = useState(100);
+  const [adTimerDuration, setAdTimerDuration] = useState(60);
 
   useEffect(() => {
     if (!isLoading) {
       setAdRewardAmount(settings.ad_reward_amount);
       setDailyAdLimit(settings.daily_ad_limit);
       setCampaignReward(settings.campaign_approval_reward);
+      setAdTimerDuration(settings.ad_timer_duration);
     }
   }, [settings, isLoading]);
 
@@ -24,6 +26,7 @@ export const AppSettingsTab = () => {
       ad_reward_amount: adRewardAmount,
       daily_ad_limit: dailyAdLimit,
       campaign_approval_reward: campaignReward,
+      ad_timer_duration: adTimerDuration,
     });
   };
 
@@ -99,6 +102,27 @@ export const AppSettingsTab = () => {
               </div>
               <p className="text-xs text-muted-foreground">
                 User တစ်ယောက် တစ်ရက်လျှင် ကြော်ငြာမှ ရယူနိုင်သည့် အများဆုံး Credits
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium font-myanmar text-foreground flex items-center gap-2">
+                <Clock className="w-4 h-4 text-muted-foreground" />
+                Ad Timer Duration
+              </label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  value={adTimerDuration}
+                  onChange={(e) => setAdTimerDuration(parseInt(e.target.value) || 0)}
+                  min={10}
+                  max={300}
+                  className="max-w-[120px]"
+                />
+                <span className="text-sm text-muted-foreground">seconds</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                User များ ကြော်ငြာကြည့်ရန် စောင့်ဆိုင်းရမည့် အချိန် (စက္ကန့်)
               </p>
             </div>
           </div>
