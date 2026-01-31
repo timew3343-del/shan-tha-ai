@@ -6,12 +6,14 @@ export interface AppSettings {
   ad_reward_amount: number;
   daily_ad_limit: number;
   campaign_approval_reward: number;
+  ad_timer_duration: number;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   ad_reward_amount: 5,
   daily_ad_limit: 10,
   campaign_approval_reward: 100,
+  ad_timer_duration: 60,
 };
 
 export const useAppSettings = () => {
@@ -29,6 +31,7 @@ export const useAppSettings = () => {
           "ad_reward_amount",
           "daily_ad_limit",
           "campaign_approval_reward",
+          "ad_timer_duration",
         ]);
 
       if (error) {
@@ -46,6 +49,8 @@ export const useAppSettings = () => {
             loadedSettings.daily_ad_limit = value || DEFAULT_SETTINGS.daily_ad_limit;
           } else if (setting.key === "campaign_approval_reward") {
             loadedSettings.campaign_approval_reward = value || DEFAULT_SETTINGS.campaign_approval_reward;
+          } else if (setting.key === "ad_timer_duration") {
+            loadedSettings.ad_timer_duration = value || DEFAULT_SETTINGS.ad_timer_duration;
           }
         });
         setSettings((prev) => ({ ...prev, ...loadedSettings }));
