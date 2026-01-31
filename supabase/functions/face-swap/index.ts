@@ -12,19 +12,14 @@ interface FaceSwapRequest {
   isLiveCamera?: boolean;
 }
 
-async function refundCredits(supabaseAdmin: any, userId: string, amount: number, reason: string) {
+async function setMaintenanceMode(supabaseAdmin: any, enabled: boolean) {
   try {
-    const { error } = await supabaseAdmin.rpc("add_user_credits", {
-      _user_id: userId,
-      _amount: amount,
-    });
-    if (error) {
-      console.error("Failed to refund credits:", error);
-    } else {
-      console.log(`Refunded ${amount} credits to user ${userId} - Reason: ${reason}`);
-    }
+    await supabaseAdmin
+      .from("app_settings")
+      .upsert({ key: "is_maintenance_mode", value: enabled.toString() }, { onConflict: "key" });
+    console.log(`Maintenance mode ${enabled ? 'enabled' : 'disabled'} automatically`);
   } catch (e) {
-    console.error("Refund error:", e);
+    console.error("Failed to set maintenance mode:", e);
   }
 }
 
@@ -46,6 +41,20 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+
+    // Check maintenance mode first
+    const { data: maintenanceSetting } = await supabaseAdmin
+      .from("app_settings")
+      .select("value")
+      .eq("key", "is_maintenance_mode")
+      .maybeSingle();
+    
+    if (maintenanceSetting?.value === "true") {
+      return new Response(
+        JSON.stringify({ error: "စနစ်ကို ခေတ္တပြုပြင်နေပါသည်။ API Key များ ငွေဖြည့်ရန် လိုအပ်နေသောကြောင့် ခေတ္တစောင့်ဆိုင်းပေးပါရန် မေတ္တာရပ်ခံအပ်ပါသည်။" }),
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const token = authHeader.replace("Bearer ", "");
     const { data: claims, error: claimsError } = await supabaseAdmin.auth.getClaims(token);
@@ -105,7 +114,15 @@ serve(async (req) => {
       );
     }
 
-    const REPLICATE_API_KEY = Deno.env.get("REPLICATE_API_KEY");
+    // Try to get API key from DB first, then fallback to env
+    const { data: apiKeySetting } = await supabaseAdmin
+      .from("app_settings")
+      .select("value")
+      .eq("key", "replicate_api_token")
+      .maybeSingle();
+    
+    const REPLICATE_API_KEY = apiKeySetting?.value || Deno.env.get("REPLICATE_API_KEY");
+    
     if (!REPLICATE_API_KEY) {
       console.error("REPLICATE_API_KEY not configured");
       return new Response(
@@ -136,10 +153,13 @@ serve(async (req) => {
       const errorText = await startResponse.text();
       console.error("Replicate start error:", startResponse.status, errorText);
       
-      if (startResponse.status === 402 || errorText.includes("insufficient") || errorText.includes("balance")) {
+      // Auto-enable maintenance mode on payment issues
+      if (startResponse.status === 402 || errorText.includes("insufficient") || errorText.includes("balance") || errorText.includes("Payment Required")) {
+        console.log("Detected API payment issue - enabling maintenance mode");
+        await setMaintenanceMode(supabaseAdmin, true);
         return new Response(
-          JSON.stringify({ error: "API လက်ကျန်ငွေ မလုံလောက်ပါ သို့မဟုတ် API ချိတ်ဆက်မှု ခေတ္တပြတ်တောက်နေပါသည်။" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: "စနစ်ကို ခေတ္တပြုပြင်နေပါသည်။ API Key များ ငွေဖြည့်ရန် လိုအပ်နေသောကြောင့် ခေတ္တစောင့်ဆိုင်းပေးပါရန် မေတ္တာရပ်ခံအပ်ပါသည်။" }),
+          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       
@@ -188,6 +208,12 @@ serve(async (req) => {
 
       if (pollData.status === "failed" || pollData.status === "canceled") {
         console.error("Face swap failed:", pollData.error);
+        
+        // Check for payment-related failures
+        if (pollData.error?.includes("402") || pollData.error?.includes("payment") || pollData.error?.includes("balance")) {
+          await setMaintenanceMode(supabaseAdmin, true);
+        }
+        
         return new Response(
           JSON.stringify({ 
             error: "API လက်ကျန်ငွေ မလုံလောက်ပါ သို့မဟုတ် API ချိတ်ဆက်မှု ခေတ္တပြတ်တောက်နေပါသည်။",

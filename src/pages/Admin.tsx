@@ -5,12 +5,13 @@ import {
   BarChart3, Download, Settings, Activity, Sun, Moon,
   Bell, TrendingUp, DollarSign, Building,
   Save, Key, Plus, Trash2, Wallet, CreditCard as CardIcon, Image, X, Loader2,
-  Gift, ExternalLink
+  Gift, ExternalLink, AlertTriangle, Power, Eye, EyeOff
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useTheme } from "next-themes";
@@ -105,7 +106,19 @@ export const Admin = () => {
   // API Keys state
   const [geminiApiKey, setGeminiApiKey] = useState("");
   const [stabilityApiKey, setStabilityApiKey] = useState("");
+  const [replicateApiToken, setReplicateApiToken] = useState("");
+  const [stripePublishableKey, setStripePublishableKey] = useState("");
+  const [stripeSecretKey, setStripeSecretKey] = useState("");
   const [isSavingApiKeys, setIsSavingApiKeys] = useState(false);
+  
+  // Password visibility for API keys
+  const [showReplicateKey, setShowReplicateKey] = useState(false);
+  const [showStripePublishable, setShowStripePublishable] = useState(false);
+  const [showStripeSecret, setShowStripeSecret] = useState(false);
+  
+  // Maintenance mode state
+  const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
+  const [isTogglingMaintenance, setIsTogglingMaintenance] = useState(false);
 
   // Payment Methods state
   const [activePaymentTab, setActivePaymentTab] = useState("scb");
@@ -132,6 +145,7 @@ export const Admin = () => {
   const [apiHealth, setApiHealth] = useState({
     gemini: { status: "checking", lastCheck: new Date() },
     stability: { status: "checking", lastCheck: new Date() },
+    replicate: { status: "checking", lastCheck: new Date() },
   });
 
   useEffect(() => {
@@ -194,6 +208,18 @@ export const Admin = () => {
               break;
             case "stability_api_key":
               setStabilityApiKey(setting.value || "");
+              break;
+            case "replicate_api_token":
+              setReplicateApiToken(setting.value || "");
+              break;
+            case "stripe_publishable_key":
+              setStripePublishableKey(setting.value || "");
+              break;
+            case "stripe_secret_key":
+              setStripeSecretKey(setting.value || "");
+              break;
+            case "is_maintenance_mode":
+              setIsMaintenanceMode(setting.value === "true");
               break;
           }
           
@@ -406,28 +432,48 @@ export const Admin = () => {
 
   const checkApiHealth = async () => {
     // Check if keys are configured in database (not localStorage)
-    if (geminiApiKey) {
-      setApiHealth(prev => ({
-        ...prev,
-        gemini: { status: "configured", lastCheck: new Date() }
-      }));
-    } else {
-      setApiHealth(prev => ({
-        ...prev,
-        gemini: { status: "no_key", lastCheck: new Date() }
-      }));
-    }
-
-    if (stabilityApiKey) {
-      setApiHealth(prev => ({
-        ...prev,
-        stability: { status: "configured", lastCheck: new Date() }
-      }));
-    } else {
-      setApiHealth(prev => ({
-        ...prev,
-        stability: { status: "no_key", lastCheck: new Date() }
-      }));
+    setApiHealth({
+      gemini: { 
+        status: geminiApiKey ? "configured" : "no_key", 
+        lastCheck: new Date() 
+      },
+      stability: { 
+        status: stabilityApiKey ? "configured" : "no_key", 
+        lastCheck: new Date() 
+      },
+      replicate: { 
+        status: replicateApiToken ? "configured" : "no_key", 
+        lastCheck: new Date() 
+      },
+    });
+  };
+  
+  const toggleMaintenanceMode = async () => {
+    setIsTogglingMaintenance(true);
+    try {
+      const newValue = !isMaintenanceMode;
+      const { error } = await supabase
+        .from("app_settings")
+        .upsert({ key: "is_maintenance_mode", value: newValue.toString() }, { onConflict: "key" });
+      
+      if (error) throw error;
+      
+      setIsMaintenanceMode(newValue);
+      toast({
+        title: newValue ? "Maintenance Mode ဖွင့်လိုက်ပါပြီ" : "Maintenance Mode ပိတ်လိုက်ပါပြီ",
+        description: newValue 
+          ? "Users များအား AI tools အသုံးပြုခွင့် ခေတ္တပိတ်ထားပါသည်" 
+          : "Users များအား AI tools အသုံးပြုခွင့် ပြန်ဖွင့်ပေးပါပြီ",
+      });
+    } catch (error) {
+      console.error("Error toggling maintenance mode:", error);
+      toast({
+        title: "အမှား",
+        description: "Maintenance mode ပြောင်းလဲရာတွင် ပြဿနာရှိပါသည်",
+        variant: "destructive",
+      });
+    } finally {
+      setIsTogglingMaintenance(false);
     }
   };
 
@@ -437,6 +483,9 @@ export const Admin = () => {
       const updates = [
         { key: "gemini_api_key", value: geminiApiKey },
         { key: "stability_api_key", value: stabilityApiKey },
+        { key: "replicate_api_token", value: replicateApiToken },
+        { key: "stripe_publishable_key", value: stripePublishableKey },
+        { key: "stripe_secret_key", value: stripeSecretKey },
       ];
 
       for (const update of updates) {
@@ -1294,6 +1343,43 @@ export const Admin = () => {
               </div>
             </div>
 
+            {/* Maintenance Mode Toggle */}
+            <div className={`gradient-card rounded-2xl p-4 border ${isMaintenanceMode ? 'border-warning/50 bg-warning/5' : 'border-primary/20'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${isMaintenanceMode ? 'bg-warning/20' : 'bg-primary/20'}`}>
+                    <Power className={`w-5 h-5 ${isMaintenanceMode ? 'text-warning' : 'text-primary'}`} />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-foreground">Maintenance Mode</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {isMaintenanceMode 
+                        ? "API tools များ ခေတ္တပိတ်ထားပါသည်" 
+                        : "System အလုပ်လုပ်နေပါသည်"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {isTogglingMaintenance ? (
+                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Switch
+                      checked={isMaintenanceMode}
+                      onCheckedChange={toggleMaintenanceMode}
+                    />
+                  )}
+                </div>
+              </div>
+              {isMaintenanceMode && (
+                <div className="mt-3 p-3 bg-warning/10 rounded-lg border border-warning/30">
+                  <p className="text-xs text-warning flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    Users များအား AI generation tools များ သုံးခွင့် ခေတ္တပိတ်ထားပါသည်။
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* API Health */}
             <div className="gradient-card rounded-2xl p-4 border border-primary/20">
               <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
@@ -1304,13 +1390,10 @@ export const Admin = () => {
                 <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
                   <span className="text-sm text-foreground">Google Gemini</span>
                   <span className={`text-xs px-2 py-1 rounded-full ${
-                    apiHealth.gemini.status === "active" ? "bg-success/20 text-success" :
-                    apiHealth.gemini.status === "configured" ? "bg-warning/20 text-warning" :
+                    apiHealth.gemini.status === "configured" ? "bg-success/20 text-success" :
                     "bg-destructive/20 text-destructive"
                   }`}>
-                    {apiHealth.gemini.status === "active" ? "Active" :
-                     apiHealth.gemini.status === "configured" ? "Configured" :
-                     apiHealth.gemini.status === "no_key" ? "No Key" : "Error"}
+                    {apiHealth.gemini.status === "configured" ? "Configured" : "No Key"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
@@ -1320,6 +1403,15 @@ export const Admin = () => {
                     "bg-destructive/20 text-destructive"
                   }`}>
                     {apiHealth.stability.status === "configured" ? "Configured" : "No Key"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                  <span className="text-sm text-foreground">Replicate AI</span>
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    apiHealth.replicate.status === "configured" ? "bg-success/20 text-success" :
+                    "bg-destructive/20 text-destructive"
+                  }`}>
+                    {apiHealth.replicate.status === "configured" ? "Configured" : "No Key"}
                   </span>
                 </div>
               </div>
@@ -1352,6 +1444,73 @@ export const Admin = () => {
                     className="bg-background/50"
                   />
                 </div>
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-2 block">Replicate API Token</label>
+                  <div className="relative">
+                    <Input
+                      type={showReplicateKey ? "text" : "password"}
+                      value={replicateApiToken}
+                      onChange={(e) => setReplicateApiToken(e.target.value)}
+                      placeholder="r8_..."
+                      className="bg-background/50 pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowReplicateKey(!showReplicateKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showReplicateKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="border-t border-border/50 pt-4 mt-4">
+                  <p className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-primary" />
+                    Stripe Keys (Payment)
+                  </p>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Publishable Key</label>
+                      <div className="relative">
+                        <Input
+                          type={showStripePublishable ? "text" : "password"}
+                          value={stripePublishableKey}
+                          onChange={(e) => setStripePublishableKey(e.target.value)}
+                          placeholder="pk_live_..."
+                          className="bg-background/50 pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowStripePublishable(!showStripePublishable)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          {showStripePublishable ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Secret Key</label>
+                      <div className="relative">
+                        <Input
+                          type={showStripeSecret ? "text" : "password"}
+                          value={stripeSecretKey}
+                          onChange={(e) => setStripeSecretKey(e.target.value)}
+                          placeholder="sk_live_..."
+                          className="bg-background/50 pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowStripeSecret(!showStripeSecret)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          {showStripeSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
                 <Button 
                   onClick={saveApiKeys} 
                   disabled={isSavingApiKeys}
@@ -1362,7 +1521,7 @@ export const Admin = () => {
                   ) : (
                     <>
                       <Save className="w-4 h-4 mr-2" />
-                      Save API Keys
+                      Save All API Keys
                     </>
                   )}
                 </Button>

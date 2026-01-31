@@ -28,7 +28,33 @@ export const useCredits = (userId: string | undefined) => {
 
   useEffect(() => {
     fetchCredits();
-  }, [fetchCredits]);
+
+    // Subscribe to realtime changes for this user's profile
+    if (userId) {
+      const channel = supabase
+        .channel(`profile-credits-${userId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "profiles",
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            console.log("Credits updated via realtime:", payload);
+            if (payload.new && typeof payload.new.credit_balance === "number") {
+              setCredits(payload.new.credit_balance);
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [fetchCredits, userId]);
 
   const deductCredits = async (amount: number, action: string) => {
     if (!userId) return false;
