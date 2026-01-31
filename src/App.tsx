@@ -11,6 +11,7 @@ import TopUp from "./pages/TopUp";
 import Support from "./pages/Support";
 import TransactionHistory from "./pages/TransactionHistory";
 import Admin from "./pages/Admin";
+import AILiveCam from "./pages/AILiveCam";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => (
               <Route path="/support" element={<Support />} />
               <Route path="/transactions" element={<TransactionHistory />} />
               <Route path="/admin" element={<Admin />} />
+              <Route path="/ai-live-cam" element={<AILiveCam />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
