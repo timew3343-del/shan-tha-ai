@@ -12,6 +12,7 @@ import Support from "./pages/Support";
 import TransactionHistory from "./pages/TransactionHistory";
 import Admin from "./pages/Admin";
 import AILiveCam from "./pages/AILiveCam";
+import EarnCredits from "./pages/EarnCredits";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
               <Route path="/transactions" element={<TransactionHistory />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/ai-live-cam" element={<AILiveCam />} />
+              <Route path="/earn-credits" element={<EarnCredits />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
