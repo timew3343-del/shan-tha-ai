@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Gift, Play, CreditCard, Loader2, CheckCircle, ExternalLink, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useCredits } from "@/hooks/useCredits";
 import { useAppSettings } from "@/hooks/useAppSettings";
+import { AdWatchModal } from "@/components/AdWatchModal";
 import { motion } from "framer-motion";
 
 const EarnCredits = () => {
@@ -24,10 +25,8 @@ const EarnCredits = () => {
   const [submitted, setSubmitted] = useState(false);
   
   // Ad watching state
-  const [isWatchingAd, setIsWatchingAd] = useState(false);
+  const [showAdModal, setShowAdModal] = useState(false);
   const [dailyAdCredits, setDailyAdCredits] = useState(0);
-  const [adScriptReady, setAdScriptReady] = useState(false);
-  const scriptLoadedRef = useRef(false);
 
   useEffect(() => {
     const getUser = async () => {
@@ -44,58 +43,6 @@ const EarnCredits = () => {
     };
     getUser();
   }, [navigate]);
-
-  // Load Adsterra script with proper error handling and cleanup
-  useEffect(() => {
-    if (scriptLoadedRef.current) return;
-
-    const loadAdScript = () => {
-      try {
-        // Remove any existing Adsterra scripts first
-        const existingScripts = document.querySelectorAll('script[src*="effectivegatecpm"]');
-        existingScripts.forEach(script => script.remove());
-
-        const script = document.createElement("script");
-        script.src = "https://pl28616430.effectivegatecpm.com/06/29/39/062939b223e8f27a05744b8dd71c0c5c.js";
-        script.async = true;
-        script.id = "adsterra-social-bar";
-        script.type = "text/javascript";
-        
-        script.onload = () => {
-          console.log("Adsterra script loaded successfully");
-          setAdScriptReady(true);
-        };
-        
-        script.onerror = (error) => {
-          console.error("Failed to load Adsterra script:", error);
-          // Still allow interaction - the ad may work regardless
-          setAdScriptReady(true);
-        };
-
-        document.body.appendChild(script);
-        scriptLoadedRef.current = true;
-      } catch (error) {
-        console.error("Error setting up Adsterra script:", error);
-        setAdScriptReady(true);
-      }
-    };
-
-    // Delay script loading slightly to ensure DOM is ready
-    const timer = setTimeout(loadAdScript, 500);
-
-    return () => {
-      clearTimeout(timer);
-      // Cleanup on unmount
-      const script = document.getElementById("adsterra-social-bar");
-      if (script) {
-        script.remove();
-      }
-      // Also remove any Adsterra-injected elements
-      const adElements = document.querySelectorAll('[id*="ad-"], [class*="adsterra"]');
-      adElements.forEach(el => el.remove());
-      scriptLoadedRef.current = false;
-    };
-  }, []);
 
   const fetchDailyAdCredits = async (userId: string) => {
     const today = new Date();
@@ -184,7 +131,7 @@ const EarnCredits = () => {
     }
   };
 
-  const handleWatchAd = async () => {
+  const handleWatchAd = () => {
     if (dailyAdCredits >= settings.daily_ad_limit) {
       toast({
         title: "ယနေ့ကန့်သတ်ချက်ပြည့်ပြီ",
@@ -193,39 +140,36 @@ const EarnCredits = () => {
       });
       return;
     }
+    setShowAdModal(true);
+  };
 
-    setIsWatchingAd(true);
-    
-    // Wait for ad interaction (Social Bar shows automatically, we track the "interaction")
-    setTimeout(async () => {
-      try {
-        // Call edge function to add credits securely
-        const { data, error } = await supabase.functions.invoke("add-ad-credits", {
-          body: { user_id: user.id },
-        });
+  const handleClaimCredits = async () => {
+    try {
+      // Call edge function to add credits securely
+      const { data, error } = await supabase.functions.invoke("add-ad-credits", {
+        body: { user_id: user.id },
+      });
 
-        if (error) throw error;
+      if (error) throw error;
 
-        if (data?.success) {
-          const earned = data.credits_added || settings.ad_reward_amount;
-          setDailyAdCredits(prev => prev + earned);
-          toast({
-            title: `🎉 ${earned} Credits ရရှိပါပြီ!`,
-            description: `ယနေ့ စုစုပေါင်း: ${dailyAdCredits + earned}/${settings.daily_ad_limit} Credits`,
-          });
-        } else {
-          throw new Error(data?.error || "Failed to add credits");
-        }
-      } catch (error: any) {
+      if (data?.success) {
+        const earned = data.credits_added || settings.ad_reward_amount;
+        setDailyAdCredits(prev => prev + earned);
         toast({
-          title: "အမှားရှိပါသည်",
-          description: error.message,
-          variant: "destructive",
+          title: `🎉 ${earned} Credits ရရှိပါပြီ!`,
+          description: `ယနေ့ စုစုပေါင်း: ${dailyAdCredits + earned}/${settings.daily_ad_limit} Credits`,
         });
-      } finally {
-        setIsWatchingAd(false);
+      } else {
+        throw new Error(data?.error || "Failed to add credits");
       }
-    }, 3000);
+    } catch (error: any) {
+      toast({
+        title: "အမှားရှိပါသည်",
+        description: error.message,
+        variant: "destructive",
+      });
+      throw error; // Re-throw to prevent modal from showing success
+    }
   };
 
   if (isLoading || settingsLoading) {
@@ -310,20 +254,10 @@ const EarnCredits = () => {
 
           <Button
             onClick={handleWatchAd}
-            disabled={isWatchingAd || dailyAdCredits >= settings.daily_ad_limit || !adScriptReady}
+            disabled={dailyAdCredits >= settings.daily_ad_limit}
             className="w-full gradient-gold text-primary-foreground"
           >
-            {!adScriptReady ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ကြော်ငြာ ပြင်ဆင်နေသည်...
-              </>
-            ) : isWatchingAd ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ကြော်ငြာကြည့်နေသည်...
-              </>
-            ) : dailyAdCredits >= settings.daily_ad_limit ? (
+            {dailyAdCredits >= settings.daily_ad_limit ? (
               "ယနေ့ ကန့်သတ်ချက် ပြည့်ပြီ"
             ) : (
               <>
@@ -333,6 +267,15 @@ const EarnCredits = () => {
             )}
           </Button>
         </div>
+
+        {/* Ad Watch Modal */}
+        <AdWatchModal
+          isOpen={showAdModal}
+          onClose={() => setShowAdModal(false)}
+          onClaim={handleClaimCredits}
+          timerDuration={settings.ad_timer_duration}
+          rewardAmount={settings.ad_reward_amount}
+        />
 
         {/* Campaign Submission Section */}
         <div className="gradient-card rounded-2xl p-5 border border-primary/20">

@@ -98,15 +98,6 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               </button>
             </motion.div>
 
-            {/* === VIDEO EDITOR SECTION === */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.12 }}
-            >
-              <VideoEditor userId={userId} />
-            </motion.div>
-
             {/* === MIDDLE SECTION: AI Chatbot === */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
