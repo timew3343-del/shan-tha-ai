@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAppSettings } from "@/hooks/useAppSettings";
 
 interface Campaign {
   id: string;
@@ -21,6 +22,7 @@ interface Campaign {
 
 export const CampaignSubmissionsTab = () => {
   const { toast } = useToast();
+  const { settings } = useAppSettings();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -64,13 +66,15 @@ export const CampaignSubmissionsTab = () => {
 
   const handleApprove = async (campaign: Campaign) => {
     setProcessingId(campaign.id);
+    const rewardAmount = settings.campaign_approval_reward;
+    
     try {
       // Update campaign status
       const { error: updateError } = await supabase
         .from("campaigns")
         .update({ 
           status: "approved", 
-          credits_awarded: 100 
+          credits_awarded: rewardAmount 
         })
         .eq("id", campaign.id);
 
@@ -79,7 +83,7 @@ export const CampaignSubmissionsTab = () => {
       // Add credits to user
       const { data: creditResult, error: creditError } = await supabase.rpc("add_user_credits", {
         _user_id: campaign.user_id,
-        _amount: 100,
+        _amount: rewardAmount,
       });
 
       if (creditError) throw creditError;
@@ -87,14 +91,14 @@ export const CampaignSubmissionsTab = () => {
       // Add to audit log
       await supabase.from("credit_audit_log").insert({
         user_id: campaign.user_id,
-        amount: 100,
+        amount: rewardAmount,
         credit_type: "campaign_reward",
         description: "Campaign review video approval reward",
       });
 
       toast({
         title: "Campaign အတည်ပြုပြီး",
-        description: "100 Credits ထည့်သွင်းပေးပြီးပါပြီ",
+        description: `${rewardAmount} Credits ထည့်သွင်းပေးပြီးပါပြီ`,
       });
 
       fetchCampaigns();
@@ -286,7 +290,7 @@ export const CampaignSubmissionsTab = () => {
                     ) : (
                       <>
                         <CheckCircle className="w-4 h-4 mr-1" />
-                        Approve (+100)
+                        Approve (+{settings.campaign_approval_reward})
                       </>
                     )}
                   </Button>

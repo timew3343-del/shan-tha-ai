@@ -5,7 +5,7 @@ import {
   BarChart3, Download, Settings, Activity, Sun, Moon,
   Bell, TrendingUp, DollarSign, Building,
   Save, Key, Plus, Trash2, Wallet, CreditCard as CardIcon, Image, X, Loader2,
-  Gift, ExternalLink, AlertTriangle, Power, Eye, EyeOff, Play
+  Gift, ExternalLink, AlertTriangle, Power, Eye, EyeOff, Play, Settings2
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { useTheme } from "next-themes";
 import { CampaignSubmissionsTab } from "@/components/admin/CampaignSubmissionsTab";
 import { CreditAuditTab } from "@/components/admin/CreditAuditTab";
+import { AppSettingsTab } from "@/components/admin/AppSettingsTab";
 
 interface PendingTransaction {
   id: string;
@@ -854,7 +855,7 @@ export const Admin = () => {
 
       <div className="max-w-2xl mx-auto p-4">
         <Tabs defaultValue="transactions" className="w-full">
-          <TabsList className="grid w-full grid-cols-6 mb-6">
+          <TabsList className="grid w-full grid-cols-7 mb-6">
             <TabsTrigger value="transactions" className="text-xs">
               <CreditCard className="w-4 h-4 mr-1" />
               ငွေသွင်း
@@ -874,6 +875,10 @@ export const Admin = () => {
             <TabsTrigger value="pricing" className="text-xs">
               <DollarSign className="w-4 h-4 mr-1" />
               စျေးနှုန်း
+            </TabsTrigger>
+            <TabsTrigger value="appsettings" className="text-xs">
+              <Settings2 className="w-4 h-4 mr-1" />
+              App
             </TabsTrigger>
             <TabsTrigger value="system" className="text-xs">
               <Activity className="w-4 h-4 mr-1" />
@@ -1133,6 +1138,11 @@ export const Admin = () => {
                 )}
               </Button>
             </div>
+          </TabsContent>
+
+          {/* App Settings Tab */}
+          <TabsContent value="appsettings" className="space-y-4">
+            <AppSettingsTab />
           </TabsContent>
 
           {/* System Tab */}

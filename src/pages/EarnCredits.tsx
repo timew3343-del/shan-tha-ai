@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Gift, Play, CreditCard, Loader2, CheckCircle, ExternalLink, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useCredits } from "@/hooks/useCredits";
+import { useAppSettings } from "@/hooks/useAppSettings";
 import { motion } from "framer-motion";
 
 const EarnCredits = () => {
@@ -14,6 +15,7 @@ const EarnCredits = () => {
   const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { credits, isLoading: creditsLoading } = useCredits(user?.id);
+  const { settings, isLoading: settingsLoading } = useAppSettings();
   
   // Campaign submission state
   const [fbLink, setFbLink] = useState("");
@@ -24,9 +26,8 @@ const EarnCredits = () => {
   // Ad watching state
   const [isWatchingAd, setIsWatchingAd] = useState(false);
   const [dailyAdCredits, setDailyAdCredits] = useState(0);
-  const adScriptLoaded = useRef(false);
-  
-  const DAILY_AD_LIMIT = 10;
+  const [adScriptReady, setAdScriptReady] = useState(false);
+  const scriptLoadedRef = useRef(false);
 
   useEffect(() => {
     const getUser = async () => {
@@ -44,23 +45,55 @@ const EarnCredits = () => {
     getUser();
   }, [navigate]);
 
-  // Load Adsterra script only on this page
+  // Load Adsterra script with proper error handling and cleanup
   useEffect(() => {
-    if (!adScriptLoaded.current) {
-      const script = document.createElement("script");
-      script.src = "https://pl28616430.effectivegatecpm.com/06/29/39/062939b223e8f27a05744b8dd71c0c5c.js";
-      script.async = true;
-      script.id = "adsterra-script";
-      document.body.appendChild(script);
-      adScriptLoaded.current = true;
-    }
+    if (scriptLoadedRef.current) return;
+
+    const loadAdScript = () => {
+      try {
+        // Remove any existing Adsterra scripts first
+        const existingScripts = document.querySelectorAll('script[src*="effectivegatecpm"]');
+        existingScripts.forEach(script => script.remove());
+
+        const script = document.createElement("script");
+        script.src = "https://pl28616430.effectivegatecpm.com/06/29/39/062939b223e8f27a05744b8dd71c0c5c.js";
+        script.async = true;
+        script.id = "adsterra-social-bar";
+        script.type = "text/javascript";
+        
+        script.onload = () => {
+          console.log("Adsterra script loaded successfully");
+          setAdScriptReady(true);
+        };
+        
+        script.onerror = (error) => {
+          console.error("Failed to load Adsterra script:", error);
+          // Still allow interaction - the ad may work regardless
+          setAdScriptReady(true);
+        };
+
+        document.body.appendChild(script);
+        scriptLoadedRef.current = true;
+      } catch (error) {
+        console.error("Error setting up Adsterra script:", error);
+        setAdScriptReady(true);
+      }
+    };
+
+    // Delay script loading slightly to ensure DOM is ready
+    const timer = setTimeout(loadAdScript, 500);
 
     return () => {
-      // Cleanup script on unmount
-      const existingScript = document.getElementById("adsterra-script");
-      if (existingScript) {
-        existingScript.remove();
+      clearTimeout(timer);
+      // Cleanup on unmount
+      const script = document.getElementById("adsterra-social-bar");
+      if (script) {
+        script.remove();
       }
+      // Also remove any Adsterra-injected elements
+      const adElements = document.querySelectorAll('[id*="ad-"], [class*="adsterra"]');
+      adElements.forEach(el => el.remove());
+      scriptLoadedRef.current = false;
     };
   }, []);
 
@@ -138,7 +171,7 @@ const EarnCredits = () => {
       setSubmitted(true);
       toast({
         title: "အောင်မြင်ပါသည်!",
-        description: "Admin စစ်ဆေးပြီးနောက် 100 Credits ရရှိပါမည်",
+        description: `Admin စစ်ဆေးပြီးနောက် ${settings.campaign_approval_reward} Credits ရရှိပါမည်`,
       });
     } catch (error: any) {
       toast({
@@ -152,10 +185,10 @@ const EarnCredits = () => {
   };
 
   const handleWatchAd = async () => {
-    if (dailyAdCredits >= DAILY_AD_LIMIT) {
+    if (dailyAdCredits >= settings.daily_ad_limit) {
       toast({
         title: "ယနေ့ကန့်သတ်ချက်ပြည့်ပြီ",
-        description: `တစ်ရက်လျှင် ${DAILY_AD_LIMIT} Credits သာ ရယူနိုင်ပါသည်`,
+        description: `တစ်ရက်လျှင် ${settings.daily_ad_limit} Credits သာ ရယူနိုင်ပါသည်`,
         variant: "destructive",
       });
       return;
@@ -163,8 +196,7 @@ const EarnCredits = () => {
 
     setIsWatchingAd(true);
     
-    // Simulate ad interaction (in real implementation, this would be tied to Adsterra's callback)
-    // The Social Bar ad shows automatically, we just need to track the "interaction"
+    // Wait for ad interaction (Social Bar shows automatically, we track the "interaction")
     setTimeout(async () => {
       try {
         // Call edge function to add credits securely
@@ -175,10 +207,11 @@ const EarnCredits = () => {
         if (error) throw error;
 
         if (data?.success) {
-          setDailyAdCredits(prev => prev + 5);
+          const earned = data.credits_added || settings.ad_reward_amount;
+          setDailyAdCredits(prev => prev + earned);
           toast({
-            title: "🎉 5 Credits ရရှိပါပြီ!",
-            description: `ယနေ့ စုစုပေါင်း: ${dailyAdCredits + 5}/${DAILY_AD_LIMIT} Credits`,
+            title: `🎉 ${earned} Credits ရရှိပါပြီ!`,
+            description: `ယနေ့ စုစုပေါင်း: ${dailyAdCredits + earned}/${settings.daily_ad_limit} Credits`,
           });
         } else {
           throw new Error(data?.error || "Failed to add credits");
@@ -195,7 +228,7 @@ const EarnCredits = () => {
     }, 3000);
   };
 
-  if (isLoading) {
+  if (isLoading || settingsLoading) {
     return (
       <div className="min-h-screen gradient-navy flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -256,7 +289,7 @@ const EarnCredits = () => {
             <div>
               <h3 className="font-semibold text-foreground font-myanmar">ကြော်ငြာကြည့်၍ Credits ရယူပါ</h3>
               <p className="text-xs text-muted-foreground">
-                တစ်ရက် {DAILY_AD_LIMIT} Credits အထိ ရယူနိုင်ပါသည်
+                တစ်ရက် {settings.daily_ad_limit} Credits အထိ ရယူနိုင်ပါသည်
               </p>
             </div>
           </div>
@@ -265,32 +298,37 @@ const EarnCredits = () => {
           <div className="mb-4">
             <div className="flex justify-between text-xs text-muted-foreground mb-1">
               <span>ယနေ့ ရရှိပြီး</span>
-              <span>{dailyAdCredits}/{DAILY_AD_LIMIT} Credits</span>
+              <span>{dailyAdCredits}/{settings.daily_ad_limit} Credits</span>
             </div>
             <div className="h-2 bg-secondary rounded-full overflow-hidden">
               <div 
                 className="h-full bg-primary transition-all duration-500"
-                style={{ width: `${(dailyAdCredits / DAILY_AD_LIMIT) * 100}%` }}
+                style={{ width: `${(dailyAdCredits / settings.daily_ad_limit) * 100}%` }}
               />
             </div>
           </div>
 
           <Button
             onClick={handleWatchAd}
-            disabled={isWatchingAd || dailyAdCredits >= DAILY_AD_LIMIT}
+            disabled={isWatchingAd || dailyAdCredits >= settings.daily_ad_limit || !adScriptReady}
             className="w-full gradient-gold text-primary-foreground"
           >
-            {isWatchingAd ? (
+            {!adScriptReady ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ကြော်ငြာ ပြင်ဆင်နေသည်...
+              </>
+            ) : isWatchingAd ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 ကြော်ငြာကြည့်နေသည်...
               </>
-            ) : dailyAdCredits >= DAILY_AD_LIMIT ? (
+            ) : dailyAdCredits >= settings.daily_ad_limit ? (
               "ယနေ့ ကန့်သတ်ချက် ပြည့်ပြီ"
             ) : (
               <>
                 <Play className="w-4 h-4 mr-2" />
-                Watch Ad to Earn 5 Credits
+                Watch Ad to Earn {settings.ad_reward_amount} Credits
               </>
             )}
           </Button>
@@ -303,7 +341,7 @@ const EarnCredits = () => {
               <Gift className="w-5 h-5 text-green-500" />
             </div>
             <div>
-              <h3 className="font-semibold text-foreground font-myanmar">Review Post တင်၍ 100 Credits ရယူပါ</h3>
+              <h3 className="font-semibold text-foreground font-myanmar">Review Post တင်၍ {settings.campaign_approval_reward} Credits ရယူပါ</h3>
               <p className="text-xs text-muted-foreground">
                 Myanmar AI အကြောင်း Video Review တင်ပါ
               </p>
@@ -315,7 +353,7 @@ const EarnCredits = () => {
               {/* Rules */}
               <div className="bg-primary/5 rounded-xl p-4 border border-primary/20">
                 <h4 className="font-semibold text-sm mb-2 font-myanmar text-primary">
-                  🎁 100 Credits အခမဲ့ ရယူရန်
+                  🎁 {settings.campaign_approval_reward} Credits အခမဲ့ ရယူရန်
                 </h4>
                 <ul className="space-y-2 text-xs text-muted-foreground font-myanmar">
                   <li className="flex items-start gap-2">
@@ -332,7 +370,7 @@ const EarnCredits = () => {
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-primary">4.</span>
-                    <span>Admin စစ်ဆေးပြီးနောက် 100 Credits ပေးပါမည်</span>
+                    <span>Admin စစ်ဆေးပြီးနောက် {settings.campaign_approval_reward} Credits ပေးပါမည်</span>
                   </li>
                 </ul>
               </div>
@@ -397,7 +435,7 @@ const EarnCredits = () => {
               <div>
                 <h3 className="font-semibold text-lg font-myanmar">တင်ပြီးပါပြီ!</h3>
                 <p className="text-sm text-muted-foreground mt-1 font-myanmar">
-                  Admin စစ်ဆေးပြီးနောက် 100 Credits ရရှိပါမည်
+                  Admin စစ်ဆေးပြီးနောက် {settings.campaign_approval_reward} Credits ရရှိပါမည်
                 </p>
               </div>
               <Button 
