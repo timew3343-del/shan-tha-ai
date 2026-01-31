@@ -351,18 +351,20 @@ export const AIChatbot = ({ userId }: AIChatbotProps) => {
           >
             <Image className="w-4 h-4" />
           </Button>
-          <Textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyPress}
-            placeholder="မေးခွန်းရိုက်ပါ..."
-            className="min-h-[40px] max-h-[120px] resize-none rounded-xl bg-secondary/50 border-primary/30 text-sm font-myanmar"
-            disabled={isLoading}
-          />
+          <div className="flex-1 relative">
+            <Textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyPress}
+              placeholder="မေးခွန်းရိုက်ပါ..."
+              className="min-h-[44px] max-h-[120px] w-full resize-none rounded-xl bg-secondary border border-primary/30 text-sm font-myanmar px-4 py-3 focus:ring-2 focus:ring-primary/50 focus:border-primary placeholder:text-muted-foreground"
+              disabled={isLoading}
+            />
+          </div>
           <Button
             onClick={handleSend}
             disabled={isLoading || (!input.trim() && !selectedImage)}
-            className="shrink-0 h-10 w-10 rounded-xl bg-primary"
+            className="shrink-0 h-10 w-10 rounded-xl bg-primary hover:bg-primary/90"
           >
             {isLoading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
