@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      ad_credit_logs: {
+        Row: {
+          created_at: string
+          credits_earned: number
+          id: string
+          source: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          credits_earned?: number
+          id?: string
+          source?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          credits_earned?: number
+          id?: string
+          source?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           created_at: string
@@ -43,10 +67,12 @@ export type Database = {
           admin_notes: string | null
           created_at: string
           credits_awarded: number | null
+          fb_link: string | null
           id: string
           link: string
           platform: string
           status: string
+          tiktok_link: string | null
           updated_at: string
           user_id: string
         }
@@ -54,10 +80,12 @@ export type Database = {
           admin_notes?: string | null
           created_at?: string
           credits_awarded?: number | null
+          fb_link?: string | null
           id?: string
           link: string
           platform: string
           status?: string
+          tiktok_link?: string | null
           updated_at?: string
           user_id: string
         }
@@ -65,11 +93,40 @@ export type Database = {
           admin_notes?: string | null
           created_at?: string
           credits_awarded?: number | null
+          fb_link?: string | null
           id?: string
           link?: string
           platform?: string
           status?: string
+          tiktok_link?: string | null
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      credit_audit_log: {
+        Row: {
+          amount: number
+          created_at: string
+          credit_type: string
+          description: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          credit_type: string
+          description?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          credit_type?: string
+          description?: string | null
+          id?: string
           user_id?: string
         }
         Relationships: []
