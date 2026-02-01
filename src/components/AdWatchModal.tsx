@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Gift, Clock, ExternalLink, CheckCircle } from "lucide-react";
+import { Gift, Clock, CheckCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface AdWatchModalProps {
@@ -12,6 +12,8 @@ interface AdWatchModalProps {
   timerDuration: number; // in seconds
   rewardAmount: number;
 }
+
+const ADSTERRA_SCRIPT_URL = "https://pl28616430.effectivegatecpm.com/06/29/39/062939b223e8f27a05744b8dd71c0c5c.js";
 
 export const AdWatchModal = ({
   isOpen,
@@ -25,31 +27,27 @@ export const AdWatchModal = ({
   const [isClaiming, setIsClaiming] = useState(false);
   const [claimed, setClaimed] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const adTabRef = useRef<Window | null>(null);
-  const adContainerRef = useRef<HTMLDivElement>(null);
+  const adIframeRef = useRef<HTMLIFrameElement>(null);
 
   // Reset state when modal opens
   useEffect(() => {
     if (isOpen) {
+      // Reset all state
       setTimeRemaining(timerDuration);
       setCanClaim(false);
       setClaimed(false);
       setIsClaiming(false);
 
       // Open ad in new tab
-      adTabRef.current = window.open(
-        "https://pl28616430.effectivegatecpm.com/06/29/39/062939b223e8f27a05744b8dd71c0c5c.js",
-        "_blank"
-      );
-
-      // Load script in modal container
-      loadAdScript();
+      window.open(ADSTERRA_SCRIPT_URL, "_blank", "noopener,noreferrer");
 
       // Start countdown
       timerRef.current = setInterval(() => {
         setTimeRemaining((prev) => {
           if (prev <= 1) {
-            clearInterval(timerRef.current!);
+            if (timerRef.current) {
+              clearInterval(timerRef.current);
+            }
             setCanClaim(true);
             return 0;
           }
@@ -61,28 +59,10 @@ export const AdWatchModal = ({
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
+        timerRef.current = null;
       }
     };
   }, [isOpen, timerDuration]);
-
-  const loadAdScript = useCallback(() => {
-    if (!adContainerRef.current) return;
-
-    // Clear previous content
-    adContainerRef.current.innerHTML = "";
-
-    // Create and load the script
-    const script = document.createElement("script");
-    script.src = "https://pl28616430.effectivegatecpm.com/06/29/39/062939b223e8f27a05744b8dd71c0c5c.js";
-    script.async = true;
-    script.type = "text/javascript";
-
-    script.onerror = () => {
-      console.log("Ad script loaded in modal");
-    };
-
-    adContainerRef.current.appendChild(script);
-  }, []);
 
   const handleClaim = async () => {
     if (!canClaim || isClaiming) return;
@@ -93,7 +73,7 @@ export const AdWatchModal = ({
       setClaimed(true);
       // Close modal after short delay
       setTimeout(() => {
-        onClose();
+        handleClose();
       }, 1500);
     } catch (error) {
       console.error("Claim error:", error);
@@ -106,7 +86,12 @@ export const AdWatchModal = ({
     // Reset everything on close
     if (timerRef.current) {
       clearInterval(timerRef.current);
+      timerRef.current = null;
     }
+    setTimeRemaining(timerDuration);
+    setCanClaim(false);
+    setClaimed(false);
+    setIsClaiming(false);
     onClose();
   };
 
@@ -117,6 +102,34 @@ export const AdWatchModal = ({
   };
 
   const progressValue = ((timerDuration - timeRemaining) / timerDuration) * 100;
+
+  // Create HTML content for the ad iframe
+  const adIframeContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        body { 
+          margin: 0; 
+          padding: 10px; 
+          background: transparent; 
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 100px;
+          font-family: sans-serif;
+          color: #888;
+        }
+      </style>
+    </head>
+    <body>
+      <script async type="text/javascript" src="${ADSTERRA_SCRIPT_URL}"></script>
+      <noscript>Ad loading...</noscript>
+    </body>
+    </html>
+  `;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -140,15 +153,15 @@ export const AdWatchModal = ({
             </p>
           </div>
 
-          {/* Ad Container - iframe alternative */}
-          <div 
-            ref={adContainerRef}
-            className="min-h-[100px] rounded-lg bg-secondary/50 flex items-center justify-center"
-          >
-            <div className="text-center text-muted-foreground text-sm">
-              <ExternalLink className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p className="font-myanmar">ကြော်ငြာ ဖွင့်ထားပါသည်</p>
-            </div>
+          {/* Ad Container - iframe for better script isolation */}
+          <div className="rounded-lg bg-secondary/50 overflow-hidden min-h-[100px]">
+            <iframe
+              ref={adIframeRef}
+              srcDoc={adIframeContent}
+              sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+              className="w-full h-[120px] border-0"
+              title="Ad Content"
+            />
           </div>
 
           {/* Timer Display */}
