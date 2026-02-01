@@ -1,59 +1,79 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Gift, Clock, CheckCircle } from "lucide-react";
+import { Gift, Clock, CheckCircle, Play } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface AdWatchModalProps {
   isOpen: boolean;
   onClose: () => void;
   onClaim: () => Promise<void>;
-  timerDuration: number; // in seconds
+  timerDuration: number; // Not used - we use fixed 30s x 2
   rewardAmount: number;
 }
 
-const ADSTERRA_SCRIPT_URL = "https://pl28616430.effectivegatecpm.com/06/29/39/062939b223e8f27a05744b8dd71c0c5c.js";
+const SESSION_DURATION = 30; // 30 seconds per session
+const TOTAL_SESSIONS = 2; // 2 sessions required
 
 export const AdWatchModal = ({
   isOpen,
   onClose,
   onClaim,
-  timerDuration,
   rewardAmount,
 }: AdWatchModalProps) => {
-  const [timeRemaining, setTimeRemaining] = useState(timerDuration);
+  const [currentSession, setCurrentSession] = useState(1);
+  const [timeRemaining, setTimeRemaining] = useState(SESSION_DURATION);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [canClaim, setCanClaim] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
   const [claimed, setClaimed] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const adIframeRef = useRef<HTMLIFrameElement>(null);
+  const adContainerRef = useRef<HTMLDivElement>(null);
 
-  // Reset state when modal opens
+  // Load ad script into container
+  const loadAdScript = useCallback(() => {
+    if (!adContainerRef.current) return;
+    
+    // Clear existing content
+    adContainerRef.current.innerHTML = '';
+    
+    // Create container div for native banner
+    const containerDiv = document.createElement('div');
+    containerDiv.id = 'container-303f0f5972332b8fd635da8909294c40';
+    adContainerRef.current.appendChild(containerDiv);
+    
+    // Load native banner script
+    const script = document.createElement('script');
+    script.async = true;
+    script.setAttribute('data-cfasync', 'false');
+    script.src = 'https://pl28623813.effectivegatecpm.com/303f0f5972332b8fd635da8909294c40/invoke.js';
+    adContainerRef.current.appendChild(script);
+  }, []);
+
+  // Reset all state
+  const resetState = useCallback(() => {
+    setCurrentSession(1);
+    setTimeRemaining(SESSION_DURATION);
+    setIsTimerRunning(false);
+    setCanClaim(false);
+    setClaimed(false);
+    setIsClaiming(false);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  // Initialize when modal opens
   useEffect(() => {
     if (isOpen) {
-      // Reset all state
-      setTimeRemaining(timerDuration);
-      setCanClaim(false);
-      setClaimed(false);
-      setIsClaiming(false);
-
-      // Open ad in new tab
-      window.open(ADSTERRA_SCRIPT_URL, "_blank", "noopener,noreferrer");
-
-      // Start countdown
-      timerRef.current = setInterval(() => {
-        setTimeRemaining((prev) => {
-          if (prev <= 1) {
-            if (timerRef.current) {
-              clearInterval(timerRef.current);
-            }
-            setCanClaim(true);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+      resetState();
+      // Small delay to ensure DOM is ready
+      setTimeout(() => {
+        loadAdScript();
+        startTimer();
+      }, 100);
     }
 
     return () => {
@@ -62,7 +82,43 @@ export const AdWatchModal = ({
         timerRef.current = null;
       }
     };
-  }, [isOpen, timerDuration]);
+  }, [isOpen, resetState, loadAdScript]);
+
+  const startTimer = () => {
+    setIsTimerRunning(true);
+    
+    timerRef.current = setInterval(() => {
+      setTimeRemaining((prev) => {
+        if (prev <= 1) {
+          // Session complete
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
+          setIsTimerRunning(false);
+          
+          // Check if all sessions complete
+          setCurrentSession((currentSess) => {
+            if (currentSess >= TOTAL_SESSIONS) {
+              setCanClaim(true);
+              return currentSess;
+            }
+            return currentSess;
+          });
+          
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const startNextSession = () => {
+    setCurrentSession((prev) => prev + 1);
+    setTimeRemaining(SESSION_DURATION);
+    loadAdScript();
+    startTimer();
+  };
 
   const handleClaim = async () => {
     if (!canClaim || isClaiming) return;
@@ -71,7 +127,6 @@ export const AdWatchModal = ({
     try {
       await onClaim();
       setClaimed(true);
-      // Close modal after short delay
       setTimeout(() => {
         handleClose();
       }, 1500);
@@ -83,15 +138,7 @@ export const AdWatchModal = ({
   };
 
   const handleClose = () => {
-    // Reset everything on close
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    setTimeRemaining(timerDuration);
-    setCanClaim(false);
-    setClaimed(false);
-    setIsClaiming(false);
+    resetState();
     onClose();
   };
 
@@ -101,35 +148,12 @@ export const AdWatchModal = ({
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const progressValue = ((timerDuration - timeRemaining) / timerDuration) * 100;
+  const totalTime = SESSION_DURATION * TOTAL_SESSIONS;
+  const elapsedTime = (currentSession - 1) * SESSION_DURATION + (SESSION_DURATION - timeRemaining);
+  const progressValue = (elapsedTime / totalTime) * 100;
 
-  // Create HTML content for the ad iframe
-  const adIframeContent = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        body { 
-          margin: 0; 
-          padding: 10px; 
-          background: transparent; 
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          min-height: 100px;
-          font-family: sans-serif;
-          color: #888;
-        }
-      </style>
-    </head>
-    <body>
-      <script async type="text/javascript" src="${ADSTERRA_SCRIPT_URL}"></script>
-      <noscript>Ad loading...</noscript>
-    </body>
-    </html>
-  `;
+  const sessionComplete = timeRemaining === 0 && !canClaim;
+  const allComplete = canClaim;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -141,28 +165,42 @@ export const AdWatchModal = ({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div className="space-y-5 py-4">
+          {/* Session Progress Indicator */}
+          <div className="flex items-center justify-center gap-3">
+            {[1, 2].map((session) => (
+              <div
+                key={session}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  currentSession > session || (currentSession === session && allComplete)
+                    ? "bg-green-500/20 text-green-500"
+                    : currentSession === session
+                    ? "bg-primary/20 text-primary"
+                    : "bg-secondary text-muted-foreground"
+                }`}
+              >
+                {currentSession > session || (currentSession === session && allComplete) ? (
+                  <CheckCircle className="w-3.5 h-3.5" />
+                ) : (
+                  <Play className="w-3.5 h-3.5" />
+                )}
+                ကြော်ငြာ {session}
+              </div>
+            ))}
+          </div>
+
           {/* Message */}
-          <div className="text-center p-4 rounded-xl bg-primary/10 border border-primary/20">
+          <div className="text-center p-3 rounded-xl bg-primary/10 border border-primary/20">
             <p className="text-sm text-foreground font-myanmar leading-relaxed">
-              🎬 ကြော်ငြာ ၂ ခု ကြည့်နေပါသည် ({Math.ceil(timerDuration / 60)} မိနစ်)
-              <br />
-              <span className="text-muted-foreground">
-                Credits ရရှိရန် ကြော်ငြာ tab ကို မပိတ်ပါနှင့်!
-              </span>
+              🎬 ကြော်ငြာ {TOTAL_SESSIONS} ခု ကြည့်ပါ (တစ်ခုလျှင် {SESSION_DURATION} စက္ကန့်)
             </p>
           </div>
 
-          {/* Ad Container - iframe for better script isolation */}
-          <div className="rounded-lg bg-secondary/50 overflow-hidden min-h-[100px]">
-            <iframe
-              ref={adIframeRef}
-              srcDoc={adIframeContent}
-              sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-              className="w-full h-[120px] border-0"
-              title="Ad Content"
-            />
-          </div>
+          {/* Ad Container */}
+          <div 
+            ref={adContainerRef}
+            className="rounded-lg bg-secondary/50 overflow-hidden min-h-[80px] flex items-center justify-center p-2"
+          />
 
           {/* Timer Display */}
           <div className="space-y-3">
@@ -170,7 +208,7 @@ export const AdWatchModal = ({
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground font-myanmar">
-                  ကျန်ချိန်
+                  ကြော်ငြာ {currentSession}/{TOTAL_SESSIONS}
                 </span>
               </div>
               <span className="text-lg font-bold text-primary tabular-nums">
@@ -178,6 +216,9 @@ export const AdWatchModal = ({
               </span>
             </div>
             <Progress value={progressValue} className="h-3" />
+            <p className="text-xs text-center text-muted-foreground">
+              စုစုပေါင်း: {Math.floor(elapsedTime)}s / {totalTime}s
+            </p>
           </div>
 
           {/* Reward Info */}
@@ -185,7 +226,7 @@ export const AdWatchModal = ({
             🎁 ရရှိမည့် Credits: <span className="text-primary font-bold">{rewardAmount}</span>
           </div>
 
-          {/* Claim Button */}
+          {/* Action Buttons */}
           <AnimatePresence mode="wait">
             {claimed ? (
               <motion.div
@@ -199,6 +240,21 @@ export const AdWatchModal = ({
                 <p className="font-semibold text-green-600 font-myanmar">
                   {rewardAmount} Credits ရရှိပါပြီ!
                 </p>
+              </motion.div>
+            ) : sessionComplete && currentSession < TOTAL_SESSIONS ? (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+              >
+                <Button
+                  onClick={startNextSession}
+                  className="w-full h-12 text-base font-medium bg-primary text-primary-foreground"
+                >
+                  <span className="flex items-center gap-2 font-myanmar">
+                    <Play className="w-5 h-5" />
+                    နောက်တစ်ခု ကြည့်မည် ({currentSession + 1}/{TOTAL_SESSIONS})
+                  </span>
+                </Button>
               </motion.div>
             ) : (
               <motion.div
