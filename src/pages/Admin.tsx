@@ -672,27 +672,24 @@ export const Admin = () => {
           .eq("id", tx.id);
       }
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("credit_balance")
-        .eq("user_id", tx.user_id)
-        .single();
+      // Use secure RPC with row locking to add credits
+      const { data: result, error: creditError } = await supabase.rpc("add_user_credits", {
+        _user_id: tx.user_id,
+        _amount: totalCredits
+      });
 
-      if (profile) {
-        const newBalance = (profile.credit_balance || 0) + totalCredits;
-        await supabase
-          .from("profiles")
-          .update({ credit_balance: newBalance })
-          .eq("user_id", tx.user_id);
-          
-        // Add to credit audit log for tracking purchased credits
-        await supabase.from("credit_audit_log").insert({
-          user_id: tx.user_id,
-          amount: totalCredits,
-          credit_type: "purchased",
-          description: `${tx.package_name} - ${tx.amount_mmk} MMK`,
-        });
+      const resultObj = result as { success?: boolean; error?: string; new_balance?: number } | null;
+      if (creditError || !resultObj?.success) {
+        throw new Error(resultObj?.error || "Failed to add credits");
       }
+          
+      // Add to credit audit log for tracking purchased credits
+      await supabase.from("credit_audit_log").insert({
+        user_id: tx.user_id,
+        amount: totalCredits,
+        credit_type: "purchased",
+        description: `${tx.package_name} - ${tx.amount_mmk} MMK`,
+      });
 
       toast({
         title: "အတည်ပြုပြီး ✓",
