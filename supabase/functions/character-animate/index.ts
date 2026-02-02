@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,6 +13,85 @@ serve(async (req) => {
   }
 
   try {
+    // Validate Authorization header
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      console.error("Missing or invalid authorization header");
+      return new Response(
+        JSON.stringify({ success: false, error: "Authentication required" }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      );
+    }
+
+    // Create Supabase admin client
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // Verify JWT and get user ID
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claims, error: claimsError } = await supabaseAdmin.auth.getClaims(token);
+
+    if (claimsError || !claims?.claims?.sub) {
+      console.error("JWT verification failed:", claimsError);
+      return new Response(
+        JSON.stringify({ success: false, error: "Invalid or expired token" }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+      );
+    }
+
+    const userId = claims.claims.sub as string;
+    console.log(`Authenticated user: ${userId}`);
+
+    // Check maintenance mode
+    const { data: maintenanceSetting } = await supabaseAdmin
+      .from("app_settings")
+      .select("value")
+      .eq("key", "is_maintenance_mode")
+      .maybeSingle();
+
+    if (maintenanceSetting?.value === "true") {
+      return new Response(
+        JSON.stringify({ success: false, error: "Service is under maintenance. Please try again later." }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 503 }
+      );
+    }
+
+    // Get credit cost from settings
+    const { data: costSetting } = await supabaseAdmin
+      .from("app_settings")
+      .select("value")
+      .eq("key", "credit_cost_character_animation")
+      .maybeSingle();
+
+    const creditCost = parseInt(costSetting?.value || "15", 10);
+
+    // Check user's credit balance
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .select("credit_balance")
+      .eq("user_id", userId)
+      .single();
+
+    if (profileError || !profile) {
+      console.error("Profile not found:", profileError);
+      return new Response(
+        JSON.stringify({ success: false, error: "User profile not found" }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+      );
+    }
+
+    if (profile.credit_balance < creditCost) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: `Insufficient credits. Required: ${creditCost}, Available: ${profile.credit_balance}` 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 402 }
+      );
+    }
+
     const REPLICATE_API_TOKEN = Deno.env.get('REPLICATE_API_KEY');
     
     if (!REPLICATE_API_TOKEN) {
@@ -25,7 +105,7 @@ serve(async (req) => {
       );
     }
 
-    const { video_base64, source_face_base64, user_id } = await req.json();
+    const { video_base64, source_face_base64 } = await req.json();
 
     if (!video_base64 || !source_face_base64) {
       return new Response(
@@ -34,19 +114,17 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Processing character animation for user: ${user_id}`);
+    console.log(`Processing character animation for user: ${userId}, credit cost: ${creditCost}`);
 
     // Start Replicate prediction with wan-animate model
-    // Using wan-video/wan-2.1-i2v-720p-alpha for high-quality video generation
     const predictionResponse = await fetch("https://api.replicate.com/v1/predictions", {
       method: "POST",
       headers: {
         "Authorization": `Token ${REPLICATE_API_TOKEN}`,
         "Content-Type": "application/json",
-        "Prefer": "wait=60", // Wait up to 60 seconds for result
+        "Prefer": "wait=60",
       },
       body: JSON.stringify({
-        // wan-video image-to-video model
         version: "d3e72ebfc98f89f86c8a4b8d4f6f77b6a8c1e5a7b3d9c2f1e4a7b0c3d6e9f2a5",
         input: {
           image: source_face_base64,
@@ -56,7 +134,6 @@ serve(async (req) => {
           guidance_scale: 7.5,
           num_inference_steps: 50,
         },
-        // Request H100 GPU for maximum performance
         hardware: "gpu-h100-80gb",
       }),
     });
@@ -65,7 +142,6 @@ serve(async (req) => {
       const errorText = await predictionResponse.text();
       console.error("Replicate API error:", errorText);
       
-      // Check if it's a balance issue
       if (predictionResponse.status === 402) {
         return new Response(
           JSON.stringify({ 
@@ -88,13 +164,13 @@ serve(async (req) => {
     const prediction = await predictionResponse.json();
     console.log("Initial prediction:", prediction.id, prediction.status);
 
-    // Poll for completion if not immediately ready
+    // Poll for completion
     let result = prediction;
     let attempts = 0;
-    const maxAttempts = 60; // Max 60 attempts (5 minutes with 5s intervals)
+    const maxAttempts = 60;
 
     while (result.status !== "succeeded" && result.status !== "failed" && attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+      await new Promise(resolve => setTimeout(resolve, 5000));
       
       const pollResponse = await fetch(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
         headers: {
@@ -128,7 +204,21 @@ serve(async (req) => {
       );
     }
 
-    // Get the output video URL
+    // Deduct credits after successful generation
+    const { data: deductResult, error: deductError } = await supabaseAdmin.rpc("deduct_user_credits", {
+      _user_id: userId,
+      _amount: creditCost,
+      _action: "Character animation"
+    });
+
+    if (deductError) {
+      console.error("Failed to deduct credits:", deductError);
+      // Still return success since animation was generated, but log the issue
+    } else {
+      const deductData = deductResult as { success: boolean; new_balance?: number } | null;
+      console.log("Credits deducted successfully. New balance:", deductData?.new_balance);
+    }
+
     const videoUrl = Array.isArray(result.output) ? result.output[0] : result.output;
 
     console.log("Animation complete:", videoUrl);
@@ -138,6 +228,7 @@ serve(async (req) => {
         success: true, 
         video_url: videoUrl,
         prediction_id: prediction.id,
+        credits_deducted: creditCost,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
