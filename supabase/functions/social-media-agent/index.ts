@@ -8,12 +8,12 @@ const corsHeaders = {
 
 interface ContentCalendarRequest {
   mode: "calendar" | "photoshoot";
-  images: string[]; // base64 images
+  images: string[];
   businessDescription: string;
-  // Photoshoot specific
+  numDays?: number;
   themePrompt?: string;
   themeName?: string;
-  selectedImageIndex?: number; // which image to use for photoshoot
+  selectedImageIndex?: number;
 }
 
 serve(async (req) => {
@@ -47,7 +47,7 @@ serve(async (req) => {
 
     const userId = claims.claims.sub as string;
     const body: ContentCalendarRequest = await req.json();
-    const { mode, images, businessDescription, themePrompt, themeName, selectedImageIndex } = body;
+    const { mode, images, businessDescription, numDays = 7, themePrompt, themeName, selectedImageIndex } = body;
 
     if (!images || images.length === 0 || !businessDescription) {
       return new Response(
@@ -56,41 +56,37 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Social media agent request: user=${userId}, mode=${mode}, images=${images.length}`);
+    console.log(`Social media agent request: user=${userId}, mode=${mode}, images=${images.length}, numDays=${numDays}`);
 
     // Get credit cost based on mode
-    const costKey = mode === "photoshoot" ? "credit_cost_photoshoot" : "credit_cost_social_media_agent";
-    const { data: costSetting } = await supabaseAdmin
-      .from("app_settings")
-      .select("value")
-      .eq("key", costKey)
-      .maybeSingle();
-
-    const creditCost = costSetting?.value ? parseInt(costSetting.value, 10) : (mode === "photoshoot" ? 8 : 25);
+    let creditCost: number;
+    if (mode === "photoshoot") {
+      const { data: costSetting } = await supabaseAdmin
+        .from("app_settings").select("value").eq("key", "credit_cost_photoshoot").maybeSingle();
+      creditCost = costSetting?.value ? parseInt(costSetting.value, 10) : 8;
+    } else {
+      // Calendar: per-day pricing
+      const { data: costSetting } = await supabaseAdmin
+        .from("app_settings").select("value").eq("key", "credit_cost_social_media_agent").maybeSingle();
+      const base7DayCost = costSetting?.value ? parseInt(costSetting.value, 10) : 25;
+      const perDayCost = Math.ceil(base7DayCost / 7);
+      creditCost = perDayCost * Math.min(Math.max(numDays, 1), 30);
+    }
 
     // Check balance
     const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("credit_balance")
-      .eq("user_id", userId)
-      .single();
+      .from("profiles").select("credit_balance").eq("user_id", userId).single();
 
     if (!profile || profile.credit_balance < creditCost) {
       return new Response(
-        JSON.stringify({
-          error: "ခရက်ဒစ် မလုံလောက်ပါ",
-          required: creditCost,
-          balance: profile?.credit_balance || 0,
-        }),
+        JSON.stringify({ error: "ခရက်ဒစ် မလုံလောက်ပါ", required: creditCost, balance: profile?.credit_balance || 0 }),
         { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     // Get API keys
     const { data: apiKeys } = await supabaseAdmin
-      .from("app_settings")
-      .select("key, value")
-      .in("key", ["stability_api_key"]);
+      .from("app_settings").select("key, value").in("key", ["stability_api_key"]);
 
     const keyMap: Record<string, string> = {};
     apiKeys?.forEach((k) => { keyMap[k.key] = k.value || ""; });
@@ -99,17 +95,12 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
     if (!LOVABLE_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "AI service not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "AI service not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-
     if (!STABILITY_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "Stability AI key not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Stability AI key not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // ===================== PHOTOSHOOT MODE =====================
@@ -118,9 +109,7 @@ serve(async (req) => {
 
       const imgIndex = selectedImageIndex ?? 0;
       let imageData = images[imgIndex];
-      if (imageData.includes(",")) {
-        imageData = imageData.split(",")[1];
-      }
+      if (imageData.includes(",")) imageData = imageData.split(",")[1];
 
       const imageBytes = Uint8Array.from(atob(imageData), (c) => c.charCodeAt(0));
       const imageBlob = new Blob([imageBytes], { type: "image/png" });
@@ -133,112 +122,73 @@ serve(async (req) => {
 
       const stabilityResponse = await fetch(
         "https://api.stability.ai/v2beta/stable-image/edit/search-and-replace",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${STABILITY_API_KEY}`,
-            Accept: "image/*",
-          },
-          body: formData,
-        }
+        { method: "POST", headers: { Authorization: `Bearer ${STABILITY_API_KEY}`, Accept: "image/*" }, body: formData }
       );
 
-      let resultImageUrl = "";
-
-      if (stabilityResponse.ok) {
-        const resultBuffer = await stabilityResponse.arrayBuffer();
-        const base64Result = btoa(String.fromCharCode(...new Uint8Array(resultBuffer)));
-
-        // Upload to Supabase Storage
-        const fileName = `photoshoot_${userId}_${Date.now()}.png`;
-        const uploadBytes = Uint8Array.from(atob(base64Result), (c) => c.charCodeAt(0));
-
-        const { error: uploadError } = await supabaseAdmin.storage
-          .from("videos")
-          .upload(fileName, uploadBytes, { contentType: "image/png", upsert: true });
-
-        if (uploadError) {
-          console.error("Upload error:", uploadError);
-        }
-
-        const { data: urlData } = supabaseAdmin.storage.from("videos").getPublicUrl(fileName);
-        resultImageUrl = urlData.publicUrl;
-        console.log("Photoshoot image uploaded:", resultImageUrl);
-      } else {
+      if (!stabilityResponse.ok) {
         const errText = await stabilityResponse.text();
         console.error("Stability AI error:", stabilityResponse.status, errText);
-        return new Response(
-          JSON.stringify({ error: "Image processing failed: " + errText }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Image processing failed: " + errText }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
-      // Deduct credits
-      await supabaseAdmin.rpc("deduct_user_credits", {
-        _user_id: userId,
-        _amount: creditCost,
-        _action: "Professional Photoshoot",
-      });
+      const resultBuffer = await stabilityResponse.arrayBuffer();
+      const base64Result = btoa(String.fromCharCode(...new Uint8Array(resultBuffer)));
+      const fileName = `photoshoot_${userId}_${Date.now()}.png`;
+      const uploadBytes = Uint8Array.from(atob(base64Result), (c) => c.charCodeAt(0));
 
+      await supabaseAdmin.storage.from("videos").upload(fileName, uploadBytes, { contentType: "image/png", upsert: true });
+      const { data: urlData } = supabaseAdmin.storage.from("videos").getPublicUrl(fileName);
+
+      await supabaseAdmin.rpc("deduct_user_credits", { _user_id: userId, _amount: creditCost, _action: "Professional Photoshoot" });
       await supabaseAdmin.from("credit_audit_log").insert({
-        user_id: userId,
-        amount: -creditCost,
-        credit_type: "photoshoot",
+        user_id: userId, amount: -creditCost, credit_type: "photoshoot",
         description: `Photoshoot: ${themeName} - ${businessDescription.substring(0, 50)}`,
       });
 
-      return new Response(
-        JSON.stringify({
-          success: true,
-          resultImageUrl,
-          creditsUsed: creditCost,
-          newBalance: profile.credit_balance - creditCost,
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({
+        success: true, resultImageUrl: urlData.publicUrl, creditsUsed: creditCost,
+        newBalance: profile.credit_balance - creditCost,
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // ===================== CALENDAR MODE =====================
-    console.log("Calendar mode: generating 7-day content plan...");
+    const actualDays = Math.min(Math.max(numDays, 1), 30);
+    console.log(`Calendar mode: generating ${actualDays}-day content plan...`);
 
-    // Step 1: Generate content calendar with Gemini
     const calendarResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
           {
             role: "system",
-            content: `You are a social media marketing expert. Analyze the product images and create a 7-day content calendar. 
+            content: `You are a social media marketing expert. Create a ${actualDays}-day content calendar.
 Return valid JSON with this structure:
 {
   "days": [
     {
-      "day": 1,
-      "dayName": "Monday",
+      "day": 1, "dayName": "Day 1",
       "caption_my": "Myanmar language caption with emojis",
       "caption_en": "English caption with emojis",
       "hashtags": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5"],
       "bestTime": "9:00 AM",
-      "visualTheme": "Description of the visual style for this day's post",
-      "contentType": "Product Showcase / Behind the Scenes / Customer Testimonial / Tips & Tricks / Story / Promo / Engagement"
+      "visualTheme": "Description of the visual style",
+      "contentType": "Product Showcase / Behind the Scenes / Tips & Tricks / Story / Promo / Engagement"
     }
   ]
 }
-Make each day unique with different content types. Include Myanmar and English captions. Hashtags should be relevant and trending.`,
+Make each day unique. Include Myanmar and English captions. Create exactly ${actualDays} days.`,
           },
           {
             role: "user",
-            content: `Business: ${businessDescription}. I have ${images.length} product images. Create a 7-day social media content calendar.`,
+            content: `Business: ${businessDescription}. I have ${images.length} product images. Create a ${actualDays}-day social media content calendar.`,
           },
         ],
         response_format: { type: "json_object" },
         temperature: 0.8,
-        max_tokens: 3000,
+        max_tokens: actualDays > 15 ? 6000 : 3000,
       }),
     });
 
@@ -247,28 +197,23 @@ Make each day unique with different content types. Include Myanmar and English c
       const calData = await calendarResponse.json();
       const content = calData.choices?.[0]?.message?.content;
       if (content) {
-        try {
-          calendarData = JSON.parse(content);
-        } catch {
-          console.error("Failed to parse calendar JSON");
-        }
+        try { calendarData = JSON.parse(content); } catch { console.error("Failed to parse calendar JSON"); }
       }
       console.log("Content calendar generated with", calendarData.days?.length, "days");
     } else {
       console.error("Gemini calendar error:", await calendarResponse.text());
     }
 
-    // Step 2: Generate enhanced images for each day using Stability AI
+    // Generate enhanced images (up to 7 images max to avoid API rate limits)
     const enhancedImages: string[] = [];
     const days = calendarData.days || [];
+    const imagesToGenerate = Math.min(days.length, 7);
 
-    for (let i = 0; i < Math.min(days.length, 7); i++) {
+    for (let i = 0; i < imagesToGenerate; i++) {
       const day = days[i];
       const imageIndex = i % images.length;
       let imageData = images[imageIndex];
-      if (imageData.includes(",")) {
-        imageData = imageData.split(",")[1];
-      }
+      if (imageData.includes(",")) imageData = imageData.split(",")[1];
 
       try {
         const imageBytes = Uint8Array.from(atob(imageData), (c) => c.charCodeAt(0));
@@ -280,34 +225,23 @@ Make each day unique with different content types. Include Myanmar and English c
         formData.append("search_prompt", "background");
         formData.append("output_format", "png");
 
-        const stabResp = await fetch(
-          "https://api.stability.ai/v2beta/stable-image/edit/search-and-replace",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${STABILITY_API_KEY}`,
-              Accept: "image/*",
-            },
-            body: formData,
-          }
-        );
+        const stabResp = await fetch("https://api.stability.ai/v2beta/stable-image/edit/search-and-replace", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${STABILITY_API_KEY}`, Accept: "image/*" },
+          body: formData,
+        });
 
         if (stabResp.ok) {
           const resultBuffer = await stabResp.arrayBuffer();
           const base64Result = btoa(String.fromCharCode(...new Uint8Array(resultBuffer)));
-
           const fileName = `social_${userId}_day${i + 1}_${Date.now()}.png`;
           const uploadBytes = Uint8Array.from(atob(base64Result), (c) => c.charCodeAt(0));
-
-          await supabaseAdmin.storage
-            .from("videos")
-            .upload(fileName, uploadBytes, { contentType: "image/png", upsert: true });
-
+          await supabaseAdmin.storage.from("videos").upload(fileName, uploadBytes, { contentType: "image/png", upsert: true });
           const { data: urlData } = supabaseAdmin.storage.from("videos").getPublicUrl(fileName);
           enhancedImages.push(urlData.publicUrl);
-          console.log(`Day ${i + 1} image enhanced and uploaded`);
+          console.log(`Day ${i + 1} image enhanced`);
         } else {
-          console.error(`Day ${i + 1} image enhancement failed:`, await stabResp.text());
+          console.error(`Day ${i + 1} image failed:`, await stabResp.text());
           enhancedImages.push("");
         }
       } catch (err) {
@@ -315,41 +249,29 @@ Make each day unique with different content types. Include Myanmar and English c
         enhancedImages.push("");
       }
 
-      // Small delay to avoid rate limiting
-      if (i < 6) await new Promise(r => setTimeout(r, 1000));
+      if (i < imagesToGenerate - 1) await new Promise(r => setTimeout(r, 1000));
     }
 
-    // Step 3: Deduct credits
-    await supabaseAdmin.rpc("deduct_user_credits", {
-      _user_id: userId,
-      _amount: creditCost,
-      _action: "Social Media Agent",
-    });
+    // Fill remaining days without images
+    for (let i = imagesToGenerate; i < days.length; i++) {
+      enhancedImages.push(enhancedImages[i % imagesToGenerate] || "");
+    }
 
+    await supabaseAdmin.rpc("deduct_user_credits", { _user_id: userId, _amount: creditCost, _action: "Social Media Agent" });
     await supabaseAdmin.from("credit_audit_log").insert({
-      user_id: userId,
-      amount: -creditCost,
-      credit_type: "social_media_agent",
-      description: `7-Day Calendar: ${businessDescription.substring(0, 50)}`,
+      user_id: userId, amount: -creditCost, credit_type: "social_media_agent",
+      description: `${actualDays}-Day Calendar: ${businessDescription.substring(0, 50)}`,
     });
 
-    console.log(`Social media calendar generated for user ${userId}. Credits used: ${creditCost}`);
+    console.log(`Social media calendar generated for user ${userId}. Days: ${actualDays}, Credits: ${creditCost}`);
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        calendar: calendarData,
-        enhancedImages,
-        creditsUsed: creditCost,
-        newBalance: profile.credit_balance - creditCost,
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({
+      success: true, calendar: calendarData, enhancedImages,
+      creditsUsed: creditCost, newBalance: profile.credit_balance - creditCost,
+    }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error: any) {
     console.error("Social media agent error:", error);
-    return new Response(
-      JSON.stringify({ error: error.message || "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: error.message || "Internal server error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });

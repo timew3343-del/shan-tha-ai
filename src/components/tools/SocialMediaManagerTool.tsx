@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { Upload, Loader2, Download, Calendar, Camera, Image, Sparkles, X, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
 import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
@@ -43,18 +44,18 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
   const [selectedImageForShoot, setSelectedImageForShoot] = useState(0);
   const [photoshootResult, setPhotoshootResult] = useState<string | null>(null);
   const [isPhotoshooting, setIsPhotoshooting] = useState(false);
+  const [numDays, setNumDays] = useState(7);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const calendarCost = (costs as any).social_media_agent || 25;
+  const baseCostPerDay = Math.ceil(((costs as any).social_media_agent || 25) / 7);
+  const calendarCost = baseCostPerDay * numDays;
   const photoshootCost = (costs as any).photoshoot || 8;
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-
     const remainingSlots = 4 - images.length;
     const filesToProcess = Array.from(files).slice(0, remainingSlots);
-
     filesToProcess.forEach((file) => {
       if (file.size > 10 * 1024 * 1024) {
         toast({ title: "ဖိုင်ကြီးလွန်းပါ", description: "10MB အောက် ပုံရွေးပါ", variant: "destructive" });
@@ -66,7 +67,6 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
       };
       reader.readAsDataURL(file);
     });
-
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -107,6 +107,7 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
           mode: "calendar",
           images,
           businessDescription: businessDesc,
+          numDays,
         }),
       });
 
@@ -121,7 +122,7 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
       setViewMode("calendar");
       refetchCredits();
 
-      toast({ title: "အောင်မြင်ပါသည်", description: "7 ရက်စာ Content Calendar ဖန်တီးပြီးပါပြီ" });
+      toast({ title: "အောင်မြင်ပါသည်", description: `${numDays} ရက်စာ Content Calendar ဖန်တီးပြီးပါပြီ` });
     } catch (error: any) {
       console.error("Calendar generation error:", error);
       toast({ title: "အမှားရှိပါသည်", description: error.message, variant: "destructive" });
@@ -132,7 +133,6 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
 
   const handlePhotoshoot = async () => {
     if (!userId || !selectedTheme) return;
-
     if (credits < photoshootCost) {
       toast({ title: "ခရက်ဒစ် မလုံလောက်ပါ", description: `${photoshootCost} Credits လိုအပ်ပါသည်`, variant: "destructive" });
       return;
@@ -201,7 +201,7 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
   if (viewMode === "upload") {
     return (
       <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4 p-4 pb-24">
-        <ToolHeader title="AI Social Media Manager" subtitle="7 ရက်စာ Content Calendar + Professional Photoshoot" onBack={onBack} />
+        <ToolHeader title="AI Social Media Manager" subtitle="Content Calendar + Professional Photoshoot" onBack={onBack} />
 
         {/* Image Upload */}
         <div className="gradient-card rounded-2xl p-4 border border-primary/20">
@@ -209,7 +209,6 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
             <Image className="w-4 h-4 text-primary" />
             ထုတ်ကုန်ပုံများ တင်ပါ (၃-၄ ပုံ)
           </h3>
-
           <div className="grid grid-cols-4 gap-2 mb-3">
             {images.map((img, i) => (
               <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-primary/20">
@@ -240,6 +239,28 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
           />
         </div>
 
+        {/* Day Selector */}
+        <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+          <h3 className="text-sm font-semibold text-foreground mb-3 font-myanmar flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-primary" />
+            ရက်ရွေးချယ်ပါ (1 ရက် - 30 ရက်)
+          </h3>
+          <div className="px-2 mb-3">
+            <Slider
+              value={[numDays]}
+              onValueChange={(v) => setNumDays(v[0])}
+              min={1}
+              max={30}
+              step={1}
+              className="w-full"
+            />
+          </div>
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span className="font-myanmar">{numDays} ရက်စာ Content Calendar</span>
+            <span className="font-semibold text-primary">{calendarCost} Credits</span>
+          </div>
+        </div>
+
         {/* Action Buttons */}
         <div className="space-y-2">
           <Button
@@ -255,17 +276,13 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
             ) : (
               <div className="flex items-center gap-2">
                 <Calendar className="w-5 h-5" />
-                <span className="font-myanmar">7 ရက်စာ Calendar ဖန်တီးမည် ({calendarCost} Cr)</span>
+                <span className="font-myanmar">{numDays} ရက်စာ Calendar ဖန်တီးမည် ({calendarCost} Cr)</span>
               </div>
             )}
           </Button>
 
           {images.length >= 1 && businessDesc.trim() && (
-            <Button
-              onClick={() => setViewMode("photoshoot")}
-              variant="outline"
-              className="w-full py-5 rounded-2xl border-primary/30"
-            >
+            <Button onClick={() => setViewMode("photoshoot")} variant="outline" className="w-full py-5 rounded-2xl border-primary/30">
               <Camera className="w-5 h-5 mr-2 text-primary" />
               <span className="font-myanmar">Professional AI Photoshoot ({photoshootCost} Cr)</span>
             </Button>
@@ -275,7 +292,7 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
         {/* Credit Info */}
         <div className="gradient-card rounded-2xl p-3 border border-primary/10">
           <p className="text-xs text-muted-foreground font-myanmar">
-            📊 Content Calendar: {calendarCost} Credits (7 ရက်စာ ပုံ + caption + hashtags)
+            📊 Content Calendar: {baseCostPerDay} Credits/ရက် × {numDays} ရက် = {calendarCost} Credits
           </p>
           <p className="text-xs text-muted-foreground font-myanmar mt-1">
             📸 Photoshoot: {photoshootCost} Credits/ပုံ (60 background themes)
@@ -289,7 +306,7 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
   if (viewMode === "calendar") {
     return (
       <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4 p-4 pb-24">
-        <ToolHeader title="7-Day Content Calendar" subtitle="AI ဖန်တီးထားသော Content Plan" onBack={() => setViewMode("upload")} />
+        <ToolHeader title={`${calendarDays.length}-Day Content Calendar`} subtitle="AI ဖန်တီးထားသော Content Plan" onBack={() => setViewMode("upload")} />
 
         <div className="flex gap-2 mb-2">
           <Button onClick={downloadAll} variant="outline" size="sm" className="rounded-xl">
@@ -308,7 +325,7 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
               key={i}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.1 }}
+              transition={{ delay: i * 0.05 }}
               className="gradient-card rounded-2xl p-4 border border-primary/20"
             >
               <div className="flex items-center gap-2 mb-3">
@@ -361,7 +378,6 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
       <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4 p-4 pb-24">
         <ToolHeader title="Professional AI Photoshoot" subtitle="60 Background Themes ရွေးချယ်ပါ" onBack={() => setViewMode("upload")} />
 
-        {/* Select Image */}
         <div className="gradient-card rounded-2xl p-3 border border-primary/20">
           <h4 className="text-xs font-semibold text-foreground mb-2 font-myanmar">ပုံရွေးပါ</h4>
           <div className="flex gap-2">
@@ -379,7 +395,6 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
           </div>
         </div>
 
-        {/* Theme Categories */}
         <div className="space-y-3">
           {THEME_CATEGORIES.map((category) => (
             <div key={category.name} className="gradient-card rounded-2xl border border-primary/20 overflow-hidden">
@@ -425,7 +440,6 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
           ))}
         </div>
 
-        {/* Generate Button */}
         {selectedTheme && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
             <div className="gradient-card rounded-2xl p-3 border border-primary/20 mb-2">
@@ -468,16 +482,13 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
 
         <div className="flex gap-2">
           <Button onClick={() => downloadImage(photoshootResult, `photoshoot_${selectedTheme?.id || "result"}.png`)} className="flex-1 rounded-2xl">
-            <Download className="w-4 h-4 mr-2" />
-            <span className="font-myanmar">Download</span>
+            <Download className="w-4 h-4 mr-2" /><span className="font-myanmar">Download</span>
           </Button>
           <Button onClick={() => { setPhotoshootResult(null); setViewMode("photoshoot"); }} variant="outline" className="flex-1 rounded-2xl">
-            <Camera className="w-4 h-4 mr-2" />
-            <span className="font-myanmar">နောက်ထပ် Theme</span>
+            <Camera className="w-4 h-4 mr-2" /><span className="font-myanmar">နောက်ထပ် Theme</span>
           </Button>
         </div>
 
-        {/* Comparison */}
         <div className="gradient-card rounded-2xl p-3 border border-primary/20">
           <h4 className="text-xs font-semibold text-foreground mb-2 font-myanmar">မူရင်း vs AI Photoshoot</h4>
           <div className="grid grid-cols-2 gap-2">

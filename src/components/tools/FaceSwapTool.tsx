@@ -60,10 +60,22 @@ export const FaceSwapTool = ({ userId, onBack }: FaceSwapToolProps) => {
 
   const startCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: "user" }, 
-        audio: false 
-      });
+      const constraints: MediaStreamConstraints = {
+        video: { 
+          facingMode: { ideal: "user" },
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+        }, 
+        audio: false,
+      };
+      
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch {
+        // Fallback: try without facingMode constraint (some mobile browsers)
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
