@@ -91,6 +91,8 @@ export const Admin = () => {
     caption_per_minute: 9,
     ad_generator: 9,
     live_camera_chat: 1,
+    social_media_agent: 25,
+    photoshoot: 8,
   });
 
   // Manual credit management state
@@ -1348,6 +1350,32 @@ export const Admin = () => {
                     type="number"
                     value={creditCosts.live_camera_chat}
                     onChange={(e) => setCreditCosts(prev => ({ ...prev, live_camera_chat: parseInt(e.target.value) || 0 }))}
+                    className="w-20 text-center bg-background/50"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                  <div>
+                    <span className="text-sm font-medium text-foreground">Social Media Agent</span>
+                    <p className="text-xs text-muted-foreground">7 ရက်စာ Content Calendar (30% margin)</p>
+                  </div>
+                  <Input
+                    type="number"
+                    value={creditCosts.social_media_agent}
+                    onChange={(e) => setCreditCosts(prev => ({ ...prev, social_media_agent: parseInt(e.target.value) || 0 }))}
+                    className="w-20 text-center bg-background/50"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                  <div>
+                    <span className="text-sm font-medium text-foreground">AI Photoshoot</span>
+                    <p className="text-xs text-muted-foreground">ပုံတစ်ပုံစီ Background ပြောင်း (30% margin)</p>
+                  </div>
+                  <Input
+                    type="number"
+                    value={creditCosts.photoshoot}
+                    onChange={(e) => setCreditCosts(prev => ({ ...prev, photoshoot: parseInt(e.target.value) || 0 }))}
                     className="w-20 text-center bg-background/50"
                   />
                 </div>
