@@ -2,19 +2,19 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Gift, Clock, CheckCircle, Play } from "lucide-react";
+import { Gift, Clock, CheckCircle, Play, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface AdWatchModalProps {
   isOpen: boolean;
   onClose: () => void;
   onClaim: () => Promise<void>;
-  timerDuration: number; // Not used - we use fixed 30s x 2
+  timerDuration: number;
   rewardAmount: number;
 }
 
-const SESSION_DURATION = 30; // 30 seconds per session
-const TOTAL_SESSIONS = 2; // 2 sessions required
+const SESSION_DURATION = 30;
+const TOTAL_SESSIONS = 2;
 
 export const AdWatchModal = ({
   isOpen,
@@ -28,22 +28,19 @@ export const AdWatchModal = ({
   const [canClaim, setCanClaim] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
   const [claimed, setClaimed] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const adContainerRef = useRef<HTMLDivElement>(null);
 
-  // Load ad script into container
   const loadAdScript = useCallback(() => {
     if (!adContainerRef.current) return;
     
-    // Clear existing content
     adContainerRef.current.innerHTML = '';
     
-    // Create container div for native banner
     const containerDiv = document.createElement('div');
     containerDiv.id = 'container-303f0f5972332b8fd635da8909294c40';
     adContainerRef.current.appendChild(containerDiv);
     
-    // Load native banner script
     const script = document.createElement('script');
     script.async = true;
     script.setAttribute('data-cfasync', 'false');
@@ -51,7 +48,6 @@ export const AdWatchModal = ({
     adContainerRef.current.appendChild(script);
   }, []);
 
-  // Reset all state
   const resetState = useCallback(() => {
     setCurrentSession(1);
     setTimeRemaining(SESSION_DURATION);
@@ -59,17 +55,16 @@ export const AdWatchModal = ({
     setCanClaim(false);
     setClaimed(false);
     setIsClaiming(false);
+    setClaimError(null);
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
   }, []);
 
-  // Initialize when modal opens
   useEffect(() => {
     if (isOpen) {
       resetState();
-      // Small delay to ensure DOM is ready
       setTimeout(() => {
         loadAdScript();
         startTimer();
@@ -90,18 +85,15 @@ export const AdWatchModal = ({
     timerRef.current = setInterval(() => {
       setTimeRemaining((prev) => {
         if (prev <= 1) {
-          // Session complete
           if (timerRef.current) {
             clearInterval(timerRef.current);
             timerRef.current = null;
           }
           setIsTimerRunning(false);
           
-          // Check if all sessions complete
           setCurrentSession((currentSess) => {
             if (currentSess >= TOTAL_SESSIONS) {
               setCanClaim(true);
-              return currentSess;
             }
             return currentSess;
           });
@@ -124,14 +116,16 @@ export const AdWatchModal = ({
     if (!canClaim || isClaiming) return;
 
     setIsClaiming(true);
+    setClaimError(null);
     try {
       await onClaim();
       setClaimed(true);
       setTimeout(() => {
         handleClose();
       }, 1500);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Claim error:", error);
+      setClaimError(error?.message || "Credits ရယူရာတွင် ပြဿနာရှိပါသည်။ ထပ်ကြိုးစားကြည့်ပါ။");
     } finally {
       setIsClaiming(false);
     }
@@ -199,8 +193,12 @@ export const AdWatchModal = ({
           {/* Ad Container */}
           <div 
             ref={adContainerRef}
-            className="rounded-lg bg-secondary/50 overflow-hidden min-h-[80px] flex items-center justify-center p-2"
-          />
+            className="rounded-lg bg-secondary/50 overflow-hidden min-h-[100px] flex items-center justify-center p-2"
+          >
+            <p className="text-xs text-muted-foreground font-myanmar animate-pulse">
+              ကြော်ငြာ ဖွင့်နေသည်...
+            </p>
+          </div>
 
           {/* Timer Display */}
           <div className="space-y-3">
@@ -225,6 +223,14 @@ export const AdWatchModal = ({
           <div className="text-center text-sm text-muted-foreground font-myanmar">
             🎁 ရရှိမည့် Credits: <span className="text-primary font-bold">{rewardAmount}</span>
           </div>
+
+          {/* Error Message */}
+          {claimError && (
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-sm">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <p className="font-myanmar">{claimError}</p>
+            </div>
+          )}
 
           {/* Action Buttons */}
           <AnimatePresence mode="wait">
@@ -279,6 +285,15 @@ export const AdWatchModal = ({
                     </span>
                   )}
                 </Button>
+                {canClaim && claimError && (
+                  <Button
+                    onClick={handleClaim}
+                    variant="outline"
+                    className="w-full mt-2 font-myanmar"
+                  >
+                    ထပ်ကြိုးစားမည်
+                  </Button>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
