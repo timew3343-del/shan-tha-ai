@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Image, Video, Volume2, Crown, Wallet, Users, Gift, 
-  ZoomIn, Eraser, Sparkles, Youtube, Camera
+  ZoomIn, Eraser, Sparkles, Youtube, FileText
 } from "lucide-react";
 import { ImageTool } from "./tools/ImageTool";
 import { VideoTool } from "./tools/VideoTool";
@@ -11,6 +11,7 @@ import { FaceSwapTool } from "./tools/FaceSwapTool";
 import { UpscaleTool } from "./tools/UpscaleTool";
 import { BgRemoveTool } from "./tools/BgRemoveTool";
 import { YouTubeToTextTool } from "./tools/YouTubeToTextTool";
+import { DocSlideTool } from "./tools/DocSlideTool";
 import { ToolCardCompact } from "./ToolCardCompact";
 import { AIChatbot } from "./AIChatbot";
 import { ReferralSection } from "./ReferralSection";
@@ -19,13 +20,14 @@ import { CreditDisplay } from "./CreditDisplay";
 import { VideoEditor } from "./VideoEditor";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { useCredits } from "@/hooks/useCredits";
+import { useUserRole } from "@/hooks/useUserRole";
 import { AnimatePresence, motion } from "framer-motion";
 
 interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "youtube";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "youtube" | "docslide";
 
 export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const navigate = useNavigate();
@@ -33,6 +35,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const [showLowCreditAlert, setShowLowCreditAlert] = useState(false);
   const { costs } = useCreditCosts();
   const { credits, isLoading: creditsLoading } = useCredits(userId);
+  const { isAdmin } = useUserRole(userId);
 
   // Show low credit alert when credits fall below 5
   useEffect(() => {
@@ -44,6 +47,9 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const handleBack = () => {
     setActiveTool("home");
   };
+
+  // Doc/Slide estimated cost
+  const docSlideCost = Math.ceil((2 + 3 * 5) * 1.4); // base estimate
 
   return (
     <div className="min-h-screen">
@@ -91,10 +97,10 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               </button>
               <button
                 onClick={() => navigate("/earn-credits")}
-                className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 transition-all"
+                className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-success/10 border border-success/30 hover:bg-success/20 transition-all"
               >
-                <Gift className="w-5 h-5 text-green-600" />
-                <span className="text-sm text-green-600 font-medium font-myanmar">Earn Credits</span>
+                <Gift className="w-5 h-5 text-success" />
+                <span className="text-sm text-success font-medium font-myanmar">Earn Credits</span>
               </button>
             </motion.div>
 
@@ -159,7 +165,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                 <Video className="w-4 h-4 text-primary" />
                 <h2 className="text-sm font-semibold text-foreground font-myanmar">ဗီဒီယို Tools</h2>
               </div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <ToolCardCompact
                   icon={Video}
                   title="ဗီဒီယိုထုတ်ရန်"
@@ -167,7 +173,6 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                   gradient="bg-gradient-to-br from-red-500 via-rose-600 to-pink-700"
                   onClick={() => setActiveTool("video")}
                   credits={costs.video_generation}
-                  size="small"
                 />
                 <ToolCardCompact
                   icon={Users}
@@ -176,16 +181,6 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                   gradient="bg-gradient-to-br from-purple-500 via-violet-600 to-indigo-700"
                   onClick={() => setActiveTool("faceswap")}
                   credits={costs.face_swap}
-                  size="small"
-                />
-                <ToolCardCompact
-                  icon={Camera}
-                  title="AI Live Cam"
-                  description="Character Animation"
-                  gradient="bg-gradient-to-br from-amber-500 via-orange-600 to-red-700"
-                  onClick={() => navigate("/ai-live-cam")}
-                  credits={costs.live_camera}
-                  size="small"
                 />
               </div>
             </motion.div>
@@ -220,11 +215,33 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               </div>
             </motion.div>
 
-            {/* Referral Section */}
+            {/* Doc & Slide Generator - NEW */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.35 }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <FileText className="w-4 h-4 text-primary" />
+                <h2 className="text-sm font-semibold text-foreground font-myanmar">Document Tools</h2>
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                <ToolCardCompact
+                  icon={FileText}
+                  title="AI Doc & Slide"
+                  description="PDF, PPTX, DOCX ဖန်တီးမည်"
+                  gradient="bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-700"
+                  onClick={() => setActiveTool("docslide")}
+                  credits={docSlideCost}
+                />
+              </div>
+            </motion.div>
+
+            {/* Referral Section */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
             >
               <ReferralSection userId={userId} />
             </motion.div>
@@ -233,7 +250,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
+              transition={{ delay: 0.45 }}
               className="gradient-card rounded-2xl p-4 border border-primary/20"
             >
               <h3 className="text-sm font-semibold text-primary mb-1 font-myanmar">💡 အကြံပြုချက်</h3>
@@ -270,6 +287,10 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
 
         {activeTool === "youtube" && (
           <YouTubeToTextTool key="youtube" userId={userId} onBack={handleBack} />
+        )}
+
+        {activeTool === "docslide" && (
+          <DocSlideTool key="docslide" userId={userId} onBack={handleBack} />
         )}
       </AnimatePresence>
     </div>

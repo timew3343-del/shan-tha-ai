@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.add-ad-credits]
 verify_jwt = false
+
+[functions.generate-doc-slides]
+verify_jwt = false

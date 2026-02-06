@@ -18,6 +18,7 @@ import { useTheme } from "next-themes";
 import { CampaignSubmissionsTab } from "@/components/admin/CampaignSubmissionsTab";
 import { CreditAuditTab } from "@/components/admin/CreditAuditTab";
 import { AppSettingsTab } from "@/components/admin/AppSettingsTab";
+import { ToolAnalyticsTab } from "@/components/admin/ToolAnalyticsTab";
 
 interface PendingTransaction {
   id: string;
@@ -86,6 +87,7 @@ export const Admin = () => {
     video_export: 3,
     youtube_to_text: 10,
     character_animation: 15,
+    doc_slide_gen: 24,
   });
 
   // Manual credit management state
@@ -1079,6 +1081,9 @@ export const Admin = () => {
               <Download className="w-4 h-4 mr-2" />
               CSV Export
             </Button>
+
+            {/* Tool Performance Analytics */}
+            <ToolAnalyticsTab />
           </TabsContent>
 
           {/* Pricing Tab */}
