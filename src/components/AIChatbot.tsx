@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Image, Loader2, X, MessageCircle, Sparkles, Upload } from "lucide-react";
+import { Send, Image, Loader2, X, MessageCircle, Sparkles, Upload, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -34,6 +34,49 @@ export const AIChatbot = ({ userId }: AIChatbotProps) => {
   const [selectedImageType, setSelectedImageType] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+
+  const openCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: 320, height: 240 },
+        audio: false,
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      streamRef.current = stream;
+      setCameraOpen(true);
+    } catch {
+      toast({ title: "ကင်မရာ ဖွင့်၍မရပါ", description: "ကင်မရာခွင့်ပြုချက် ပေးပါ", variant: "destructive" });
+    }
+  };
+
+  const closeCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setCameraOpen(false);
+  };
+
+  const captureFromCamera = () => {
+    if (!videoRef.current) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = videoRef.current.videoWidth || 320;
+    canvas.height = videoRef.current.videoHeight || 240;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(videoRef.current, 0, 0);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+    setSelectedImage(dataUrl);
+    setSelectedImageType("image/jpeg");
+    closeCamera();
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -312,8 +355,25 @@ export const AIChatbot = ({ userId }: AIChatbotProps) => {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Camera Preview */}
+      {cameraOpen && (
+        <div className="px-4 py-2 border-t border-primary/10">
+          <div className="relative rounded-xl overflow-hidden bg-black">
+            <video ref={videoRef} className="w-full h-32 object-cover" playsInline muted />
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-2">
+              <Button size="sm" onClick={captureFromCamera} className="rounded-xl bg-primary text-xs h-7 px-3">
+                <Camera className="w-3 h-3 mr-1" /> ဓာတ်ပုံရိုက်
+              </Button>
+              <Button size="sm" variant="destructive" onClick={closeCamera} className="rounded-xl text-xs h-7 px-3">
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Image Preview */}
-      {selectedImage && (
+      {selectedImage && !cameraOpen && (
         <div className="px-4 py-2 border-t border-primary/10">
           <div className="relative inline-block">
             <img
@@ -351,6 +411,15 @@ export const AIChatbot = ({ userId }: AIChatbotProps) => {
           >
             <Image className="w-4 h-4" />
           </Button>
+          <button
+            type="button"
+            onClick={cameraOpen ? closeCamera : openCamera}
+            disabled={isLoading}
+            className="shrink-0 flex flex-col items-center gap-0.5 text-primary/70 hover:text-primary transition-colors disabled:opacity-50"
+          >
+            <Camera className="w-4 h-4" />
+            <span className="text-[9px] font-myanmar leading-none">ကင်မရာ</span>
+          </button>
           <div className="flex-1 relative">
             <Textarea
               value={input}

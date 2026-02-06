@@ -19,6 +19,8 @@ export interface CreditCosts {
   caption_per_minute: number;
   ad_generator: number;
   live_camera_chat: number;
+  social_media_agent: number;
+  photoshoot: number;
 }
 
 // Default costs with 40% profit margin (cost / 0.6 rounded up)
@@ -40,6 +42,8 @@ const DEFAULT_COSTS: CreditCosts = {
   caption_per_minute: 9,
   ad_generator: 9,
   live_camera_chat: 1,
+  social_media_agent: 25,
+  photoshoot: 8,
 };
 
 export const useCreditCosts = () => {

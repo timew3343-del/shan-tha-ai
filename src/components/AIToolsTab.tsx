@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { 
   Image, Video, Volume2, Crown, Wallet, Users, Gift, 
   ZoomIn, Eraser, Sparkles, Youtube, FileText, Captions,
-  Megaphone, Camera
+  Megaphone, Camera, Briefcase
 } from "lucide-react";
 import { ImageTool } from "./tools/ImageTool";
 import { VideoTool } from "./tools/VideoTool";
@@ -16,6 +16,7 @@ import { DocSlideTool } from "./tools/DocSlideTool";
 import { CaptionTool } from "./tools/CaptionTool";
 import { AdGeneratorTool } from "./tools/AdGeneratorTool";
 import { LiveCameraChatTool } from "./tools/LiveCameraChatTool";
+import { SocialMediaManagerTool } from "./tools/SocialMediaManagerTool";
 import { ToolCardCompact } from "./ToolCardCompact";
 import { AIChatbot } from "./AIChatbot";
 import { ReferralSection } from "./ReferralSection";
@@ -31,7 +32,7 @@ interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "youtube" | "docslide" | "caption" | "adgenerator" | "livecamera";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "youtube" | "docslide" | "caption" | "adgenerator" | "livecamera" | "socialmedia";
 
 export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const navigate = useNavigate();
@@ -232,11 +233,33 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               </div>
             </motion.div>
 
-            {/* AI Live Camera Chat */}
+            {/* AI Social Media Manager */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.33 }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Briefcase className="w-4 h-4 text-primary" />
+                <h2 className="text-sm font-semibold text-foreground font-myanmar">Social Media & Photoshoot</h2>
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                <ToolCardCompact
+                  icon={Briefcase}
+                  title="AI Social Media Manager"
+                  description="7 ရက်စာ Content + Professional Photoshoot"
+                  gradient="bg-gradient-to-br from-fuchsia-500 via-pink-600 to-rose-700"
+                  onClick={() => setActiveTool("socialmedia")}
+                  credits={(costs as any).social_media_agent || 25}
+                />
+              </div>
+            </motion.div>
+
+            {/* AI Live Camera Chat */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.36 }}
             >
               <div className="flex items-center gap-2 mb-2">
                 <Camera className="w-4 h-4 text-primary" />
@@ -332,6 +355,9 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
         )}
         {activeTool === "livecamera" && (
           <LiveCameraChatTool key="livecamera" userId={userId} onBack={handleBack} />
+        )}
+        {activeTool === "socialmedia" && (
+          <SocialMediaManagerTool key="socialmedia" userId={userId} onBack={handleBack} />
         )}
       </AnimatePresence>
     </div>
