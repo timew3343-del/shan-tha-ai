@@ -19,6 +19,7 @@ import { CampaignSubmissionsTab } from "@/components/admin/CampaignSubmissionsTa
 import { CreditAuditTab } from "@/components/admin/CreditAuditTab";
 import { AppSettingsTab } from "@/components/admin/AppSettingsTab";
 import { ToolAnalyticsTab } from "@/components/admin/ToolAnalyticsTab";
+import { GlobalMarginTab } from "@/components/admin/GlobalMarginTab";
 
 interface PendingTransaction {
   id: string;
@@ -72,28 +73,7 @@ export const Admin = () => {
   ]);
   const [isSavingPricing, setIsSavingPricing] = useState(false);
 
-  // Credit Costs state
-  const [creditCosts, setCreditCosts] = useState({
-    image_generation: 3,
-    video_generation: 10,
-    video_with_speech: 14,
-    text_to_speech: 3,
-    speech_to_text: 7,
-    ai_chat: 2,
-    face_swap: 21,
-    upscale: 2,
-    bg_remove: 2,
-    live_camera: 21,
-    video_export: 5,
-    youtube_to_text: 14,
-    character_animation: 21,
-    doc_slide_gen: 34,
-    caption_per_minute: 9,
-    ad_generator: 9,
-    live_camera_chat: 1,
-    social_media_agent: 25,
-    photoshoot: 8,
-  });
+  // Credit Costs state removed - now uses Global Profit Margin
 
   // Manual credit management state
   const [manualCreditEmail, setManualCreditEmail] = useState("");
@@ -104,7 +84,7 @@ export const Admin = () => {
   // Users state
   const [users, setUsers] = useState<{ user_id: string; email: string; credit_balance: number; created_at: string }[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
-  const [isSavingCosts, setIsSavingCosts] = useState(false);
+  // isSavingCosts removed - now uses Global Profit Margin
 
   // Campaigns state
   const [campaigns, setCampaigns] = useState<{ id: string; user_id: string; link: string; platform: string; status: string; created_at: string; user_email?: string }[]>([]);
@@ -228,7 +208,6 @@ export const Admin = () => {
 
       if (data) {
         const loadedPayments: PaymentMethod[] = [];
-        const loadedCosts: Record<string, number> = {};
         
         data.forEach((setting) => {
           switch (setting.key) {
@@ -264,20 +243,10 @@ export const Admin = () => {
               }
             } catch {}
           }
-          
-          // Load credit costs
-          if (setting.key.startsWith("credit_cost_")) {
-            const costKey = setting.key.replace("credit_cost_", "");
-            loadedCosts[costKey] = parseInt(setting.value || "0", 10);
-          }
         });
         
         if (loadedPayments.length > 0) {
           setPaymentMethods(loadedPayments);
-        }
-        
-        if (Object.keys(loadedCosts).length > 0) {
-          setCreditCosts(prev => ({ ...prev, ...loadedCosts }));
         }
       }
     } catch (error) {
@@ -611,37 +580,7 @@ export const Admin = () => {
     }
   };
 
-  const saveCreditCosts = async () => {
-    setIsSavingCosts(true);
-    try {
-      const updates = Object.entries(creditCosts).map(([key, value]) => ({
-        key: `credit_cost_${key}`,
-        value: value.toString(),
-      }));
-
-      for (const update of updates) {
-        const { error } = await supabase
-          .from("app_settings")
-          .upsert({ key: update.key, value: update.value }, { onConflict: "key" });
-        
-        if (error) throw error;
-      }
-
-      toast({
-        title: "သိမ်းဆည်းပြီးပါပြီ",
-        description: "Credit costs များကို အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ",
-      });
-    } catch (error) {
-      console.error("Error saving credit costs:", error);
-      toast({
-        title: "အမှား",
-        description: "Credit costs သိမ်းဆည်းရာတွင် ပြဿနာရှိပါသည်။",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSavingCosts(false);
-    }
-  };
+  // saveCreditCosts removed - now uses Global Profit Margin
 
   const savePricingChanges = async () => {
     setIsSavingPricing(true);
@@ -1161,241 +1100,8 @@ export const Admin = () => {
 
           {/* System Tab */}
           <TabsContent value="system" className="space-y-4">
-            {/* Credit Consumption Settings */}
-            <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-                <DollarSign className="w-5 h-5 text-primary" />
-                ကုန်ကျမည့် ခရက်ဒစ် ပြောင်းလဲခြင်း
-              </h3>
-              <p className="text-xs text-muted-foreground mb-4">
-                AI Tools တစ်ခုစီအတွက် ကုန်ကျမည့် Credits ပမာဏကို သတ်မှတ်ပါ
-              </p>
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                  <div>
-                    <span className="text-sm font-medium text-foreground">ပုံထုတ်ရန် (Image)</span>
-                    <p className="text-xs text-muted-foreground">Generate Image</p>
-                  </div>
-                  <Input
-                    type="number"
-                    value={creditCosts.image_generation}
-                    onChange={(e) => setCreditCosts(prev => ({ ...prev, image_generation: parseInt(e.target.value) || 0 }))}
-                    className="w-20 text-center bg-background/50"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                  <div>
-                    <span className="text-sm font-medium text-foreground">ဗီဒီယိုထုတ်ရန် (Video)</span>
-                    <p className="text-xs text-muted-foreground">Image + Prompt ဖြင့် ဗီဒီယိုထုတ်</p>
-                  </div>
-                  <Input
-                    type="number"
-                    value={creditCosts.video_generation}
-                    onChange={(e) => setCreditCosts(prev => ({ ...prev, video_generation: parseInt(e.target.value) || 0 }))}
-                    className="w-20 text-center bg-background/50"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                  <div>
-                    <span className="text-sm font-medium text-foreground">စာသားပါဗီဒီယို</span>
-                    <p className="text-xs text-muted-foreground">Video with Speech overlay</p>
-                  </div>
-                  <Input
-                    type="number"
-                    value={creditCosts.video_with_speech}
-                    onChange={(e) => setCreditCosts(prev => ({ ...prev, video_with_speech: parseInt(e.target.value) || 0 }))}
-                    className="w-20 text-center bg-background/50"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                  <div>
-                    <span className="text-sm font-medium text-foreground">စာ → အသံ (TTS)</span>
-                    <p className="text-xs text-muted-foreground">Text to Speech</p>
-                  </div>
-                  <Input
-                    type="number"
-                    value={creditCosts.text_to_speech}
-                    onChange={(e) => setCreditCosts(prev => ({ ...prev, text_to_speech: parseInt(e.target.value) || 0 }))}
-                    className="w-20 text-center bg-background/50"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                  <div>
-                    <span className="text-sm font-medium text-foreground">အသံ → စာ (STT)</span>
-                    <p className="text-xs text-muted-foreground">Speech to Text</p>
-                  </div>
-                  <Input
-                    type="number"
-                    value={creditCosts.speech_to_text}
-                    onChange={(e) => setCreditCosts(prev => ({ ...prev, speech_to_text: parseInt(e.target.value) || 0 }))}
-                    className="w-20 text-center bg-background/50"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                  <div>
-                    <span className="text-sm font-medium text-foreground">AI Chatbot</span>
-                    <p className="text-xs text-muted-foreground">AI မေးမြန်းခြင်း</p>
-                  </div>
-                  <Input
-                    type="number"
-                    value={creditCosts.ai_chat}
-                    onChange={(e) => setCreditCosts(prev => ({ ...prev, ai_chat: parseInt(e.target.value) || 0 }))}
-                    className="w-20 text-center bg-background/50"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                  <div>
-                    <span className="text-sm font-medium text-foreground">Face Swap</span>
-                    <p className="text-xs text-muted-foreground">မျက်နှာပြောင်း ဗီဒီယို</p>
-                  </div>
-                  <Input
-                    type="number"
-                    value={creditCosts.face_swap}
-                    onChange={(e) => setCreditCosts(prev => ({ ...prev, face_swap: parseInt(e.target.value) || 0 }))}
-                    className="w-20 text-center bg-background/50"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                  <div>
-                    <span className="text-sm font-medium text-foreground">4K Upscale</span>
-                    <p className="text-xs text-muted-foreground">ပုံ Resolution မြှင့်တင်</p>
-                  </div>
-                  <Input
-                    type="number"
-                    value={creditCosts.upscale}
-                    onChange={(e) => setCreditCosts(prev => ({ ...prev, upscale: parseInt(e.target.value) || 0 }))}
-                    className="w-20 text-center bg-background/50"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                  <div>
-                    <span className="text-sm font-medium text-foreground">Background Remove</span>
-                    <p className="text-xs text-muted-foreground">နောက်ခံ ဖယ်ရှားခြင်း</p>
-                  </div>
-                  <Input
-                    type="number"
-                    value={creditCosts.bg_remove}
-                    onChange={(e) => setCreditCosts(prev => ({ ...prev, bg_remove: parseInt(e.target.value) || 0 }))}
-                    className="w-20 text-center bg-background/50"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                  <div>
-                    <span className="text-sm font-medium text-foreground">Live Camera</span>
-                    <p className="text-xs text-muted-foreground">ကင်မရာ တိုက်ရိုက်</p>
-                  </div>
-                  <Input
-                    type="number"
-                    value={creditCosts.live_camera}
-                    onChange={(e) => setCreditCosts(prev => ({ ...prev, live_camera: parseInt(e.target.value) || 0 }))}
-                    className="w-20 text-center bg-background/50"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                  <div>
-                    <span className="text-sm font-medium text-foreground">Video Editor Export</span>
-                    <p className="text-xs text-muted-foreground">ဗီဒီယို တည်းဖြတ်ပြီး Export</p>
-                  </div>
-                  <Input
-                    type="number"
-                    value={creditCosts.video_export}
-                    onChange={(e) => setCreditCosts(prev => ({ ...prev, video_export: parseInt(e.target.value) || 0 }))}
-                    className="w-20 text-center bg-background/50"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                  <div>
-                    <span className="text-sm font-medium text-foreground">AI Caption</span>
-                    <p className="text-xs text-muted-foreground">မိနစ်တိုင်း ကုန်ကျမည့် Credits</p>
-                  </div>
-                  <Input
-                    type="number"
-                    value={creditCosts.caption_per_minute}
-                    onChange={(e) => setCreditCosts(prev => ({ ...prev, caption_per_minute: parseInt(e.target.value) || 0 }))}
-                    className="w-20 text-center bg-background/50"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                  <div>
-                    <span className="text-sm font-medium text-foreground">AI Ad Generator</span>
-                    <p className="text-xs text-muted-foreground">ကြော်ငြာ ဖန်တီးခြင်း</p>
-                  </div>
-                  <Input
-                    type="number"
-                    value={creditCosts.ad_generator}
-                    onChange={(e) => setCreditCosts(prev => ({ ...prev, ad_generator: parseInt(e.target.value) || 0 }))}
-                    className="w-20 text-center bg-background/50"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                  <div>
-                    <span className="text-sm font-medium text-foreground">Live Camera Chat</span>
-                    <p className="text-xs text-muted-foreground">12 စက္ကန့်တိုင်း ကုန်ကျမည့် Credits</p>
-                  </div>
-                  <Input
-                    type="number"
-                    value={creditCosts.live_camera_chat}
-                    onChange={(e) => setCreditCosts(prev => ({ ...prev, live_camera_chat: parseInt(e.target.value) || 0 }))}
-                    className="w-20 text-center bg-background/50"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                  <div>
-                    <span className="text-sm font-medium text-foreground">Social Media Agent</span>
-                    <p className="text-xs text-muted-foreground">7 ရက်စာ Content Calendar (30% margin)</p>
-                  </div>
-                  <Input
-                    type="number"
-                    value={creditCosts.social_media_agent}
-                    onChange={(e) => setCreditCosts(prev => ({ ...prev, social_media_agent: parseInt(e.target.value) || 0 }))}
-                    className="w-20 text-center bg-background/50"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                  <div>
-                    <span className="text-sm font-medium text-foreground">AI Photoshoot</span>
-                    <p className="text-xs text-muted-foreground">ပုံတစ်ပုံစီ Background ပြောင်း (30% margin)</p>
-                  </div>
-                  <Input
-                    type="number"
-                    value={creditCosts.photoshoot}
-                    onChange={(e) => setCreditCosts(prev => ({ ...prev, photoshoot: parseInt(e.target.value) || 0 }))}
-                    className="w-20 text-center bg-background/50"
-                  />
-                </div>
-              </div>
-
-              <Button 
-                onClick={saveCreditCosts} 
-                disabled={isSavingCosts}
-                className="w-full mt-4 gradient-gold text-primary-foreground"
-              >
-                {isSavingCosts ? (
-                  <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <>
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Credit Costs
-                  </>
-                )}
-              </Button>
-            </div>
+            {/* Global Profit Margin */}
+            <GlobalMarginTab />
 
             {/* Manual Credit Management */}
             <div className="gradient-card rounded-2xl p-4 border border-primary/20">

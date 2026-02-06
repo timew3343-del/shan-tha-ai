@@ -52,14 +52,16 @@ serve(async (req) => {
       );
     }
 
-    // Fetch credit cost (2x speech_to_text cost)
-    const { data: costSetting } = await supabaseAdmin
+    // Fetch global profit margin and calculate credit cost
+    const { data: marginSetting } = await supabaseAdmin
       .from("app_settings")
       .select("value")
-      .eq("key", "credit_cost_youtube_to_text")
+      .eq("key", "profit_margin")
       .maybeSingle();
     
-    const creditCost = costSetting?.value ? parseInt(costSetting.value, 10) : 10;
+    const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
+    const BASE_COST = 10; // Base API cost for YouTube-to-text
+    const creditCost = Math.ceil(BASE_COST * (1 + profitMargin / 100));
 
     // Check user credits
     const { data: profile, error: profileError } = await supabaseAdmin

@@ -58,14 +58,16 @@ serve(async (req) => {
       );
     }
 
-    // Get credit cost from settings
-    const { data: costSetting } = await supabaseAdmin
+    // Fetch global profit margin and calculate credit cost
+    const { data: marginSetting } = await supabaseAdmin
       .from("app_settings")
       .select("value")
-      .eq("key", "credit_cost_character_animation")
+      .eq("key", "profit_margin")
       .maybeSingle();
-
-    const creditCost = parseInt(costSetting?.value || "15", 10);
+    
+    const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
+    const BASE_COST = 15; // Base API cost for character animation
+    const creditCost = Math.ceil(BASE_COST * (1 + profitMargin / 100));
 
     // Check user's credit balance
     const { data: profile, error: profileError } = await supabaseAdmin

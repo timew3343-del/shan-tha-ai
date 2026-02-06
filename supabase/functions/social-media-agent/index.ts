@@ -58,18 +58,24 @@ serve(async (req) => {
 
     console.log(`Social media agent request: user=${userId}, mode=${mode}, images=${images.length}, numDays=${numDays}`);
 
-    // Get credit cost based on mode
+    // Fetch global profit margin and calculate credit cost
+    const { data: marginSetting } = await supabaseAdmin
+      .from("app_settings")
+      .select("value")
+      .eq("key", "profit_margin")
+      .maybeSingle();
+    
+    const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
+    
     let creditCost: number;
     if (mode === "photoshoot") {
-      const { data: costSetting } = await supabaseAdmin
-        .from("app_settings").select("value").eq("key", "credit_cost_photoshoot").maybeSingle();
-      creditCost = costSetting?.value ? parseInt(costSetting.value, 10) : 8;
+      const BASE_COST = 6; // Base API cost for photoshoot
+      creditCost = Math.ceil(BASE_COST * (1 + profitMargin / 100));
     } else {
       // Calendar: per-day pricing
-      const { data: costSetting } = await supabaseAdmin
-        .from("app_settings").select("value").eq("key", "credit_cost_social_media_agent").maybeSingle();
-      const base7DayCost = costSetting?.value ? parseInt(costSetting.value, 10) : 25;
-      const perDayCost = Math.ceil(base7DayCost / 7);
+      const BASE_7DAY_COST = 18; // Base API cost for 7-day calendar
+      const base7DayCostWithMargin = Math.ceil(BASE_7DAY_COST * (1 + profitMargin / 100));
+      const perDayCost = Math.ceil(base7DayCostWithMargin / 7);
       creditCost = perDayCost * Math.min(Math.max(numDays, 1), 30);
     }
 

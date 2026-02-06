@@ -74,19 +74,17 @@ serve(async (req) => {
 
     console.log(`Caption request: user=${userId}, lang=${targetLanguage}, duration=${videoDuration}s`);
 
-    // Calculate credit cost: first 10s free, then 6 credits per minute
-    const { data: costSettings } = await supabaseAdmin
+    // Fetch global profit margin and calculate credit cost
+    const { data: marginSetting } = await supabaseAdmin
       .from("app_settings")
-      .select("key, value")
-      .in("key", ["credit_cost_caption_per_minute", "caption_free_seconds"]);
-
-    let creditsPerMinute = 6;
-    let freeSeconds = 10;
-
-    costSettings?.forEach((s) => {
-      if (s.key === "credit_cost_caption_per_minute") creditsPerMinute = parseInt(s.value || "6", 10);
-      if (s.key === "caption_free_seconds") freeSeconds = parseInt(s.value || "10", 10);
-    });
+      .select("value")
+      .eq("key", "profit_margin")
+      .maybeSingle();
+    
+    const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
+    const BASE_COST_PER_MINUTE = 6; // Base API cost per minute of video
+    const creditsPerMinute = Math.ceil(BASE_COST_PER_MINUTE * (1 + profitMargin / 100));
+    const freeSeconds = 10;
 
     const billableSeconds = Math.max(0, videoDuration - freeSeconds);
     const creditCost = billableSeconds > 0 ? Math.ceil((billableSeconds / 60) * creditsPerMinute) : 0;

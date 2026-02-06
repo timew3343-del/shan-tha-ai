@@ -1,6 +1,31 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
+// Base API costs (raw cost without profit margin)
+const BASE_API_COSTS = {
+  image_generation: 2,
+  video_generation: 7,
+  video_with_speech: 10,
+  text_to_speech: 2,
+  speech_to_text: 5,
+  ai_chat: 1,
+  face_swap: 15,
+  upscale: 1,
+  bg_remove: 1,
+  live_camera: 15,
+  video_export: 4,
+  youtube_to_text: 10,
+  character_animation: 15,
+  doc_slide_gen: 24,
+  caption_per_minute: 6,
+  ad_generator: 6,
+  live_camera_chat: 1,
+  social_media_agent: 18,
+  photoshoot: 6,
+};
+
+export type CreditCostKey = keyof typeof BASE_API_COSTS;
+
 export interface CreditCosts {
   image_generation: number;
   video_generation: number;
@@ -23,63 +48,68 @@ export interface CreditCosts {
   photoshoot: number;
 }
 
-// Default costs with 40% profit margin (cost / 0.6 rounded up)
-const DEFAULT_COSTS: CreditCosts = {
-  image_generation: 3,
-  video_generation: 10,
-  video_with_speech: 14,
-  text_to_speech: 3,
-  speech_to_text: 7,
-  ai_chat: 2,
-  face_swap: 21,
-  upscale: 2,
-  bg_remove: 2,
-  live_camera: 21,
-  video_export: 5,
-  youtube_to_text: 14,
-  character_animation: 21,
-  doc_slide_gen: 34,
-  caption_per_minute: 9,
-  ad_generator: 9,
-  live_camera_chat: 1,
-  social_media_agent: 25,
-  photoshoot: 8,
-};
+function calculateCosts(margin: number): CreditCosts {
+  const result: any = {};
+  for (const [key, baseCost] of Object.entries(BASE_API_COSTS)) {
+    result[key] = Math.ceil(baseCost * (1 + margin / 100));
+  }
+  return result as CreditCosts;
+}
+
+export { BASE_API_COSTS };
 
 export const useCreditCosts = () => {
-  const [costs, setCosts] = useState<CreditCosts>(DEFAULT_COSTS);
+  const [profitMargin, setProfitMargin] = useState(40);
+  const [costs, setCosts] = useState<CreditCosts>(calculateCosts(40));
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchCosts = useCallback(async () => {
+  const fetchMargin = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from("app_settings")
-        .select("key, value")
-        .like("key", "credit_cost_%");
+        .select("value")
+        .eq("key", "profit_margin")
+        .maybeSingle();
 
       if (error) {
-        console.error("Error fetching credit costs:", error);
+        console.error("Error fetching profit margin:", error);
         return;
       }
 
-      if (data && data.length > 0) {
-        const loadedCosts: Partial<CreditCosts> = {};
-        data.forEach((setting) => {
-          const costKey = setting.key.replace("credit_cost_", "") as keyof CreditCosts;
-          loadedCosts[costKey] = parseInt(setting.value || "0", 10);
-        });
-        setCosts((prev) => ({ ...prev, ...loadedCosts }));
-      }
+      const margin = data?.value ? parseInt(data.value, 10) : 40;
+      setProfitMargin(margin);
+      setCosts(calculateCosts(margin));
     } catch (error) {
-      console.error("Error fetching credit costs:", error);
+      console.error("Error fetching profit margin:", error);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchCosts();
-  }, [fetchCosts]);
+    fetchMargin();
 
-  return { costs, isLoading, refetch: fetchCosts };
+    // Subscribe to realtime changes on profit_margin
+    const channel = supabase
+      .channel("profit-margin-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "app_settings",
+          filter: "key=eq.profit_margin",
+        },
+        () => {
+          fetchMargin();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchMargin]);
+
+  return { costs, profitMargin, isLoading, refetch: fetchMargin };
 };

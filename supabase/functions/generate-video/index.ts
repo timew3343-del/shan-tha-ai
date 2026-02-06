@@ -86,16 +86,16 @@ serve(async (req) => {
       );
     }
 
-    const costKey = speechText?.trim() ? "credit_cost_video_with_speech" : "credit_cost_video_generation";
-    
-    const { data: costSetting } = await supabaseAdmin
+    // Fetch global profit margin and calculate credit cost
+    const { data: marginSetting } = await supabaseAdmin
       .from("app_settings")
       .select("value")
-      .eq("key", costKey)
+      .eq("key", "profit_margin")
       .maybeSingle();
     
-    const defaultCost = speechText?.trim() ? 10 : 7;
-    const creditCost = costSetting?.value ? parseInt(costSetting.value, 10) : defaultCost;
+    const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
+    const BASE_COST = speechText?.trim() ? 10 : 7;
+    const creditCost = Math.ceil(BASE_COST * (1 + profitMargin / 100));
 
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")

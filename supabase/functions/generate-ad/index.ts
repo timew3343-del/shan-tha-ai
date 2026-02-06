@@ -163,14 +163,16 @@ serve(async (req) => {
 
     console.log(`Ad generation: user=${userId}, style=${adStyle}, duration=${duration}, lang=${language}, voice=${voiceGender}`);
 
-    // ===== CALCULATE CREDIT COST (40% profit built into admin-set base) =====
-    const { data: costSetting } = await supabaseAdmin
+    // ===== CALCULATE CREDIT COST using global profit margin =====
+    const { data: marginSetting } = await supabaseAdmin
       .from("app_settings")
       .select("value")
-      .eq("key", "credit_cost_ad_generator")
+      .eq("key", "profit_margin")
       .maybeSingle();
 
-    const baseCost = costSetting?.value ? parseInt(costSetting.value, 10) : 9;
+    const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
+    const BASE_COST = 6; // Base API cost for ad generator
+    const baseCost = Math.ceil(BASE_COST * (1 + profitMargin / 100));
     const multiplier = DURATION_MULTIPLIERS[duration] || 1;
     const creditCost = Math.ceil(baseCost * multiplier);
 
