@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Image, Video, Volume2, Crown, Wallet, Users, Gift, 
-  ZoomIn, Eraser, Sparkles, Youtube, FileText
+  ZoomIn, Eraser, Sparkles, Youtube, FileText, Captions
 } from "lucide-react";
 import { ImageTool } from "./tools/ImageTool";
 import { VideoTool } from "./tools/VideoTool";
@@ -12,6 +12,7 @@ import { UpscaleTool } from "./tools/UpscaleTool";
 import { BgRemoveTool } from "./tools/BgRemoveTool";
 import { YouTubeToTextTool } from "./tools/YouTubeToTextTool";
 import { DocSlideTool } from "./tools/DocSlideTool";
+import { CaptionTool } from "./tools/CaptionTool";
 import { ToolCardCompact } from "./ToolCardCompact";
 import { AIChatbot } from "./AIChatbot";
 import { ReferralSection } from "./ReferralSection";
@@ -27,7 +28,7 @@ interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "youtube" | "docslide";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "youtube" | "docslide" | "caption";
 
 export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const navigate = useNavigate();
@@ -182,6 +183,14 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                   onClick={() => setActiveTool("faceswap")}
                   credits={costs.face_swap}
                 />
+                <ToolCardCompact
+                  icon={Captions}
+                  title="AI Caption"
+                  description="စာတန်းထိုး"
+                  gradient="bg-gradient-to-br from-amber-500 via-orange-600 to-red-700"
+                  onClick={() => setActiveTool("caption")}
+                  credits={costs.caption_per_minute}
+                />
               </div>
             </motion.div>
 
@@ -291,6 +300,10 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
 
         {activeTool === "docslide" && (
           <DocSlideTool key="docslide" userId={userId} onBack={handleBack} />
+        )}
+
+        {activeTool === "caption" && (
+          <CaptionTool key="caption" userId={userId} onBack={handleBack} />
         )}
       </AnimatePresence>
     </div>

@@ -16,6 +16,7 @@ export interface CreditCosts {
   youtube_to_text: number;
   character_animation: number;
   doc_slide_gen: number;
+  caption_per_minute: number;
 }
 
 const DEFAULT_COSTS: CreditCosts = {
@@ -33,6 +34,7 @@ const DEFAULT_COSTS: CreditCosts = {
   youtube_to_text: 10,
   character_animation: 15,
   doc_slide_gen: 24,
+  caption_per_minute: 6,
 };
 
 export const useCreditCosts = () => {
