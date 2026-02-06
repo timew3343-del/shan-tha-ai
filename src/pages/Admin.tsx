@@ -74,21 +74,23 @@ export const Admin = () => {
 
   // Credit Costs state
   const [creditCosts, setCreditCosts] = useState({
-    image_generation: 2,
-    video_generation: 7,
-    video_with_speech: 10,
-    text_to_speech: 2,
-    speech_to_text: 5,
-    ai_chat: 1,
-    face_swap: 15,
-    upscale: 1,
-    bg_remove: 1,
-    live_camera: 15,
-    video_export: 3,
-    youtube_to_text: 10,
-    character_animation: 15,
-    doc_slide_gen: 24,
-    caption_per_minute: 6,
+    image_generation: 3,
+    video_generation: 10,
+    video_with_speech: 14,
+    text_to_speech: 3,
+    speech_to_text: 7,
+    ai_chat: 2,
+    face_swap: 21,
+    upscale: 2,
+    bg_remove: 2,
+    live_camera: 21,
+    video_export: 5,
+    youtube_to_text: 14,
+    character_animation: 21,
+    doc_slide_gen: 34,
+    caption_per_minute: 9,
+    ad_generator: 9,
+    live_camera_chat: 1,
   });
 
   // Manual credit management state
@@ -1320,6 +1322,32 @@ export const Admin = () => {
                     type="number"
                     value={creditCosts.caption_per_minute}
                     onChange={(e) => setCreditCosts(prev => ({ ...prev, caption_per_minute: parseInt(e.target.value) || 0 }))}
+                    className="w-20 text-center bg-background/50"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                  <div>
+                    <span className="text-sm font-medium text-foreground">AI Ad Generator</span>
+                    <p className="text-xs text-muted-foreground">ကြော်ငြာ ဖန်တီးခြင်း</p>
+                  </div>
+                  <Input
+                    type="number"
+                    value={creditCosts.ad_generator}
+                    onChange={(e) => setCreditCosts(prev => ({ ...prev, ad_generator: parseInt(e.target.value) || 0 }))}
+                    className="w-20 text-center bg-background/50"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                  <div>
+                    <span className="text-sm font-medium text-foreground">Live Camera Chat</span>
+                    <p className="text-xs text-muted-foreground">12 စက္ကန့်တိုင်း ကုန်ကျမည့် Credits</p>
+                  </div>
+                  <Input
+                    type="number"
+                    value={creditCosts.live_camera_chat}
+                    onChange={(e) => setCreditCosts(prev => ({ ...prev, live_camera_chat: parseInt(e.target.value) || 0 }))}
                     className="w-20 text-center bg-background/50"
                   />
                 </div>

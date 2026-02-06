@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.caption-video]
 verify_jwt = false
+
+[functions.generate-ad]
+verify_jwt = false

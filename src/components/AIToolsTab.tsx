@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Image, Video, Volume2, Crown, Wallet, Users, Gift, 
-  ZoomIn, Eraser, Sparkles, Youtube, FileText, Captions
+  ZoomIn, Eraser, Sparkles, Youtube, FileText, Captions,
+  Megaphone, Camera
 } from "lucide-react";
 import { ImageTool } from "./tools/ImageTool";
 import { VideoTool } from "./tools/VideoTool";
@@ -13,6 +14,8 @@ import { BgRemoveTool } from "./tools/BgRemoveTool";
 import { YouTubeToTextTool } from "./tools/YouTubeToTextTool";
 import { DocSlideTool } from "./tools/DocSlideTool";
 import { CaptionTool } from "./tools/CaptionTool";
+import { AdGeneratorTool } from "./tools/AdGeneratorTool";
+import { LiveCameraChatTool } from "./tools/LiveCameraChatTool";
 import { ToolCardCompact } from "./ToolCardCompact";
 import { AIChatbot } from "./AIChatbot";
 import { ReferralSection } from "./ReferralSection";
@@ -28,7 +31,7 @@ interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "youtube" | "docslide" | "caption";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "youtube" | "docslide" | "caption" | "adgenerator" | "livecamera";
 
 export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const navigate = useNavigate();
@@ -38,7 +41,6 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const { credits, isLoading: creditsLoading } = useCredits(userId);
   const { isAdmin } = useUserRole(userId);
 
-  // Show low credit alert when credits fall below 5
   useEffect(() => {
     if (!creditsLoading && credits <= 5 && credits > 0) {
       setShowLowCreditAlert(true);
@@ -49,12 +51,10 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
     setActiveTool("home");
   };
 
-  // Doc/Slide estimated cost
-  const docSlideCost = Math.ceil((2 + 3 * 5) * 1.4); // base estimate
+  const docSlideCost = Math.ceil((2 + 3 * 5) * 1.4);
 
   return (
     <div className="min-h-screen">
-      {/* Low Credit Alert */}
       <LowCreditAlert 
         credits={credits} 
         show={showLowCreditAlert} 
@@ -191,6 +191,14 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                   onClick={() => setActiveTool("caption")}
                   credits={costs.caption_per_minute}
                 />
+                <ToolCardCompact
+                  icon={Megaphone}
+                  title="AI Ad"
+                  description="ကြော်ငြာ ဖန်တီး"
+                  gradient="bg-gradient-to-br from-pink-500 via-fuchsia-600 to-purple-700"
+                  onClick={() => setActiveTool("adgenerator")}
+                  credits={costs.ad_generator}
+                />
               </div>
             </motion.div>
 
@@ -224,7 +232,29 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               </div>
             </motion.div>
 
-            {/* Doc & Slide Generator - NEW */}
+            {/* AI Live Camera Chat */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.33 }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <Camera className="w-4 h-4 text-primary" />
+                <h2 className="text-sm font-semibold text-foreground font-myanmar">Live AI</h2>
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                <ToolCardCompact
+                  icon={Camera}
+                  title="AI Live Camera"
+                  description="ကင်မရာနှင့် AI စကားပြော"
+                  gradient="bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-700"
+                  onClick={() => setActiveTool("livecamera")}
+                  credits={costs.live_camera_chat}
+                />
+              </div>
+            </motion.div>
+
+            {/* Doc & Slide Generator */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -273,37 +303,35 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
         {activeTool === "image" && (
           <ImageTool key="image" userId={userId} onBack={handleBack} />
         )}
-
         {activeTool === "video" && (
           <VideoTool key="video" userId={userId} onBack={handleBack} />
         )}
-
         {activeTool === "speech" && (
           <SpeechTool key="speech" userId={userId} onBack={handleBack} />
         )}
-
         {activeTool === "faceswap" && (
           <FaceSwapTool key="faceswap" userId={userId} onBack={handleBack} />
         )}
-
         {activeTool === "upscale" && (
           <UpscaleTool key="upscale" userId={userId} onBack={handleBack} />
         )}
-
         {activeTool === "bgremove" && (
           <BgRemoveTool key="bgremove" userId={userId} onBack={handleBack} />
         )}
-
         {activeTool === "youtube" && (
           <YouTubeToTextTool key="youtube" userId={userId} onBack={handleBack} />
         )}
-
         {activeTool === "docslide" && (
           <DocSlideTool key="docslide" userId={userId} onBack={handleBack} />
         )}
-
         {activeTool === "caption" && (
           <CaptionTool key="caption" userId={userId} onBack={handleBack} />
+        )}
+        {activeTool === "adgenerator" && (
+          <AdGeneratorTool key="adgenerator" userId={userId} onBack={handleBack} />
+        )}
+        {activeTool === "livecamera" && (
+          <LiveCameraChatTool key="livecamera" userId={userId} onBack={handleBack} />
         )}
       </AnimatePresence>
     </div>
