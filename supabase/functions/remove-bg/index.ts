@@ -72,14 +72,16 @@ serve(async (req) => {
       });
     }
 
-    // Get credit cost from settings
-    const { data: costSetting } = await supabaseAdmin
+    // Fetch global profit margin and calculate credit cost
+    const { data: marginSetting } = await supabaseAdmin
       .from("app_settings")
       .select("value")
-      .eq("key", "credit_cost_bg_remove")
+      .eq("key", "profit_margin")
       .maybeSingle();
-
-    const creditCost = parseInt(costSetting?.value || "1", 10);
+    
+    const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
+    const BASE_COST = 1; // Base API cost for background removal
+    const creditCost = Math.ceil(BASE_COST * (1 + profitMargin / 100));
 
     // Check user credits first
     const { data: profile } = await supabaseAdmin

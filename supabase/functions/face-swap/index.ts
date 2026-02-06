@@ -79,15 +79,16 @@ serve(async (req) => {
       );
     }
 
-    // Determine credit cost based on live camera or file upload
-    const costKey = isLiveCamera ? "credit_cost_live_camera" : "credit_cost_face_swap";
-    const { data: costSetting } = await supabaseAdmin
+    // Fetch global profit margin and calculate credit cost
+    const { data: marginSetting } = await supabaseAdmin
       .from("app_settings")
       .select("value")
-      .eq("key", costKey)
+      .eq("key", "profit_margin")
       .maybeSingle();
     
-    const creditCost = costSetting?.value ? parseInt(costSetting.value, 10) : 15;
+    const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
+    const BASE_COST = 15; // Base API cost for face swap
+    const creditCost = Math.ceil(BASE_COST * (1 + profitMargin / 100));
 
     // Check user credits
     const { data: profile, error: profileError } = await supabaseAdmin

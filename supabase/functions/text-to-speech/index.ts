@@ -91,14 +91,16 @@ serve(async (req) => {
       );
     }
 
-    // Fetch dynamic credit cost from app_settings
-    const { data: costSetting } = await supabaseAdmin
+    // Fetch global profit margin and calculate credit cost
+    const { data: marginSetting } = await supabaseAdmin
       .from("app_settings")
       .select("value")
-      .eq("key", "credit_cost_text_to_speech")
+      .eq("key", "profit_margin")
       .maybeSingle();
     
-    const creditCost = costSetting?.value ? parseInt(costSetting.value, 10) : 2;
+    const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
+    const BASE_COST = 2; // Base API cost for text-to-speech
+    const creditCost = Math.ceil(BASE_COST * (1 + profitMargin / 100));
     
     if (profile.credit_balance < creditCost) {
       return new Response(

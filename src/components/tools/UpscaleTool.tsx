@@ -7,7 +7,6 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
-import { Watermark, addWatermarkToImage } from "@/components/Watermark";
 import { motion } from "framer-motion";
 
 interface UpscaleToolProps {
@@ -234,19 +233,11 @@ export const UpscaleTool = ({ userId, onBack }: UpscaleToolProps) => {
               <h3 className="text-sm font-semibold text-primary font-myanmar">4K ရလဒ်</h3>
             </div>
             <Button
-              onClick={async () => {
-                try {
-                  const watermarked = await addWatermarkToImage(resultImage, userId || 'unknown');
-                  const link = document.createElement("a");
-                  link.href = watermarked;
-                  link.download = `upscaled-4k-${Date.now()}.png`;
-                  link.click();
-                } catch {
-                  const link = document.createElement("a");
-                  link.href = resultImage;
-                  link.download = `upscaled-4k-${Date.now()}.png`;
-                  link.click();
-                }
+              onClick={() => {
+                const link = document.createElement("a");
+                link.href = resultImage;
+                link.download = `upscaled-4k-${Date.now()}.png`;
+                link.click();
               }}
               size="sm"
               variant="outline"
@@ -256,13 +247,11 @@ export const UpscaleTool = ({ userId, onBack }: UpscaleToolProps) => {
               Download
             </Button>
           </div>
-          <Watermark userId={userId}>
-            <img
-              src={resultImage}
-              alt="Upscaled"
-              className="w-full rounded-xl border border-border"
-            />
-          </Watermark>
+          <img
+            src={resultImage}
+            alt="Upscaled"
+            className="w-full rounded-xl border border-border"
+          />
         </motion.div>
       )}
     </motion.div>

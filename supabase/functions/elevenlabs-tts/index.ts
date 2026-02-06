@@ -77,14 +77,16 @@ serve(async (req) => {
       );
     }
 
-    // Fetch credit cost
-    const { data: costSetting } = await supabaseAdmin
+    // Fetch global profit margin and calculate credit cost
+    const { data: marginSetting } = await supabaseAdmin
       .from("app_settings")
       .select("value")
-      .eq("key", "credit_cost_text_to_speech")
+      .eq("key", "profit_margin")
       .maybeSingle();
     
-    const creditCost = costSetting?.value ? parseInt(costSetting.value, 10) : 2;
+    const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
+    const BASE_COST = 2; // Base API cost for TTS
+    const creditCost = Math.ceil(BASE_COST * (1 + profitMargin / 100));
 
     // Check user credits
     const { data: profile, error: profileError } = await supabaseAdmin
