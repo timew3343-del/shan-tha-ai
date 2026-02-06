@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.generate-doc-slides]
 verify_jwt = false
+
+[functions.caption-video]
+verify_jwt = false

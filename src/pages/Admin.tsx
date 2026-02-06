@@ -88,6 +88,7 @@ export const Admin = () => {
     youtube_to_text: 10,
     character_animation: 15,
     doc_slide_gen: 24,
+    caption_per_minute: 6,
   });
 
   // Manual credit management state
@@ -114,12 +115,14 @@ export const Admin = () => {
   const [replicateApiToken, setReplicateApiToken] = useState("");
   const [stripePublishableKey, setStripePublishableKey] = useState("");
   const [stripeSecretKey, setStripeSecretKey] = useState("");
+  const [shotstackApiKey, setShotstackApiKey] = useState("");
   const [isSavingApiKeys, setIsSavingApiKeys] = useState(false);
   
   // Password visibility for API keys
   const [showReplicateKey, setShowReplicateKey] = useState(false);
   const [showStripePublishable, setShowStripePublishable] = useState(false);
   const [showStripeSecret, setShowStripeSecret] = useState(false);
+  const [showShotstackKey, setShowShotstackKey] = useState(false);
   
   // Maintenance mode state
   const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
@@ -239,6 +242,9 @@ export const Admin = () => {
               break;
             case "stripe_secret_key":
               setStripeSecretKey(setting.value || "");
+              break;
+            case "shotstack_api_key":
+              setShotstackApiKey(setting.value || "");
               break;
             case "is_maintenance_mode":
               setIsMaintenanceMode(setting.value === "true");
@@ -492,6 +498,7 @@ export const Admin = () => {
         { key: "replicate_api_token", value: replicateApiToken },
         { key: "stripe_publishable_key", value: stripePublishableKey },
         { key: "stripe_secret_key", value: stripeSecretKey },
+        { key: "shotstack_api_key", value: shotstackApiKey },
       ];
 
       for (const update of updates) {
@@ -1303,6 +1310,19 @@ export const Admin = () => {
                     className="w-20 text-center bg-background/50"
                   />
                 </div>
+
+                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                  <div>
+                    <span className="text-sm font-medium text-foreground">AI Caption</span>
+                    <p className="text-xs text-muted-foreground">မိနစ်တိုင်း ကုန်ကျမည့် Credits</p>
+                  </div>
+                  <Input
+                    type="number"
+                    value={creditCosts.caption_per_minute}
+                    onChange={(e) => setCreditCosts(prev => ({ ...prev, caption_per_minute: parseInt(e.target.value) || 0 }))}
+                    className="w-20 text-center bg-background/50"
+                  />
+                </div>
               </div>
 
               <Button 
@@ -1501,6 +1521,25 @@ export const Admin = () => {
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                     >
                       {showReplicateKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-2 block">Shotstack API Key</label>
+                  <div className="relative">
+                    <Input
+                      type={showShotstackKey ? "text" : "password"}
+                      value={shotstackApiKey}
+                      onChange={(e) => setShotstackApiKey(e.target.value)}
+                      placeholder="Enter Shotstack API key..."
+                      className="bg-background/50 pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowShotstackKey(!showShotstackKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showShotstackKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
