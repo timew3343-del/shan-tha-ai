@@ -183,13 +183,30 @@ export const Admin = () => {
 
       fetchTransactions();
       calculateAnalytics();
-      checkApiHealth();
-      loadSettings();
+      loadSettings(); // API health is derived reactively below
       loadUsers();
       loadCampaigns();
       setIsLoading(false);
     }
   }, [roleLoading, isAdmin, userId, navigate, toast]);
+
+  // Reactively update API health whenever key state changes
+  useEffect(() => {
+    setApiHealth({
+      gemini: { 
+        status: geminiApiKey ? "configured" : "no_key", 
+        lastCheck: new Date() 
+      },
+      stability: { 
+        status: stabilityApiKey ? "configured" : "no_key", 
+        lastCheck: new Date() 
+      },
+      replicate: { 
+        status: replicateApiToken ? "configured" : "no_key", 
+        lastCheck: new Date() 
+      },
+    });
+  }, [geminiApiKey, stabilityApiKey, replicateApiToken]);
 
   const loadSettings = async () => {
     try {
@@ -435,23 +452,7 @@ export const Admin = () => {
     }
   };
 
-  const checkApiHealth = async () => {
-    // Check if keys are configured in database (not localStorage)
-    setApiHealth({
-      gemini: { 
-        status: geminiApiKey ? "configured" : "no_key", 
-        lastCheck: new Date() 
-      },
-      stability: { 
-        status: stabilityApiKey ? "configured" : "no_key", 
-        lastCheck: new Date() 
-      },
-      replicate: { 
-        status: replicateApiToken ? "configured" : "no_key", 
-        lastCheck: new Date() 
-      },
-    });
-  };
+  // checkApiHealth is now handled reactively via useEffect above
   
   const toggleMaintenanceMode = async () => {
     setIsTogglingMaintenance(true);
@@ -508,7 +509,7 @@ export const Admin = () => {
         description: "API Keys များကို အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ",
       });
 
-      checkApiHealth();
+      // API health updates reactively via useEffect
     } catch (error) {
       console.error("Error saving API keys:", error);
       toast({
