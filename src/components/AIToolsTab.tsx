@@ -67,7 +67,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
             <div className="text-center pt-2">
               <div className="inline-flex items-center gap-2 mb-1">
                 <Crown className="w-5 h-5 text-primary animate-pulse" />
-                <h1 className="text-xl font-bold text-primary font-myanmar">Myanmar AI</h1>
+                <h1 className="text-xl font-bold text-primary font-myanmar">Myanmar AI Studio</h1>
                 <Crown className="w-5 h-5 text-primary animate-pulse" />
               </div>
               <p className="text-muted-foreground text-xs font-myanmar">
