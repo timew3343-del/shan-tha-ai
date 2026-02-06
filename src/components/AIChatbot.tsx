@@ -41,7 +41,7 @@ export const AIChatbot = ({ userId }: AIChatbotProps) => {
   const openCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: 320, height: 240 },
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 640 }, height: { ideal: 480 } },
         audio: false,
       });
       if (videoRef.current) {
@@ -417,8 +417,8 @@ export const AIChatbot = ({ userId }: AIChatbotProps) => {
             disabled={isLoading}
             className="shrink-0 flex flex-col items-center gap-0.5 text-primary/70 hover:text-primary transition-colors disabled:opacity-50"
           >
-            <Camera className="w-4 h-4" />
-            <span className="text-[9px] font-myanmar leading-none">ကင်မရာ</span>
+            <Camera className="w-5 h-5" />
+            <span className="text-[10px] font-myanmar leading-none font-medium">ကင်မရာ</span>
           </button>
           <div className="flex-1 relative">
             <Textarea

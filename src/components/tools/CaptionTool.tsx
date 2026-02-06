@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import { Upload, Sparkles, Download, Loader2, X, Languages, FileText } from "lucide-react";
+import { Upload, Sparkles, Download, Loader2, X, Languages, FileText, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useCredits } from "@/hooks/useCredits";
+import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
 import { motion } from "framer-motion";
@@ -24,6 +25,7 @@ interface CaptionToolProps {
 export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
   const { toast } = useToast();
   const { credits, refetch: refetchCredits } = useCredits(userId);
+  const { costs } = useCreditCosts();
   const [targetLang, setTargetLang] = useState("my");
   const [uploadedVideo, setUploadedVideo] = useState<File | null>(null);
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
@@ -38,11 +40,10 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // Calculate estimated credits
-  const freeSeconds = 10;
-  const creditsPerMinute = 6;
-  const billableSeconds = Math.max(0, videoDuration - freeSeconds);
-  const estimatedCost = billableSeconds > 0 ? Math.ceil((billableSeconds / 60) * creditsPerMinute) : 0;
+  // Credit calculation with 40% profit margin
+  const creditPerMinute = costs.caption_per_minute || 9;
+  const estimatedCost = videoDuration > 0 ? Math.max(1, Math.ceil((videoDuration / 60) * creditPerMinute)) : 0;
+  const maxDurationSeconds = 30 * 60; // 30 minutes max
 
   // Progress animation
   useEffect(() => {
@@ -60,7 +61,7 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
 
       interval = setInterval(() => {
         setProgress((prev) => {
-          const newProgress = prev + Math.random() * 3;
+          const newProgress = prev + Math.random() * 2;
           if (newProgress >= 95) return 95;
           const newStatusIndex = Math.min(Math.floor(newProgress / 25), statuses.length - 1);
           if (newStatusIndex !== statusIndex) {
@@ -69,7 +70,7 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
           }
           return newProgress;
         });
-      }, 2000);
+      }, 3000);
     } else {
       setProgress(100);
       setStatusText("");
@@ -83,16 +84,7 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Max 100MB
-    if (file.size > 100 * 1024 * 1024) {
-      toast({
-        title: "ဖိုင်ကြီးလွန်းပါသည်",
-        description: "100MB အထိသာ upload လုပ်နိုင်ပါသည်",
-        variant: "destructive",
-      });
-      return;
-    }
-
+    // No file size limit - any size allowed, max 30 min duration enforced after metadata loads
     setUploadedVideo(file);
     const url = URL.createObjectURL(file);
     setVideoPreviewUrl(url);
@@ -102,7 +94,17 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
 
   const handleVideoLoaded = () => {
     if (videoRef.current) {
-      setVideoDuration(Math.round(videoRef.current.duration));
+      const dur = Math.round(videoRef.current.duration);
+      if (dur > maxDurationSeconds) {
+        toast({
+          title: "ဗီဒီယို ရှည်လွန်းပါသည်",
+          description: `အများဆုံး ${maxDurationSeconds / 60} မိနစ်အထိသာ တင်နိုင်ပါသည်`,
+          variant: "destructive",
+        });
+        removeVideo();
+        return;
+      }
+      setVideoDuration(dur);
     }
   };
 
@@ -140,26 +142,21 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
 
       // Upload video to Supabase storage
       const fileName = `${userId}/caption-${Date.now()}.${uploadedVideo.name.split(".").pop()}`;
-
       const { error: uploadError } = await supabase.storage
         .from("videos")
-        .upload(fileName, uploadedVideo, {
-          cacheControl: "3600",
-          upsert: false,
-        });
+        .upload(fileName, uploadedVideo, { cacheControl: "3600", upsert: false });
 
       if (uploadError) {
         console.error("Upload error:", uploadError);
         throw new Error("ဗီဒီယို upload မအောင်မြင်ပါ");
       }
 
-      // Get public URL
       const { data: urlData } = supabase.storage.from("videos").getPublicUrl(fileName);
       const videoUrl = urlData.publicUrl;
 
-      console.log("Video uploaded, public URL:", videoUrl);
+      // Call caption edge function - works in background
+      toast({ title: "Caption ထုတ်နေပါသည်", description: "ဗီဒီယို ကြာချိန်အလိုက် အချိန်ယူပါမည်။ ဤစာမျက်နှာတွင် စောင့်ပါ" });
 
-      // Call caption edge function
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/caption-video`,
         {
@@ -214,6 +211,12 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
     URL.revokeObjectURL(url);
   };
 
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${String(secs).padStart(2, "0")}`;
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, x: 20 }}
@@ -227,13 +230,28 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
         onBack={onBack}
       />
 
+      {/* Warning Notice */}
+      <div className="gradient-card rounded-2xl p-3 border border-amber-500/30 bg-amber-500/5">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-xs font-medium text-amber-600 dark:text-amber-400 font-myanmar">
+              သတိပေးချက်
+            </p>
+            <p className="text-xs text-muted-foreground font-myanmar mt-0.5">
+              မိမိတင်သည့် ဗီဒီယို ကြာချိန်အလိုက် ခရက်ဒစ်ကုန်ကျမည် ဖြစ်ပါသည်။ 
+              အများဆုံး {maxDurationSeconds / 60} မိနစ်အထိ တင်နိုင်ပါသည်။
+              မိနစ်တိုင်း {creditPerMinute} Credits ကုန်ကျမည်။
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Video Upload */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-        <label className="block text-sm font-medium text-primary mb-3 font-myanmar">
-          ဗီဒီယိုထည့်ရန်
-        </label>
+        <label className="block text-sm font-medium text-primary mb-3 font-myanmar">ဗီဒီယိုထည့်ရန်</label>
         <p className="text-xs text-muted-foreground mb-3 font-myanmar">
-          MP4, MOV, WebM (100MB အထိ)
+          MP4, MOV, WebM • ဖိုင်ဆိုဒ် အကန့်အသတ်မရှိ • အများဆုံး {maxDurationSeconds / 60} မိနစ်
         </p>
 
         {uploadedVideo ? (
@@ -246,23 +264,20 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
                 controls
                 className="w-full rounded-xl border border-primary/30 max-h-48"
               />
-              <button
-                onClick={removeVideo}
-                className="absolute -top-2 -right-2 p-1 bg-destructive rounded-full text-white"
-              >
+              <button onClick={removeVideo} className="absolute -top-2 -right-2 p-1 bg-destructive rounded-full text-white">
                 <X className="w-3 h-3" />
               </button>
             </div>
             {videoDuration > 0 && (
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground font-myanmar">
-                  အရှည်: {Math.floor(videoDuration / 60)}:{String(videoDuration % 60).padStart(2, "0")}
-                </span>
-                <span className={`font-medium ${estimatedCost === 0 ? "text-success" : "text-primary"}`}>
-                  {estimatedCost === 0
-                    ? "🎉 အခမဲ့ (10s အတွင်း)"
-                    : `${estimatedCost} Credits ကုန်ကျမည်`}
-                </span>
+              <div className="gradient-card rounded-xl p-3 border border-primary/10 space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground font-myanmar">⏱ ကြာချိန်: {formatDuration(videoDuration)}</span>
+                  <span className="font-semibold text-primary">{estimatedCost} Credits ကုန်ကျမည်</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground font-myanmar">📏 ဖိုင်ဆိုဒ်: {(uploadedVideo.size / (1024 * 1024)).toFixed(1)} MB</span>
+                  <span className="text-muted-foreground font-myanmar">💰 {creditPerMinute} Cr/မိနစ်</span>
+                </div>
               </div>
             )}
           </div>
@@ -273,16 +288,11 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
           >
             <Upload className="w-8 h-8 text-primary" />
             <span className="text-sm text-muted-foreground font-myanmar">ဗီဒီယိုထည့်ရန် နှိပ်ပါ</span>
+            <span className="text-[10px] text-muted-foreground/70 font-myanmar">ဖိုင်ဆိုဒ် အကန့်အသတ်မရှိ</span>
           </button>
         )}
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="video/*"
-          onChange={handleVideoUpload}
-          className="hidden"
-        />
+        <input ref={fileInputRef} type="file" accept="video/*" onChange={handleVideoUpload} className="hidden" />
       </div>
 
       {/* Language Selection */}
@@ -305,14 +315,6 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
         </Select>
       </div>
 
-      {/* Credit Info */}
-      <div className="gradient-card rounded-2xl p-3 border border-primary/10">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground font-myanmar">
-          <FileText className="w-3.5 h-3.5 text-primary" />
-          <span>ပထမ {freeSeconds} စက္ကန့် အခမဲ့ • ပြီးရင် မိနစ်တိုင်း {creditsPerMinute} Credits</span>
-        </div>
-      </div>
-
       {/* Progress */}
       {isLoading && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2">
@@ -321,6 +323,9 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
             <span>{Math.round(progress)}%</span>
           </div>
           <Progress value={progress} className="h-2" />
+          <p className="text-xs text-muted-foreground/70 font-myanmar text-center">
+            ⏳ ဗီဒီယို ကြာချိန်အလိုက် အချိန်ယူပါမည်။ ပြီးဆုံးပါက ခရက်ဒစ်ဖြတ်ပါမည်။
+          </p>
         </motion.div>
       )}
 
@@ -331,26 +336,15 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
         className="w-full btn-gradient-red py-4 rounded-2xl font-semibold font-myanmar"
       >
         {isLoading ? (
-          <>
-            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-            Caption ထုတ်နေသည်...
-          </>
+          <><Loader2 className="w-5 h-5 mr-2 animate-spin" />Caption ထုတ်နေသည်... (ကြာနိုင်ပါသည်)</>
         ) : (
-          <>
-            <Sparkles className="w-5 h-5 mr-2" />
-            Caption ထုတ်မည် {estimatedCost > 0 ? `(${estimatedCost} Credits)` : "(အခမဲ့)"}
-          </>
+          <><Sparkles className="w-5 h-5 mr-2" />Caption ထုတ်မည် ({estimatedCost > 0 ? `${estimatedCost} Credits` : "0 Credits"})</>
         )}
       </Button>
 
       {/* Results */}
       {srtResult && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="space-y-4"
-        >
-          {/* Info */}
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
           <div className="gradient-card rounded-2xl p-4 border border-success/30">
             <div className="flex items-center gap-2 mb-2">
               <Sparkles className="w-4 h-4 text-success" />
@@ -358,13 +352,9 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
             </div>
             <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
               {detectedLang && (
-                <span className="px-2 py-1 bg-secondary rounded-lg">
-                  မူရင်းဘာသာ: {detectedLang}
-                </span>
+                <span className="px-2 py-1 bg-secondary rounded-lg">မူရင်းဘာသာ: {detectedLang}</span>
               )}
-              <span className="px-2 py-1 bg-secondary rounded-lg">
-                {creditsUsed} Credits သုံးပြီး
-              </span>
+              <span className="px-2 py-1 bg-secondary rounded-lg">{creditsUsed} Credits သုံးပြီး</span>
             </div>
           </div>
 
@@ -372,21 +362,14 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
           <div className="gradient-card rounded-2xl p-4 border border-primary/20">
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-sm font-medium text-primary font-myanmar">Subtitle (SRT) - ပြင်ဆင်နိုင်ပါသည်</h4>
-              <div className="flex gap-2">
-                {originalSrt && (
-                  <Button
-                    onClick={() => setSrtResult(originalSrt)}
-                    size="sm"
-                    variant="ghost"
-                    className="text-xs"
-                  >
-                    ↩ မူရင်းပြန်ထား
-                  </Button>
-                )}
-              </div>
+              {originalSrt && (
+                <Button onClick={() => setSrtResult(originalSrt)} size="sm" variant="ghost" className="text-xs">
+                  ↩ မူရင်းပြန်ထား
+                </Button>
+              )}
             </div>
             <p className="text-xs text-muted-foreground mb-3 font-myanmar">
-              ✏️ စာတန်းထိုး မှားယွင်းပါက အောက်တွင် တိုက်ရိုက်ပြင်ဆင်နိုင်ပါသည်
+              ✏️ စာတန်းထိုး မှားယွင်းပါက အောက်တွင် တိုက်ရိုက်ပြင်ဆင်နိုင်ပါသည်။ စိတ်တိုင်းကျမှ Download ယူပါ။
             </p>
             <Textarea
               value={srtResult}
@@ -395,24 +378,12 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
             />
             <div className="flex gap-2 mt-3">
               {originalSrt && originalSrt !== srtResult && (
-                <Button
-                  onClick={() => downloadSrt(originalSrt, "original")}
-                  size="sm"
-                  variant="outline"
-                  className="text-xs flex-1"
-                >
-                  <Download className="w-3 h-3 mr-1" />
-                  မူရင်း Download
+                <Button onClick={() => downloadSrt(originalSrt, "original")} size="sm" variant="outline" className="text-xs flex-1">
+                  <Download className="w-3 h-3 mr-1" />မူရင်း Download
                 </Button>
               )}
-              <Button
-                onClick={() => downloadSrt(srtResult, targetLang)}
-                size="sm"
-                variant="default"
-                className="text-xs flex-1"
-              >
-                <Download className="w-3 h-3 mr-1" />
-                ပြင်ဆင်ပြီး SRT Download
+              <Button onClick={() => downloadSrt(srtResult, targetLang)} size="sm" variant="default" className="text-xs flex-1">
+                <Download className="w-3 h-3 mr-1" />ပြင်ဆင်ပြီး SRT Download
               </Button>
             </div>
           </div>
