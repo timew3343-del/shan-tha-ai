@@ -368,38 +368,53 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
             </div>
           </div>
 
-          {/* SRT Preview */}
+          {/* Editable SRT */}
           <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm font-medium text-primary font-myanmar">Subtitle (SRT)</h4>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-medium text-primary font-myanmar">Subtitle (SRT) - ပြင်ဆင်နိုင်ပါသည်</h4>
               <div className="flex gap-2">
-                {originalSrt && originalSrt !== srtResult && (
+                {originalSrt && (
                   <Button
-                    onClick={() => downloadSrt(originalSrt, "original")}
+                    onClick={() => setSrtResult(originalSrt)}
                     size="sm"
-                    variant="outline"
+                    variant="ghost"
                     className="text-xs"
                   >
-                    <Download className="w-3 h-3 mr-1" />
-                    မူရင်း
+                    ↩ မူရင်းပြန်ထား
                   </Button>
                 )}
-                <Button
-                  onClick={() => downloadSrt(srtResult, targetLang)}
-                  size="sm"
-                  variant="default"
-                  className="text-xs"
-                >
-                  <Download className="w-3 h-3 mr-1" />
-                  SRT Download
-                </Button>
               </div>
             </div>
+            <p className="text-xs text-muted-foreground mb-3 font-myanmar">
+              ✏️ စာတန်းထိုး မှားယွင်းပါက အောက်တွင် တိုက်ရိုက်ပြင်ဆင်နိုင်ပါသည်
+            </p>
             <Textarea
-              readOnly
               value={srtResult}
+              onChange={(e) => setSrtResult(e.target.value)}
               className="min-h-[200px] text-xs font-mono bg-background/50 border-primary/20"
             />
+            <div className="flex gap-2 mt-3">
+              {originalSrt && originalSrt !== srtResult && (
+                <Button
+                  onClick={() => downloadSrt(originalSrt, "original")}
+                  size="sm"
+                  variant="outline"
+                  className="text-xs flex-1"
+                >
+                  <Download className="w-3 h-3 mr-1" />
+                  မူရင်း Download
+                </Button>
+              )}
+              <Button
+                onClick={() => downloadSrt(srtResult, targetLang)}
+                size="sm"
+                variant="default"
+                className="text-xs flex-1"
+              >
+                <Download className="w-3 h-3 mr-1" />
+                ပြင်ဆင်ပြီး SRT Download
+              </Button>
+            </div>
           </div>
         </motion.div>
       )}

@@ -17,24 +17,29 @@ export interface CreditCosts {
   character_animation: number;
   doc_slide_gen: number;
   caption_per_minute: number;
+  ad_generator: number;
+  live_camera_chat: number;
 }
 
+// Default costs with 40% profit margin (cost / 0.6 rounded up)
 const DEFAULT_COSTS: CreditCosts = {
-  image_generation: 2,
-  video_generation: 7,
-  video_with_speech: 10,
-  text_to_speech: 2,
-  speech_to_text: 5,
-  ai_chat: 1,
-  face_swap: 15,
-  upscale: 1,
-  bg_remove: 1,
-  live_camera: 15,
-  video_export: 3,
-  youtube_to_text: 10,
-  character_animation: 15,
-  doc_slide_gen: 24,
-  caption_per_minute: 6,
+  image_generation: 3,
+  video_generation: 10,
+  video_with_speech: 14,
+  text_to_speech: 3,
+  speech_to_text: 7,
+  ai_chat: 2,
+  face_swap: 21,
+  upscale: 2,
+  bg_remove: 2,
+  live_camera: 21,
+  video_export: 5,
+  youtube_to_text: 14,
+  character_animation: 21,
+  doc_slide_gen: 34,
+  caption_per_minute: 9,
+  ad_generator: 9,
+  live_camera_chat: 1,
 };
 
 export const useCreditCosts = () => {
