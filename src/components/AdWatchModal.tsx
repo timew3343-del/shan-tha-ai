@@ -13,34 +13,38 @@ interface AdWatchModalProps {
   rewardAmount: number;
 }
 
-const SESSION_DURATION = 30;
 const TOTAL_SESSIONS = 2;
 
 export const AdWatchModal = ({
   isOpen,
   onClose,
   onClaim,
+  timerDuration,
   rewardAmount,
 }: AdWatchModalProps) => {
+  const sessionDuration = Math.max(10, Math.floor((timerDuration || 60) / TOTAL_SESSIONS));
+
   const [currentSession, setCurrentSession] = useState(1);
-  const [timeRemaining, setTimeRemaining] = useState(SESSION_DURATION);
+  const [timeRemaining, setTimeRemaining] = useState(sessionDuration);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [sessionTimerDone, setSessionTimerDone] = useState(false);
   const [canClaim, setCanClaim] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
   const [claimed, setClaimed] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const adContainerRef = useRef<HTMLDivElement>(null);
+  const currentSessionRef = useRef(1);
 
   const loadAdScript = useCallback(() => {
     if (!adContainerRef.current) return;
-    
+
     adContainerRef.current.innerHTML = '';
-    
+
     const containerDiv = document.createElement('div');
     containerDiv.id = 'container-303f0f5972332b8fd635da8909294c40';
     adContainerRef.current.appendChild(containerDiv);
-    
+
     const script = document.createElement('script');
     script.async = true;
     script.setAttribute('data-cfasync', 'false');
@@ -48,19 +52,25 @@ export const AdWatchModal = ({
     adContainerRef.current.appendChild(script);
   }, []);
 
-  const resetState = useCallback(() => {
-    setCurrentSession(1);
-    setTimeRemaining(SESSION_DURATION);
-    setIsTimerRunning(false);
-    setCanClaim(false);
-    setClaimed(false);
-    setIsClaiming(false);
-    setClaimError(null);
+  const clearTimer = useCallback(() => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
   }, []);
+
+  const resetState = useCallback(() => {
+    setCurrentSession(1);
+    currentSessionRef.current = 1;
+    setTimeRemaining(sessionDuration);
+    setIsTimerRunning(false);
+    setSessionTimerDone(false);
+    setCanClaim(false);
+    setClaimed(false);
+    setIsClaiming(false);
+    setClaimError(null);
+    clearTimer();
+  }, [sessionDuration, clearTimer]);
 
   useEffect(() => {
     if (isOpen) {
@@ -70,34 +80,26 @@ export const AdWatchModal = ({
         startTimer();
       }, 100);
     }
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, [isOpen, resetState, loadAdScript]);
+    return () => clearTimer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   const startTimer = () => {
+    clearTimer();
     setIsTimerRunning(true);
-    
+    setSessionTimerDone(false);
+
     timerRef.current = setInterval(() => {
       setTimeRemaining((prev) => {
         if (prev <= 1) {
-          if (timerRef.current) {
-            clearInterval(timerRef.current);
-            timerRef.current = null;
-          }
+          clearTimer();
           setIsTimerRunning(false);
-          
-          setCurrentSession((currentSess) => {
-            if (currentSess >= TOTAL_SESSIONS) {
-              setCanClaim(true);
-            }
-            return currentSess;
-          });
-          
+          setSessionTimerDone(true);
+
+          // Use ref for current session to avoid nested state issues
+          if (currentSessionRef.current >= TOTAL_SESSIONS) {
+            setCanClaim(true);
+          }
           return 0;
         }
         return prev - 1;
@@ -106,8 +108,11 @@ export const AdWatchModal = ({
   };
 
   const startNextSession = () => {
-    setCurrentSession((prev) => prev + 1);
-    setTimeRemaining(SESSION_DURATION);
+    const nextSession = currentSessionRef.current + 1;
+    currentSessionRef.current = nextSession;
+    setCurrentSession(nextSession);
+    setTimeRemaining(sessionDuration);
+    setSessionTimerDone(false);
     loadAdScript();
     startTimer();
   };
@@ -142,12 +147,11 @@ export const AdWatchModal = ({
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const totalTime = SESSION_DURATION * TOTAL_SESSIONS;
-  const elapsedTime = (currentSession - 1) * SESSION_DURATION + (SESSION_DURATION - timeRemaining);
+  const totalTime = sessionDuration * TOTAL_SESSIONS;
+  const elapsedTime = (currentSession - 1) * sessionDuration + (sessionDuration - timeRemaining);
   const progressValue = (elapsedTime / totalTime) * 100;
 
-  const sessionComplete = timeRemaining === 0 && !canClaim;
-  const allComplete = canClaim;
+  const showNextButton = sessionTimerDone && !canClaim && currentSession < TOTAL_SESSIONS;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
@@ -162,18 +166,18 @@ export const AdWatchModal = ({
         <div className="space-y-5 py-4">
           {/* Session Progress Indicator */}
           <div className="flex items-center justify-center gap-3">
-            {[1, 2].map((session) => (
+            {Array.from({ length: TOTAL_SESSIONS }, (_, i) => i + 1).map((session) => (
               <div
                 key={session}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                  currentSession > session || (currentSession === session && allComplete)
+                  currentSession > session || (currentSession === session && canClaim)
                     ? "bg-green-500/20 text-green-500"
                     : currentSession === session
                     ? "bg-primary/20 text-primary"
                     : "bg-secondary text-muted-foreground"
                 }`}
               >
-                {currentSession > session || (currentSession === session && allComplete) ? (
+                {currentSession > session || (currentSession === session && canClaim) ? (
                   <CheckCircle className="w-3.5 h-3.5" />
                 ) : (
                   <Play className="w-3.5 h-3.5" />
@@ -186,14 +190,14 @@ export const AdWatchModal = ({
           {/* Message */}
           <div className="text-center p-3 rounded-xl bg-primary/10 border border-primary/20">
             <p className="text-sm text-foreground font-myanmar leading-relaxed">
-              🎬 ကြော်ငြာ {TOTAL_SESSIONS} ခု ကြည့်ပါ (တစ်ခုလျှင် {SESSION_DURATION} စက္ကန့်)
+              🎬 ကြော်ငြာ {TOTAL_SESSIONS} ခု ကြည့်ပါ (တစ်ခုလျှင် {sessionDuration} စက္ကန့်)
             </p>
           </div>
 
           {/* Ad Container */}
-          <div 
+          <div
             ref={adContainerRef}
-            className="rounded-lg bg-secondary/50 overflow-hidden min-h-[100px] flex items-center justify-center p-2"
+            className="rounded-lg bg-secondary/50 overflow-hidden min-h-[150px] flex items-center justify-center p-2"
           >
             <p className="text-xs text-muted-foreground font-myanmar animate-pulse">
               ကြော်ငြာ ဖွင့်နေသည်...
@@ -236,6 +240,7 @@ export const AdWatchModal = ({
           <AnimatePresence mode="wait">
             {claimed ? (
               <motion.div
+                key="claimed"
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 className="flex flex-col items-center gap-2 py-4"
@@ -247,8 +252,9 @@ export const AdWatchModal = ({
                   {rewardAmount} Credits ရရှိပါပြီ!
                 </p>
               </motion.div>
-            ) : sessionComplete && currentSession < TOTAL_SESSIONS ? (
+            ) : showNextButton ? (
               <motion.div
+                key="next"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
               >
@@ -264,6 +270,7 @@ export const AdWatchModal = ({
               </motion.div>
             ) : (
               <motion.div
+                key="claim"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
               >
