@@ -55,14 +55,23 @@ export const GlobalMarginTab = () => {
     if (isLocked) return;
     setIsSaving(true);
     try {
+      // Save the margin
       const { error } = await supabase
         .from("app_settings")
         .upsert({ key: "profit_margin", value: margin.toString() }, { onConflict: "key" });
       
       if (error) throw error;
+
+      // Auto-update all credit costs based on new margin
+      for (const [key, baseCost] of Object.entries(BASE_API_COSTS)) {
+        const userCost = Math.ceil(baseCost * (1 + margin / 100));
+        await supabase
+          .from("app_settings")
+          .upsert({ key: `credit_cost_${key}`, value: userCost.toString() }, { onConflict: "key" });
+      }
       
       setIsLocked(true);
-      toast({ title: "သိမ်းဆည်းပြီးပါပြီ", description: `Global Profit Margin ${margin}% သတ်မှတ်ပြီးပါပြီ` });
+      toast({ title: "သိမ်းဆည်းပြီးပါပြီ", description: `Global Profit Margin ${margin}% သတ်မှတ်ပြီး Credit Costs အားလုံး အပ်ဒိတ်ပြီးပါပြီ` });
     } catch (err) {
       console.error("Save margin error:", err);
       toast({ title: "အမှား", description: "Margin သိမ်းဆည်းရာတွင် ပြဿနာရှိပါသည်", variant: "destructive" });
@@ -126,7 +135,7 @@ export const GlobalMarginTab = () => {
         )}
       </div>
 
-      {/* Margin Slider */}
+      {/* Margin Slider - Now supports up to 150% */}
       <div className="gradient-card rounded-xl p-5 border border-primary/20">
         <div className="flex items-center justify-between mb-4">
           <h4 className="font-semibold text-foreground font-myanmar">Profit Margin</h4>
@@ -137,7 +146,7 @@ export const GlobalMarginTab = () => {
           value={[margin]}
           onValueChange={(val) => !isLocked && setMargin(val[0])}
           min={10}
-          max={100}
+          max={150}
           step={5}
           disabled={isLocked}
           className="mb-4"
@@ -147,6 +156,7 @@ export const GlobalMarginTab = () => {
           <span>10%</span>
           <span>50%</span>
           <span>100%</span>
+          <span>150%</span>
         </div>
 
         <p className="text-xs text-muted-foreground mt-3 font-myanmar">
@@ -189,7 +199,7 @@ export const GlobalMarginTab = () => {
         ) : (
           <>
             <Save className="w-4 h-4 mr-2" />
-            {isLocked ? "🔒 Locked - PIN ထည့်ပါ" : "Global Margin သိမ်းဆည်းမည်"}
+            {isLocked ? "🔒 Locked - PIN ထည့်ပါ" : "Global Margin + Credit Costs သိမ်းဆည်းမည်"}
           </>
         )}
       </Button>

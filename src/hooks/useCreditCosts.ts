@@ -29,6 +29,7 @@ const BASE_API_COSTS = {
   song_mtv: 15,
   auto_ad: 18,
   video_redesign: 21,
+  logo_design: 3,
 };
 
 export type CreditCostKey = keyof typeof BASE_API_COSTS;
@@ -60,6 +61,7 @@ export interface CreditCosts {
   song_mtv: number;
   auto_ad: number;
   video_redesign: number;
+  logo_design: number;
 }
 
 function calculateDefaultCosts(margin: number = 40): CreditCosts {
@@ -78,7 +80,6 @@ export const useCreditCosts = () => {
 
   const fetchCosts = useCallback(async () => {
     try {
-      // Fetch pre-calculated credit costs (set by admin, readable by users via RLS)
       const { data, error } = await supabase
         .from("app_settings")
         .select("key, value")
@@ -100,7 +101,6 @@ export const useCreditCosts = () => {
         }
       });
 
-      // Merge: use fetched values where available, fallback to default 40% margin
       const defaults = calculateDefaultCosts(40);
       setCosts({ ...defaults, ...fetchedCosts });
     } catch (error) {
@@ -113,16 +113,11 @@ export const useCreditCosts = () => {
   useEffect(() => {
     fetchCosts();
 
-    // Subscribe to realtime changes on credit_cost_* settings
     const channel = supabase
       .channel("credit-costs-realtime")
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "app_settings",
-        },
+        { event: "*", schema: "public", table: "app_settings" },
         (payload: any) => {
           const key = payload?.new?.key || payload?.old?.key;
           if (key && typeof key === "string" && key.startsWith("credit_cost_")) {
