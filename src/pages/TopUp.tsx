@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Upload, CreditCard, CheckCircle, X, ZoomIn, Sparkles, MessageCircle, Send, Clock, Package, Building } from "lucide-react";
+import { ArrowLeft, Upload, CreditCard, CheckCircle, X, ZoomIn, Sparkles, Clock, Package, Building } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import kbzpayQr from "@/assets/kbzpay-qr.jpg";
 import wavepayQr from "@/assets/wavepay-qr.jpg";
+import { PromoCodeRedeem } from "@/components/PromoCodeRedeem";
+import { TopUpSupportChat } from "@/components/TopUpSupportChat";
 
 interface PricingPackage {
   id: string;
@@ -187,13 +189,13 @@ export const TopUp = () => {
     setShowSuccess(false);
   };
 
-  const openTelegram = () => {
-    window.open("https://t.me/yourusername", "_blank");
-  };
-
-  const openMessenger = () => {
-    window.open("https://m.me/yourpage", "_blank");
-  };
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) setCurrentUserId(user.id);
+    });
+  }, []);
 
   return (
     <div className="min-h-screen gradient-navy pb-8">
@@ -424,6 +426,13 @@ export const TopUp = () => {
           ))}
         </div>
 
+        {/* Promo Code Section */}
+        {currentUserId && (
+          <div className="animate-fade-up" style={{ animationDelay: "0.12s" }}>
+            <PromoCodeRedeem userId={currentUserId} />
+          </div>
+        )}
+
         {/* Upload Section */}
         <div className="gradient-card rounded-2xl p-4 border border-primary/20 space-y-4 animate-fade-up" style={{ animationDelay: "0.15s" }}>
           <h3 className="font-semibold text-foreground text-sm">ငွေလွှဲပြေစာ Screenshot</h3>
@@ -479,31 +488,8 @@ export const TopUp = () => {
           )}
         </Button>
 
-        {/* Support Section */}
-        <div className="gradient-card rounded-2xl p-4 border border-border/30 animate-fade-up" style={{ animationDelay: "0.25s" }}>
-          <div className="flex items-start gap-3 mb-3">
-            <Clock className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              ငွေလွှဲပြီး ၁ မိနစ်အတွင်း ခရက်ဒစ် မတိုးပါက ၂၄ နာရီအတွင်း ဆက်သွယ်နိုင်ပါသည်။
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={openTelegram}
-              className="flex-1 py-2 rounded-xl bg-[#0088cc] text-white text-sm font-medium flex items-center justify-center gap-1"
-            >
-              <Send className="w-4 h-4" />
-              Telegram
-            </button>
-            <button
-              onClick={openMessenger}
-              className="flex-1 py-2 rounded-xl bg-gradient-to-r from-[#00B2FF] to-[#006AFF] text-white text-sm font-medium flex items-center justify-center gap-1"
-            >
-              <MessageCircle className="w-4 h-4" />
-              Messenger
-            </button>
-          </div>
-        </div>
+        {/* Support Chatbot Section */}
+        {currentUserId && <TopUpSupportChat userId={currentUserId} />}
 
         {/* Transaction History Link */}
         <button
