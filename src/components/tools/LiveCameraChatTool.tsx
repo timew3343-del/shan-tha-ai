@@ -62,21 +62,47 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
 
   const startCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: 640, height: 480 },
-        audio: false,
-      });
+      if (!navigator.mediaDevices?.getUserMedia) {
+        toast({ title: "ကင်မရာ မရနိုင်ပါ", description: "HTTPS connection လိုအပ်ပါသည်", variant: "destructive" });
+        return;
+      }
+
+      let stream: MediaStream;
+      
+      // Try preferred constraints first, then fallback for mobile
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: false,
+        });
+      } catch {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "user" } },
+            audio: false,
+          });
+        } catch {
+          // Final fallback: any camera
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        }
+      }
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute('playsinline', 'true');
+        videoRef.current.setAttribute('webkit-playsinline', 'true');
         await videoRef.current.play();
       }
       streamRef.current = stream;
       setCameraActive(true);
-    } catch (error) {
-      console.error("Camera access error:", error);
+    } catch (err: any) {
+      console.error("Camera access error:", err);
+      const isPermissionDenied = err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError";
       toast({
         title: "ကင်မရာ ဖွင့်၍မရပါ",
-        description: "ကင်မရာခွင့်ပြုချက် ပေးပါ",
+        description: isPermissionDenied
+          ? "ကင်မရာခွင့်ပြုချက် ပေးပါ။ Settings → Camera → Allow"
+          : "ကင်မရာ ဖွင့်ရာတွင် ပြဿနာရှိပါသည်",
         variant: "destructive",
       });
     }

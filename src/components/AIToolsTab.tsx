@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { 
   Image, Video, Volume2, Crown, Wallet, Gift, 
   ZoomIn, Eraser, Sparkles, Youtube, FileText, Captions,
-  Megaphone, Briefcase, Shield, BookOpen, Camera, Film
+  Megaphone, Briefcase, Shield, BookOpen, Film
 } from "lucide-react";
 import { ImageTool } from "./tools/ImageTool";
 import { VideoTool } from "./tools/VideoTool";
@@ -20,7 +20,7 @@ import { VideoCopywritingTool } from "./tools/VideoCopywritingTool";
 import { CopyrightCheckerTool } from "./tools/CopyrightCheckerTool";
 import { StoryVideoTool } from "./tools/StoryVideoTool";
 import { SceneSummarizerTool } from "./tools/SceneSummarizerTool";
-import { LiveCameraChatTool } from "./tools/LiveCameraChatTool";
+
 import { ToolCardCompact } from "./ToolCardCompact";
 import { AIChatbot } from "./AIChatbot";
 import { ReferralSection } from "./ReferralSection";
@@ -36,7 +36,7 @@ interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "youtube" | "docslide" | "caption" | "adgenerator" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "livecamera";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "youtube" | "docslide" | "caption" | "adgenerator" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer";
 
 export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const navigate = useNavigate();
@@ -73,7 +73,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
       case "copyrightchecker": return <CopyrightCheckerTool key="copyrightchecker" userId={userId} onBack={handleBack} />;
       case "storyvideo": return <StoryVideoTool key="storyvideo" userId={userId} onBack={handleBack} />;
       case "scenesummarizer": return <SceneSummarizerTool key="scenesummarizer" userId={userId} onBack={handleBack} />;
-      case "livecamera": return <LiveCameraChatTool key="livecamera" userId={userId} onBack={handleBack} />;
+      
       default: return null;
     }
   };
@@ -167,16 +167,6 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               </div>
             </motion.div>
 
-            {/* AI Live Camera */}
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.32 }}>
-              <div className="flex items-center gap-2 mb-2">
-                <Camera className="w-4 h-4 text-primary" />
-                <h2 className="text-sm font-semibold text-foreground font-myanmar">AI Live Camera</h2>
-              </div>
-              <div className="grid grid-cols-1 gap-2">
-                <ToolCardCompact icon={Camera} title="AI Live Camera Chat" description="ကင်မရာ + AI Real-time Chat" gradient="bg-gradient-to-br from-rose-500 via-pink-600 to-fuchsia-700" onClick={() => setActiveTool("livecamera")} credits={costs.live_camera_chat} badge="LIVE" badgeTooltip="Real-time AI Camera Analysis" />
-              </div>
-            </motion.div>
 
             {/* Social Media */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.33 }}>
