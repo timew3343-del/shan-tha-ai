@@ -101,6 +101,8 @@ export const Admin = () => {
   const [stripePublishableKey, setStripePublishableKey] = useState("");
   const [stripeSecretKey, setStripeSecretKey] = useState("");
   const [shotstackApiKey, setShotstackApiKey] = useState("");
+  const [acrcloudAccessKey, setAcrcloudAccessKey] = useState("");
+  const [acrcloudAccessSecret, setAcrcloudAccessSecret] = useState("");
   const [isSavingApiKeys, setIsSavingApiKeys] = useState(false);
   
   // Password visibility for API keys
@@ -108,6 +110,8 @@ export const Admin = () => {
   const [showStripePublishable, setShowStripePublishable] = useState(false);
   const [showStripeSecret, setShowStripeSecret] = useState(false);
   const [showShotstackKey, setShowShotstackKey] = useState(false);
+  const [showAcrcloudKey, setShowAcrcloudKey] = useState(false);
+  const [showAcrcloudSecret, setShowAcrcloudSecret] = useState(false);
   
   // Maintenance mode state
   const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
@@ -229,6 +233,12 @@ export const Admin = () => {
               break;
             case "shotstack_api_key":
               setShotstackApiKey(setting.value || "");
+              break;
+            case "acrcloud_access_key":
+              setAcrcloudAccessKey(setting.value || "");
+              break;
+            case "acrcloud_access_secret":
+              setAcrcloudAccessSecret(setting.value || "");
               break;
             case "is_maintenance_mode":
               setIsMaintenanceMode(setting.value === "true");
@@ -473,6 +483,8 @@ export const Admin = () => {
         { key: "stripe_publishable_key", value: stripePublishableKey },
         { key: "stripe_secret_key", value: stripeSecretKey },
         { key: "shotstack_api_key", value: shotstackApiKey },
+        { key: "acrcloud_access_key", value: acrcloudAccessKey },
+        { key: "acrcloud_access_secret", value: acrcloudAccessSecret },
       ];
 
       for (const update of updates) {
@@ -1249,6 +1261,15 @@ export const Admin = () => {
                     {apiHealth.replicate.status === "configured" ? "Configured" : "No Key"}
                   </span>
                 </div>
+                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                  <span className="text-sm text-foreground">ACRCloud</span>
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    acrcloudAccessKey && acrcloudAccessSecret ? "bg-success/20 text-success" :
+                    "bg-destructive/20 text-destructive"
+                  }`}>
+                    {acrcloudAccessKey && acrcloudAccessSecret ? "Configured" : "No Key"}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -1315,6 +1336,52 @@ export const Admin = () => {
                     >
                       {showShotstackKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
+                  </div>
+                </div>
+
+                <div className="border-t border-border/50 pt-4 mt-4">
+                  <p className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+                    🎵 ACRCloud Keys (Copyright Detection)
+                  </p>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Access Key</label>
+                      <div className="relative">
+                        <Input
+                          type={showAcrcloudKey ? "text" : "password"}
+                          value={acrcloudAccessKey}
+                          onChange={(e) => setAcrcloudAccessKey(e.target.value)}
+                          placeholder="ACRCloud Access Key..."
+                          className="bg-background/50 pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowAcrcloudKey(!showAcrcloudKey)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          {showAcrcloudKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Access Secret</label>
+                      <div className="relative">
+                        <Input
+                          type={showAcrcloudSecret ? "text" : "password"}
+                          value={acrcloudAccessSecret}
+                          onChange={(e) => setAcrcloudAccessSecret(e.target.value)}
+                          placeholder="ACRCloud Access Secret..."
+                          className="bg-background/50 pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowAcrcloudSecret(!showAcrcloudSecret)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          {showAcrcloudSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 
