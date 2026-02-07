@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, forwardRef } from "react";
 import { MessageSquare, Send, Loader2, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,7 +10,7 @@ interface UserFeedbackProps {
   userId?: string;
 }
 
-export const UserFeedback = ({ userId }: UserFeedbackProps) => {
+export const UserFeedback = forwardRef<HTMLDivElement, UserFeedbackProps>(({ userId }, ref) => {
   const { toast } = useToast();
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -52,7 +52,7 @@ export const UserFeedback = ({ userId }: UserFeedbackProps) => {
   };
 
   return (
-    <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+    <div ref={ref} className="gradient-card rounded-2xl p-4 border border-primary/20">
       <div className="flex items-center gap-2 mb-3">
         <MessageSquare className="w-5 h-5 text-primary" />
         <h3 className="text-sm font-semibold text-foreground font-myanmar">
@@ -106,4 +106,6 @@ export const UserFeedback = ({ userId }: UserFeedbackProps) => {
       </AnimatePresence>
     </div>
   );
-};
+});
+
+UserFeedback.displayName = "UserFeedback";
