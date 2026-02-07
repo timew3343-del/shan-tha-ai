@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Camera, Send, Square, Loader2, Sparkles, X, MessageCircle, Timer } from "lucide-react";
+import { Camera, Send, Square, Loader2, Sparkles, MessageCircle, Timer, AlertCircle, SwitchCamera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -29,12 +29,14 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
   const { credits, refetch: refetchCredits } = useCredits(userId);
   const { costs } = useCreditCosts();
   const [cameraActive, setCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const [sessionActive, setSessionActive] = useState(false);
   const [sessionTime, setSessionTime] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [creditsUsedSession, setCreditsUsedSession] = useState(0);
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -52,59 +54,90 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
     scrollToBottom();
   }, [messages]);
 
-  // Cleanup on unmount
+  // Auto-start camera on mount
   useEffect(() => {
+    startCamera();
     return () => {
       stopSession();
       stopCamera();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const startCamera = async () => {
+    setCameraError(null);
+    
+    // Check for secure context
+    if (!window.isSecureContext) {
+      setCameraError("HTTPS connection လိုအပ်ပါသည်။ Secure context မဟုတ်ပါ။");
+      return;
+    }
+
+    // Check for getUserMedia support
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCameraError("ဤ browser တွင် ကင်မရာ မရနိုင်ပါ။ Chrome/Safari အသုံးပြုပါ။");
+      return;
+    }
+
     try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        toast({ title: "ကင်မရာ မရနိုင်ပါ", description: "HTTPS connection လိုအပ်ပါသည်", variant: "destructive" });
-        return;
+      // Stop existing stream first
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
       }
 
       let stream: MediaStream;
       
-      // Try preferred constraints first, then fallback for mobile
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
-          audio: false,
-        });
-      } catch {
+      // Progressive fallback for maximum mobile compatibility
+      const constraints = [
+        { video: { facingMode, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
+        { video: { facingMode: { ideal: facingMode } }, audio: false },
+        { video: true, audio: false },
+      ];
+
+      for (let i = 0; i < constraints.length; i++) {
         try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { ideal: "user" } },
-            audio: false,
-          });
-        } catch {
-          // Final fallback: any camera
-          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+          stream = await navigator.mediaDevices.getUserMedia(constraints[i]);
+          break;
+        } catch (err) {
+          if (i === constraints.length - 1) throw err;
         }
       }
 
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+        videoRef.current.srcObject = stream!;
         videoRef.current.setAttribute('playsinline', 'true');
         videoRef.current.setAttribute('webkit-playsinline', 'true');
+        videoRef.current.setAttribute('autoplay', 'true');
+        videoRef.current.muted = true;
+        
+        // Wait for metadata to load before playing
+        await new Promise<void>((resolve, reject) => {
+          const vid = videoRef.current!;
+          const onLoaded = () => { vid.removeEventListener('loadedmetadata', onLoaded); resolve(); };
+          const onError = () => { vid.removeEventListener('error', onError); reject(new Error('Video load failed')); };
+          if (vid.readyState >= 1) { resolve(); return; }
+          vid.addEventListener('loadedmetadata', onLoaded);
+          vid.addEventListener('error', onError);
+        });
+        
         await videoRef.current.play();
       }
-      streamRef.current = stream;
+      streamRef.current = stream!;
       setCameraActive(true);
+      setCameraError(null);
     } catch (err: any) {
       console.error("Camera access error:", err);
-      const isPermissionDenied = err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError";
-      toast({
-        title: "ကင်မရာ ဖွင့်၍မရပါ",
-        description: isPermissionDenied
-          ? "ကင်မရာခွင့်ပြုချက် ပေးပါ။ Settings → Camera → Allow"
-          : "ကင်မရာ ဖွင့်ရာတွင် ပြဿနာရှိပါသည်",
-        variant: "destructive",
-      });
+      
+      if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError") {
+        setCameraError("ကင်မရာ ခွင့်ပြုချက် ပိတ်ထားပါသည်။\n\nSettings → Privacy → Camera → Allow ကို ဖွင့်ပေးပါ။");
+      } else if (err?.name === "NotFoundError" || err?.name === "DevicesNotFoundError") {
+        setCameraError("ကင်မရာ ရှာမတွေ့ပါ။ ကင်မရာ ချိတ်ဆက်ထားပါ သို့မဟုတ် အခြား device ဖြင့် စမ်းကြည့်ပါ။");
+      } else if (err?.name === "NotReadableError" || err?.name === "TrackStartError") {
+        setCameraError("ကင်မရာကို အခြား app မှ အသုံးပြုနေပါသည်။ အခြား app များ ပိတ်ပြီး ထပ်စမ်းပါ။");
+      } else {
+        setCameraError(`ကင်မရာ ဖွင့်၍မရပါ: ${err?.message || 'Unknown error'}`);
+      }
     }
   };
 
@@ -119,11 +152,22 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
     setCameraActive(false);
   };
 
+  const switchCamera = async () => {
+    const newMode = facingMode === "user" ? "environment" : "user";
+    setFacingMode(newMode);
+    stopCamera();
+    // Small delay for cleanup
+    setTimeout(() => startCamera(), 200);
+  };
+
   const captureFrame = useCallback((): string | null => {
-    if (!videoRef.current) return null;
+    if (!videoRef.current || videoRef.current.readyState < 2) return null;
     const canvas = document.createElement("canvas");
-    canvas.width = videoRef.current.videoWidth || 640;
-    canvas.height = videoRef.current.videoHeight || 480;
+    const vw = videoRef.current.videoWidth;
+    const vh = videoRef.current.videoHeight;
+    if (!vw || !vh) return null;
+    canvas.width = vw;
+    canvas.height = vh;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
     ctx.drawImage(videoRef.current, 0, 0);
@@ -139,23 +183,16 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
     setSessionTime(0);
     setCreditsUsedSession(0);
 
-    // Session timer
     timerRef.current = setInterval(() => {
       setSessionTime((prev) => prev + 1);
     }, 1000);
 
-    // Credit deduction timer (starts after FREE_SECONDS)
     deductTimerRef.current = setTimeout(() => {
-      // Start periodic deduction
       const deductInterval = setInterval(async () => {
         try {
           const { data: { session } } = await supabase.auth.getSession();
-          if (!session) {
-            stopSession();
-            return;
-          }
+          if (!session) { stopSession(); return; }
 
-          // Check balance first
           const { data: profile } = await supabase
             .from("profiles")
             .select("credit_balance")
@@ -163,22 +200,12 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
             .single();
 
           if (!profile || profile.credit_balance < creditPerTick) {
-            toast({
-              title: "ခရက်ဒစ် ကုန်သွားပါပြီ",
-              description: "Session ကို ရပ်တန့်လိုက်ပါပြီ",
-              variant: "destructive",
-            });
+            toast({ title: "ခရက်ဒစ် ကုန်သွားပါပြီ", description: "Session ကို ရပ်တန့်လိုက်ပါပြီ", variant: "destructive" });
             stopSession();
             return;
           }
 
-          // Deduct credits via RPC
-          await supabase.rpc("deduct_user_credits", {
-            _user_id: userId!,
-            _amount: creditPerTick,
-            _action: "Live Camera Chat",
-          });
-
+          await supabase.rpc("deduct_user_credits", { _user_id: userId!, _amount: creditPerTick, _action: "Live Camera Chat" });
           setCreditsUsedSession((prev) => prev + creditPerTick);
           refetchCredits();
         } catch (error) {
@@ -186,19 +213,12 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
         }
       }, DEDUCT_INTERVAL_SECONDS * 1000);
 
-      // Store for cleanup
       deductTimerRef.current = deductInterval as any;
     }, FREE_SECONDS * 1000);
 
-    // Auto-analyze every 15 seconds
-    autoAnalyzeRef.current = setInterval(() => {
-      autoAnalyze();
-    }, 15000);
+    autoAnalyzeRef.current = setInterval(() => { autoAnalyze(); }, 15000);
 
-    toast({
-      title: "Session စတင်ပါပြီ",
-      description: `ပထမ ${FREE_SECONDS} စက္ကန့် အခမဲ့`,
-    });
+    toast({ title: "Session စတင်ပါပြီ", description: `ပထမ ${FREE_SECONDS} စက္ကန့် အခမဲ့` });
   };
 
   const stopSession = () => {
@@ -220,14 +240,9 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
 
   const sendToAI = async (message: string, imageBase64?: string) => {
     if (!userId) return;
-
     setIsProcessing(true);
 
-    const userMsg: ChatMessage = {
-      role: "user",
-      content: message,
-      image: imageBase64?.substring(0, 100) ? "📸 Camera Frame" : undefined,
-    };
+    const userMsg: ChatMessage = { role: "user", content: message, image: imageBase64 ? "📸 Camera Frame" : undefined };
     setMessages((prev) => [...prev, userMsg]);
 
     try {
@@ -236,31 +251,16 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
 
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          message,
-          imageBase64: imageBase64?.split(",")[1],
-          imageType: "image/jpeg",
-        }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ message, imageBase64: imageBase64?.split(",")[1], imageType: "image/jpeg" }),
       });
 
       if (!response.ok) {
         const errData = await response.json();
-        if (response.status === 402) {
-          toast({
-            title: "ခရက်ဒစ် မလုံလောက်ပါ",
-            variant: "destructive",
-          });
-          stopSession();
-          return;
-        }
+        if (response.status === 402) { toast({ title: "ခရက်ဒစ် မလုံလောက်ပါ", variant: "destructive" }); stopSession(); return; }
         throw new Error(errData.error || "AI error");
       }
 
-      // Stream response
       if (!response.body) throw new Error("No response stream");
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -270,7 +270,6 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
         textBuffer += decoder.decode(value, { stream: true });
         let newlineIndex: number;
         while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
@@ -294,21 +293,13 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
                 return [...prev, { role: "assistant", content: fullResponse }];
               });
             }
-          } catch {
-            textBuffer = line + "\n" + textBuffer;
-            break;
-          }
+          } catch { textBuffer = line + "\n" + textBuffer; break; }
         }
       }
-
       refetchCredits();
     } catch (error: any) {
       console.error("Live chat error:", error);
-      toast({
-        title: "အမှားရှိပါသည်",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "အမှားရှိပါသည်", description: error.message, variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
@@ -318,17 +309,12 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
     const msg = input.trim();
     if (!msg) return;
     setInput("");
-
-    // Capture current frame to include with question
     const frame = cameraActive ? captureFrame() : undefined;
     await sendToAI(msg, frame || undefined);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
   const formatTime = (seconds: number) => {
@@ -340,46 +326,59 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
   const isFreeTime = sessionTime <= FREE_SECONDS;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      className="space-y-3 p-4 pb-24"
-    >
+    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-3 p-4 pb-24">
       <ToolHeader
         title="AI Live Camera Chat"
         subtitle="ကင်မရာ + AI စကားပြောခြင်း"
-        onBack={() => {
-          stopSession();
-          stopCamera();
-          onBack();
-        }}
+        onBack={() => { stopSession(); stopCamera(); onBack(); }}
       />
 
       {/* Camera Preview */}
-      <div className="relative aspect-video bg-black/80 rounded-2xl overflow-hidden border border-primary/20">
+      <div className="relative aspect-video bg-black rounded-2xl overflow-hidden border border-primary/20">
         <video
           ref={videoRef}
           className="w-full h-full object-cover"
           playsInline
+          autoPlay
           muted
+          style={{ minHeight: '200px' }}
         />
 
-        {!cameraActive && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Button onClick={startCamera} className="bg-primary text-primary-foreground">
-              <Camera className="w-5 h-5 mr-2" />
-              ကင်မရာဖွင့်ရန်
-            </Button>
+        {/* Camera error state */}
+        {cameraError && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/90 p-4">
+            <div className="text-center max-w-xs">
+              <AlertCircle className="w-10 h-10 text-destructive mx-auto mb-3" />
+              <p className="text-sm text-white font-myanmar whitespace-pre-line mb-4">{cameraError}</p>
+              <Button onClick={startCamera} className="bg-primary text-primary-foreground">
+                <Camera className="w-4 h-4 mr-2" />
+                ထပ်စမ်းမည်
+              </Button>
+            </div>
           </div>
+        )}
+
+        {/* Camera not active and no error */}
+        {!cameraActive && !cameraError && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-2" />
+              <p className="text-xs text-white/70 font-myanmar">ကင်မရာ ဖွင့်နေသည်...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Camera switch button */}
+        {cameraActive && (
+          <button onClick={switchCamera} className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center border border-white/20 hover:bg-black/70 transition-colors">
+            <SwitchCamera className="w-4 h-4 text-white" />
+          </button>
         )}
 
         {/* Session overlay */}
         {sessionActive && (
           <div className="absolute top-3 left-3 flex items-center gap-2">
-            <div className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 ${
-              isFreeTime ? "bg-success/90 text-white" : "bg-destructive/90 text-white"
-            }`}>
+            <div className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 ${isFreeTime ? "bg-green-500/90 text-white" : "bg-destructive/90 text-white"}`}>
               <div className={`w-2 h-2 rounded-full ${isFreeTime ? "bg-white" : "bg-white animate-pulse"}`} />
               <Timer className="w-3 h-3" />
               {formatTime(sessionTime)}
@@ -392,20 +391,12 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
       {/* Session Controls */}
       <div className="flex gap-2">
         {!sessionActive ? (
-          <Button
-            onClick={startSession}
-            disabled={!cameraActive}
-            className="flex-1 bg-primary text-primary-foreground rounded-2xl py-3"
-          >
+          <Button onClick={startSession} disabled={!cameraActive} className="flex-1 bg-primary text-primary-foreground rounded-2xl py-3">
             <Sparkles className="w-4 h-4 mr-2" />
             <span className="font-myanmar">Session စတင်မည် (ပထမ {FREE_SECONDS}s အခမဲ့)</span>
           </Button>
         ) : (
-          <Button
-            onClick={stopSession}
-            variant="destructive"
-            className="flex-1 rounded-2xl py-3"
-          >
+          <Button onClick={stopSession} variant="destructive" className="flex-1 rounded-2xl py-3">
             <Square className="w-4 h-4 mr-2" />
             <span className="font-myanmar">Session ရပ်မည်</span>
           </Button>
@@ -426,30 +417,15 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
           {messages.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center text-center">
               <MessageCircle className="w-10 h-10 text-muted-foreground/30 mb-2" />
-              <p className="text-xs text-muted-foreground font-myanmar">
-                Session စတင်ပြီး AI နှင့် စကားပြောပါ
-              </p>
+              <p className="text-xs text-muted-foreground font-myanmar">Session စတင်ပြီး AI နှင့် စကားပြောပါ</p>
             </div>
           )}
 
           <AnimatePresence>
             {messages.map((msg, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-[85%] rounded-2xl p-2.5 ${
-                    msg.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-secondary-foreground"
-                  }`}
-                >
-                  {msg.image && (
-                    <span className="text-xs opacity-70">📸</span>
-                  )}
+              <motion.div key={idx} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[85%] rounded-2xl p-2.5 ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}>
+                  {msg.image && <span className="text-xs opacity-70">📸</span>}
                   {msg.role === "assistant" ? (
                     <div className="prose prose-sm dark:prose-invert max-w-none font-myanmar text-xs leading-relaxed">
                       <ReactMarkdown>{msg.content}</ReactMarkdown>
@@ -469,7 +445,6 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
               </div>
             </div>
           )}
-
           <div ref={messagesEndRef} />
         </div>
 
@@ -486,16 +461,8 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
                 disabled={isProcessing}
               />
             </div>
-            <Button
-              onClick={handleSend}
-              disabled={isProcessing || !input.trim()}
-              className="shrink-0 h-9 w-9 rounded-xl bg-primary"
-            >
-              {isProcessing ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Send className="w-4 h-4" />
-              )}
+            <Button onClick={handleSend} disabled={isProcessing || !input.trim()} className="shrink-0 h-9 w-9 rounded-xl bg-primary">
+              {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </Button>
           </div>
         </div>

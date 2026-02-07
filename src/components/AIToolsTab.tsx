@@ -1,13 +1,14 @@
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, lazy, Suspense, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Image, Video, Volume2, Crown, Wallet, Gift, 
   ZoomIn, Eraser, Sparkles, Youtube, FileText, Captions,
   Megaphone, Briefcase, Shield, BookOpen, ListChecks,
-  Music, Palette, Zap, Loader2, Wand2
+  Music, Palette, Zap, Loader2, Wand2, Search, Home,
+  Mic, PenTool
 } from "lucide-react";
 
-// Lazy load all tool components for code splitting
+// Lazy load all tool components
 const ImageTool = lazy(() => import("./tools/ImageTool").then(m => ({ default: m.ImageTool })));
 const VideoTool = lazy(() => import("./tools/VideoTool").then(m => ({ default: m.VideoTool })));
 const SpeechTool = lazy(() => import("./tools/SpeechTool").then(m => ({ default: m.SpeechTool })));
@@ -27,6 +28,7 @@ const StoryVideoTool = lazy(() => import("./tools/StoryVideoTool").then(m => ({ 
 const SceneSummarizerTool = lazy(() => import("./tools/SceneSummarizerTool").then(m => ({ default: m.SceneSummarizerTool })));
 const SongMTVTool = lazy(() => import("./tools/SongMTVTool").then(m => ({ default: m.SongMTVTool })));
 const VideoRedesignTool = lazy(() => import("./tools/VideoRedesignTool").then(m => ({ default: m.VideoRedesignTool })));
+const LogoDesignTool = lazy(() => import("./tools/LogoDesignTool").then(m => ({ default: m.LogoDesignTool })));
 
 import { ToolCardCompact } from "./ToolCardCompact";
 import { AIChatbot } from "./AIChatbot";
@@ -37,14 +39,40 @@ import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { useCredits } from "@/hooks/useCredits";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useLanguage } from "@/i18n/LanguageContext";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, LayoutGroup } from "framer-motion";
 import { Users } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv" | "videoredesign";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv" | "videoredesign" | "logodesign";
+
+type ToolCategory = "all" | "image" | "video" | "audio" | "premium";
+
+interface ToolDef {
+  id: ActiveTool;
+  icon: any;
+  titleKey: string;
+  fallbackTitle: string;
+  descKey: string;
+  fallbackDesc: string;
+  gradient: string;
+  credits: number;
+  category: ToolCategory[];
+  badge?: string;
+  badgeTooltip?: string;
+  size?: "small" | "default";
+}
+
+const CATEGORIES: { key: ToolCategory; label: string; icon: any }[] = [
+  { key: "all", label: "အားလုံး", icon: Home },
+  { key: "image", label: "ပုံရိပ် Tools", icon: Image },
+  { key: "video", label: "ဗီဒီယို Tools", icon: Video },
+  { key: "audio", label: "အသံနှင့်စာ", icon: Mic },
+  { key: "premium", label: "Premium", icon: Crown },
+];
 
 const ToolLoadingFallback = () => (
   <div className="flex items-center justify-center py-20">
@@ -59,6 +87,8 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const navigate = useNavigate();
   const [activeTool, setActiveTool] = useState<ActiveTool>("home");
   const [showLowCreditAlert, setShowLowCreditAlert] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<ToolCategory>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const { costs } = useCreditCosts();
   const { credits, isLoading: creditsLoading } = useCredits(userId);
   const { isAdmin } = useUserRole(userId);
@@ -73,6 +103,50 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const handleBack = () => setActiveTool("home");
 
   const docSlideCost = Math.ceil((2 + 3 * 5) * 1.4);
+
+  const tools: ToolDef[] = useMemo(() => [
+    // Premium
+    { id: "songmtv", icon: Music, titleKey: "tool.songMtv", fallbackTitle: "သီချင်းထုတ်မယ်/MTV ထုတ်မယ်", descKey: "tool.songMtv.desc", fallbackDesc: "AI အသုံးပြု၍ သီချင်းနှင့် MTV များ ဖန်တီးပေးခြင်း", gradient: "bg-gradient-to-br from-rose-500 via-pink-600 to-fuchsia-700", credits: costs.song_mtv, category: ["premium", "audio"], badge: "PREMIUM", badgeTooltip: "AI Song & MTV Creator" },
+    { id: "autoad", icon: Zap, titleKey: "tool.autoAd", fallbackTitle: "AI ကို ကြော်ငြာ အပ်ခြင်း", descKey: "tool.autoAd.desc", fallbackDesc: "AI မှ သင်အပ်သောကြော်ငြာကို ဖန်တီးပေးပါလိမ့်မည်", gradient: "bg-gradient-to-br from-orange-500 via-amber-600 to-yellow-700", credits: costs.auto_ad, category: ["premium", "video"], badge: "PREMIUM", badgeTooltip: "Full Auto Ad Generator" },
+    // Image
+    { id: "image", icon: Image, titleKey: "tool.imageGen", fallbackTitle: "ပုံထုတ်ရန်", descKey: "tool.imageGen.desc", fallbackDesc: "AI ပုံဆွဲ", gradient: "bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700", credits: costs.image_generation, category: ["image"], size: "small" },
+    { id: "upscale", icon: ZoomIn, titleKey: "tool.upscale", fallbackTitle: "4K Upscale", descKey: "tool.upscale.desc", fallbackDesc: "Resolution မြှင့်", gradient: "bg-gradient-to-br from-cyan-500 via-cyan-600 to-blue-700", credits: costs.upscale, category: ["image"], size: "small" },
+    { id: "bgremove", icon: Eraser, titleKey: "tool.bgRemove", fallbackTitle: "BG Remove", descKey: "tool.bgRemove.desc", fallbackDesc: "Background ဖယ်", gradient: "bg-gradient-to-br from-teal-500 via-teal-600 to-emerald-700", credits: costs.bg_remove, category: ["image"], size: "small" },
+    { id: "bgstudio", icon: Palette, titleKey: "tool.bgStudio", fallbackTitle: "ပစ္စည်းပုံထည့်/အော်တို ဘတ်ဂရောင်းချိန်း", descKey: "tool.bgStudio.desc", fallbackDesc: "ကုန်ပစ္စည်းပုံရိပ်များကို နောက်ခံအလှများ အလိုအလျောက် ပြောင်းလဲပေးခြင်း", gradient: "bg-gradient-to-br from-violet-500 via-purple-600 to-fuchsia-700", credits: costs.bg_studio, category: ["image"], size: "small", badge: "NEW", badgeTooltip: "AI Background Studio" },
+    { id: "logodesign", icon: PenTool, titleKey: "", fallbackTitle: "Logo & Graphic Design", descKey: "", fallbackDesc: "Logo၊ FB Cover ဒီဇိုင်း", gradient: "bg-gradient-to-br from-pink-500 via-rose-600 to-red-700", credits: costs.logo_design, category: ["image"], size: "small", badge: "NEW", badgeTooltip: "AI Logo & Graphic Design" },
+    { id: "faceswap", icon: Users, titleKey: "tool.faceSwap", fallbackTitle: "မျက်နှာပြောင်း", descKey: "tool.faceSwap.desc", fallbackDesc: "Face Swap", gradient: "bg-gradient-to-br from-purple-500 via-violet-600 to-indigo-700", credits: costs.face_swap, category: ["image", "video"] },
+    // Video
+    { id: "video", icon: Video, titleKey: "tool.videoGen", fallbackTitle: "ဗီဒီယိုထုတ်ရန်", descKey: "tool.videoGen.desc", fallbackDesc: "ပုံမှ ဗီဒီယို", gradient: "bg-gradient-to-br from-red-500 via-rose-600 to-pink-700", credits: costs.video_generation, category: ["video"] },
+    { id: "videoredesign", icon: Wand2, titleKey: "", fallbackTitle: "AI Video Redesign", descKey: "", fallbackDesc: "ဗီဒီယို Style ပြောင်း", gradient: "bg-gradient-to-br from-violet-500 via-fuchsia-600 to-pink-700", credits: costs.video_redesign, category: ["video"], badge: "NEW", badgeTooltip: "AI Video Style Transfer" },
+    { id: "caption", icon: Captions, titleKey: "tool.caption", fallbackTitle: "AI Caption", descKey: "tool.caption.desc", fallbackDesc: "စာတန်းထိုး", gradient: "bg-gradient-to-br from-amber-500 via-orange-600 to-red-700", credits: costs.caption_per_minute, category: ["video"] },
+    { id: "adgenerator", icon: Megaphone, titleKey: "tool.adGen", fallbackTitle: "AI Ad", descKey: "tool.adGen.desc", fallbackDesc: "ကြော်ငြာ ဖန်တီး", gradient: "bg-gradient-to-br from-pink-500 via-fuchsia-600 to-purple-700", credits: costs.ad_generator, category: ["video"] },
+    { id: "videocopywriting", icon: Crown, titleKey: "tool.videoCopy", fallbackTitle: "Video Copywriting", descKey: "tool.videoCopy.desc", fallbackDesc: "AI ကြော်ငြာ ဖန်တီး", gradient: "bg-gradient-to-br from-amber-500 via-yellow-600 to-orange-700", credits: costs.ai_chat * 3, category: ["video"], badge: "PRO", badgeTooltip: "Our most powerful AI video tool" },
+    { id: "copyrightchecker", icon: Shield, titleKey: "tool.copyright", fallbackTitle: "Copyright Check", descKey: "tool.copyright.desc", fallbackDesc: "မူပိုင်ခွင့် စစ်ဆေးခြင်း", gradient: "bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-700", credits: costs.copyright_check, category: ["video"], badge: "NEW" },
+    { id: "storyvideo", icon: BookOpen, titleKey: "tool.storyVideo", fallbackTitle: "Story → Video", descKey: "tool.storyVideo.desc", fallbackDesc: "ပုံပြင်မှ ဗီဒီယို", gradient: "bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-700", credits: costs.story_video, category: ["video"], badge: "NEW" },
+    { id: "scenesummarizer", icon: ListChecks, titleKey: "tool.sceneSumm", fallbackTitle: "Video Recap", descKey: "tool.sceneSumm.desc", fallbackDesc: "ဗီဒီယို အကျဥ်းချုပ်", gradient: "bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-700", credits: costs.scene_summarizer, category: ["video"] },
+    // Audio/Text
+    { id: "speech", icon: Volume2, titleKey: "tool.tts", fallbackTitle: "အသံ ↔ စာ", descKey: "tool.tts.desc", fallbackDesc: "Text-to-Speech & STT", gradient: "bg-gradient-to-br from-emerald-500 via-green-600 to-teal-700", credits: costs.text_to_speech, category: ["audio"] },
+    { id: "youtube", icon: Youtube, titleKey: "tool.youtubeText", fallbackTitle: "YouTube → စာ", descKey: "tool.youtubeText.desc", fallbackDesc: "ဗီဒီယိုမှ စာထုတ်", gradient: "bg-gradient-to-br from-red-500 via-red-600 to-rose-700", credits: costs.youtube_to_text, category: ["audio"] },
+    // Social/Doc
+    { id: "socialmedia", icon: Briefcase, titleKey: "tool.socialMedia", fallbackTitle: "AI Studio Management", descKey: "tool.socialMedia.desc", fallbackDesc: "စိတ်ကြိုက် မီဒီယာမှာလုပ်ရန် ပလန်ဆွဲခိုင်းခြင်း", gradient: "bg-gradient-to-br from-fuchsia-500 via-pink-600 to-rose-700", credits: costs.social_media_agent, category: ["premium"] },
+    { id: "docslide", icon: FileText, titleKey: "tool.docSlide", fallbackTitle: "AI Doc & Slide", descKey: "tool.docSlide.desc", fallbackDesc: "PDF, PPTX, DOCX ဖန်တီးမည်", gradient: "bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-700", credits: docSlideCost, category: ["audio"] },
+  ], [costs, docSlideCost]);
+
+  const filteredTools = useMemo(() => {
+    let filtered = tools;
+    if (activeCategory !== "all") {
+      filtered = filtered.filter(t => t.category.includes(activeCategory));
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(tool => {
+        const title = (tool.titleKey ? t(tool.titleKey) : "") || tool.fallbackTitle;
+        const desc = (tool.descKey ? t(tool.descKey) : "") || tool.fallbackDesc;
+        return title.toLowerCase().includes(q) || desc.toLowerCase().includes(q) || tool.id.toLowerCase().includes(q);
+      });
+    }
+    return filtered;
+  }, [tools, activeCategory, searchQuery]);
 
   const renderActiveTool = () => {
     switch (activeTool) {
@@ -95,27 +169,18 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
       case "scenesummarizer": return <SceneSummarizerTool key="scenesummarizer" userId={userId} onBack={handleBack} />;
       case "songmtv": return <SongMTVTool key="songmtv" userId={userId} onBack={handleBack} />;
       case "videoredesign": return <VideoRedesignTool key="videoredesign" userId={userId} onBack={handleBack} />;
+      case "logodesign": return <LogoDesignTool key="logodesign" userId={userId} onBack={handleBack} />;
       default: return null;
     }
   };
 
   return (
     <div className="min-h-screen">
-      <LowCreditAlert 
-        credits={credits} 
-        show={showLowCreditAlert} 
-        onClose={() => setShowLowCreditAlert(false)} 
-      />
+      <LowCreditAlert credits={credits} show={showLowCreditAlert} onClose={() => setShowLowCreditAlert(false)} />
 
       <AnimatePresence mode="wait">
         {activeTool === "home" ? (
-          <motion.div
-            key="home"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="flex flex-col gap-4 p-4 pb-24"
-          >
+          <motion.div key="home" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, x: -20 }} className="flex flex-col gap-4 p-4 pb-24">
             {/* Header */}
             <div className="text-center pt-2">
               <div className="inline-flex items-center gap-2 mb-1">
@@ -123,9 +188,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                 <h1 className="text-xl font-bold text-primary font-myanmar">{t('dashboard.title')}</h1>
                 <Crown className="w-5 h-5 text-primary animate-pulse" />
               </div>
-              <p className="text-muted-foreground text-xs font-myanmar">
-                {t('dashboard.subtitle')}
-              </p>
+              <p className="text-muted-foreground text-xs font-myanmar">{t('dashboard.subtitle')}</p>
             </div>
 
             {/* Top-up Buttons */}
@@ -134,9 +197,9 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                 <Wallet className="w-5 h-5 text-primary" />
                 <span className="text-sm text-primary font-medium font-myanmar">{t('dashboard.topupBtn')}</span>
               </button>
-              <button onClick={() => navigate("/earn-credits")} className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-success/10 border border-success/30 hover:bg-success/20 transition-all">
-                <Gift className="w-5 h-5 text-success" />
-                <span className="text-sm text-success font-medium font-myanmar">{t('dashboard.earnCredits')}</span>
+              <button onClick={() => navigate("/earn-credits")} className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 transition-all">
+                <Gift className="w-5 h-5 text-green-500" />
+                <span className="text-sm text-green-500 font-medium font-myanmar">{t('dashboard.earnCredits')}</span>
               </button>
             </motion.div>
 
@@ -145,84 +208,79 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               <AIChatbot userId={userId} />
             </motion.div>
 
-            {/* 🔥 Premium Tools */}
+            {/* Search Bar */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.17 }}>
-              <div className="flex items-center gap-2 mb-2">
-                <Crown className="w-4 h-4 text-primary" />
-                <h2 className="text-sm font-semibold text-foreground font-myanmar">Premium Tools</h2>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <ToolCardCompact icon={Music} title={t('tool.songMtv') || 'AI သီချင်း & MTV'} description={t('tool.songMtv.desc') || 'သီချင်းနှင့် MTV ဖန်တီး'} gradient="bg-gradient-to-br from-rose-500 via-pink-600 to-fuchsia-700" onClick={() => setActiveTool("songmtv")} credits={costs.song_mtv} badge="PREMIUM" badgeTooltip="AI Song & MTV Creator" />
-                <ToolCardCompact icon={Zap} title={t('tool.autoAd') || 'Auto ကြော်ငြာ'} description={t('tool.autoAd.desc') || 'AI အော်တိုကြော်ငြာ'} gradient="bg-gradient-to-br from-orange-500 via-amber-600 to-yellow-700" onClick={() => setActiveTool("autoad")} credits={costs.auto_ad} badge="PREMIUM" badgeTooltip="Full Auto Ad Generator" />
-              </div>
-            </motion.div>
-
-            {/* Image Tools */}
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-              <div className="flex items-center gap-2 mb-2">
-                <Image className="w-4 h-4 text-primary" />
-                <h2 className="text-sm font-semibold text-foreground font-myanmar">{t('tools.image')}</h2>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <ToolCardCompact icon={Image} title={t('tool.imageGen')} description={t('tool.imageGen.desc')} gradient="bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700" onClick={() => setActiveTool("image")} credits={costs.image_generation} size="small" />
-                <ToolCardCompact icon={ZoomIn} title={t('tool.upscale')} description={t('tool.upscale.desc')} gradient="bg-gradient-to-br from-cyan-500 via-cyan-600 to-blue-700" onClick={() => setActiveTool("upscale")} credits={costs.upscale} size="small" />
-                <ToolCardCompact icon={Eraser} title={t('tool.bgRemove')} description={t('tool.bgRemove.desc')} gradient="bg-gradient-to-br from-teal-500 via-teal-600 to-emerald-700" onClick={() => setActiveTool("bgremove")} credits={costs.bg_remove} size="small" />
-                <ToolCardCompact icon={Palette} title={t('tool.bgStudio') || 'BG Studio'} description={t('tool.bgStudio.desc') || 'နောက်ခံပြောင်း'} gradient="bg-gradient-to-br from-violet-500 via-purple-600 to-fuchsia-700" onClick={() => setActiveTool("bgstudio")} credits={costs.bg_studio} size="small" badge="NEW" badgeTooltip="AI Background Studio" />
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Tool ရှာရန်... (e.g. Face, Video, Logo)"
+                  className="pl-9 h-10 rounded-2xl bg-card/40 backdrop-blur-xl border border-white/10 text-sm font-myanmar"
+                />
               </div>
             </motion.div>
 
-            {/* Video Tools */}
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-              <div className="flex items-center gap-2 mb-2">
-                <Video className="w-4 h-4 text-primary" />
-                <h2 className="text-sm font-semibold text-foreground font-myanmar">{t('tools.video')}</h2>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <ToolCardCompact icon={Video} title={t('tool.videoGen')} description={t('tool.videoGen.desc')} gradient="bg-gradient-to-br from-red-500 via-rose-600 to-pink-700" onClick={() => setActiveTool("video")} credits={costs.video_generation} />
-                <ToolCardCompact icon={Users} title={t('tool.faceSwap')} description={t('tool.faceSwap.desc')} gradient="bg-gradient-to-br from-purple-500 via-violet-600 to-indigo-700" onClick={() => setActiveTool("faceswap")} credits={costs.face_swap} />
-                <ToolCardCompact icon={Wand2} title="AI Video Redesign" description="ဗီဒီယို Style ပြောင်း" gradient="bg-gradient-to-br from-violet-500 via-fuchsia-600 to-pink-700" onClick={() => setActiveTool("videoredesign")} credits={costs.video_redesign} badge="NEW" badgeTooltip="AI Video Style Transfer" />
-                <ToolCardCompact icon={Captions} title={t('tool.caption')} description={t('tool.caption.desc')} gradient="bg-gradient-to-br from-amber-500 via-orange-600 to-red-700" onClick={() => setActiveTool("caption")} credits={costs.caption_per_minute} />
-                <ToolCardCompact icon={Megaphone} title={t('tool.adGen')} description={t('tool.adGen.desc')} gradient="bg-gradient-to-br from-pink-500 via-fuchsia-600 to-purple-700" onClick={() => setActiveTool("adgenerator")} credits={costs.ad_generator} />
-                <ToolCardCompact icon={Crown} title={t('tool.videoCopy')} description={t('tool.videoCopy.desc')} gradient="bg-gradient-to-br from-amber-500 via-yellow-600 to-orange-700" onClick={() => setActiveTool("videocopywriting")} credits={costs.ai_chat * 3} badge="PRO" badgeTooltip="Our most powerful AI video tool" />
-                <ToolCardCompact icon={Shield} title={t('tool.copyright')} description={t('tool.copyright.desc')} gradient="bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-700" onClick={() => setActiveTool("copyrightchecker")} credits={costs.copyright_check} badge="NEW" badgeTooltip="AI Copyright Safety Analysis" />
-                <ToolCardCompact icon={BookOpen} title={t('tool.storyVideo')} description={t('tool.storyVideo.desc')} gradient="bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-700" onClick={() => setActiveTool("storyvideo")} credits={costs.story_video} badge="NEW" badgeTooltip="AI Story-to-Video with Character Lock" />
-                <ToolCardCompact icon={ListChecks} title={t('tool.sceneSumm')} description={t('tool.sceneSumm.desc')} gradient="bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-700" onClick={() => setActiveTool("scenesummarizer")} credits={costs.scene_summarizer} />
-              </div>
-            </motion.div>
-
-            {/* Speech/Text */}
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-              <div className="flex items-center gap-2 mb-2">
-                <Volume2 className="w-4 h-4 text-primary" />
-                <h2 className="text-sm font-semibold text-foreground font-myanmar">{t('tools.speech')}</h2>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <ToolCardCompact icon={Volume2} title={t('tool.tts')} description={t('tool.tts.desc')} gradient="bg-gradient-to-br from-emerald-500 via-green-600 to-teal-700" onClick={() => setActiveTool("speech")} credits={costs.text_to_speech} />
-                <ToolCardCompact icon={Youtube} title={t('tool.youtubeText')} description={t('tool.youtubeText.desc')} gradient="bg-gradient-to-br from-red-500 via-red-600 to-rose-700" onClick={() => setActiveTool("youtube")} credits={costs.youtube_to_text} />
+            {/* Category Tabs */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.19 }}>
+              <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                {CATEGORIES.map((cat) => {
+                  const Icon = cat.icon;
+                  const isActive = activeCategory === cat.key;
+                  return (
+                    <button
+                      key={cat.key}
+                      onClick={() => setActiveCategory(cat.key)}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-medium whitespace-nowrap transition-all duration-300 font-myanmar ${
+                        isActive
+                          ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30"
+                          : "bg-card/40 backdrop-blur-xl border border-white/10 text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      {cat.label}
+                    </button>
+                  );
+                })}
               </div>
             </motion.div>
 
-            {/* Social Media */}
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.33 }}>
-              <div className="flex items-center gap-2 mb-2">
-                <Briefcase className="w-4 h-4 text-primary" />
-                <h2 className="text-sm font-semibold text-foreground font-myanmar">{t('tools.social')}</h2>
-              </div>
-              <div className="grid grid-cols-1 gap-2">
-                <ToolCardCompact icon={Briefcase} title={t('tool.socialMedia')} description={t('tool.socialMedia.desc')} gradient="bg-gradient-to-br from-fuchsia-500 via-pink-600 to-rose-700" onClick={() => setActiveTool("socialmedia")} credits={costs.social_media_agent} />
-              </div>
-            </motion.div>
+            {/* Tools Grid */}
+            <LayoutGroup>
+              <motion.div layout className="grid grid-cols-2 gap-2">
+                <AnimatePresence mode="popLayout">
+                  {filteredTools.map((tool, idx) => (
+                    <motion.div
+                      key={tool.id}
+                      layout
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      transition={{ delay: idx * 0.03, type: "spring", stiffness: 300, damping: 25 }}
+                    >
+                      <ToolCardCompact
+                        icon={tool.icon}
+                        title={(tool.titleKey ? t(tool.titleKey) : "") || tool.fallbackTitle}
+                        description={(tool.descKey ? t(tool.descKey) : "") || tool.fallbackDesc}
+                        gradient={tool.gradient}
+                        onClick={() => setActiveTool(tool.id)}
+                        credits={tool.credits}
+                        size={tool.size}
+                        badge={tool.badge}
+                        badgeTooltip={tool.badgeTooltip}
+                      />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </motion.div>
+            </LayoutGroup>
 
-            {/* Document Tools */}
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
-              <div className="flex items-center gap-2 mb-2">
-                <FileText className="w-4 h-4 text-primary" />
-                <h2 className="text-sm font-semibold text-foreground font-myanmar">{t('tools.document')}</h2>
+            {filteredTools.length === 0 && (
+              <div className="text-center py-12">
+                <Search className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground font-myanmar">"{searchQuery}" နှင့် ကိုက်ညီသော tool မရှိပါ</p>
               </div>
-              <div className="grid grid-cols-1 gap-2">
-                <ToolCardCompact icon={FileText} title={t('tool.docSlide')} description={t('tool.docSlide.desc')} gradient="bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-700" onClick={() => setActiveTool("docslide")} credits={docSlideCost} />
-              </div>
-            </motion.div>
+            )}
 
             {/* Referral */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
@@ -237,9 +295,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
             {/* Info */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="gradient-card rounded-2xl p-4 border border-primary/20">
               <h3 className="text-sm font-semibold text-primary mb-1 font-myanmar">{t('dashboard.tip')}</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed font-myanmar">
-                {t('dashboard.tipText')}
-              </p>
+              <p className="text-xs text-muted-foreground leading-relaxed font-myanmar">{t('dashboard.tipText')}</p>
             </motion.div>
 
             {/* Footer */}
