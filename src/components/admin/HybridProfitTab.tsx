@@ -293,8 +293,8 @@ export const HybridProfitTab = () => {
             <Zap className="w-4 h-4 text-orange-500" />
           </div>
           <div>
-            <h4 className="font-semibold text-foreground text-sm">Auto Ad Profit %</h4>
-            <p className="text-[10px] text-muted-foreground">Auto ကြော်ငြာအပ်ရန် အတွက် သီးသန့် အမြတ်နှုန်း</p>
+            <h4 className="font-semibold text-foreground text-sm font-myanmar">Auto ကြော်ငြာအပ်ရန် Profit Margin %</h4>
+            <p className="text-[10px] text-muted-foreground font-myanmar">Auto Ad tool အတွက် သီးသန့် အမြတ်နှုန်း (Global Margin နှင့် သက်ဆိုင်မှု မရှိပါ)</p>
           </div>
           <span className="text-2xl font-bold text-orange-500 ml-auto">{autoAdMargin}%</span>
         </div>

@@ -1,29 +1,31 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Image, Video, Volume2, Crown, Wallet, Gift, 
   ZoomIn, Eraser, Sparkles, Youtube, FileText, Captions,
   Megaphone, Briefcase, Shield, BookOpen, ListChecks,
-  Music, Palette, Zap
+  Music, Palette, Zap, Loader2
 } from "lucide-react";
-import { ImageTool } from "./tools/ImageTool";
-import { VideoTool } from "./tools/VideoTool";
-import { SpeechTool } from "./tools/SpeechTool";
-import { FaceSwapTool } from "./tools/FaceSwapTool";
-import { UpscaleTool } from "./tools/UpscaleTool";
-import { BgRemoveTool } from "./tools/BgRemoveTool";
-import { BgStudioTool } from "./tools/BgStudioTool";
-import { YouTubeToTextTool } from "./tools/YouTubeToTextTool";
-import { DocSlideTool } from "./tools/DocSlideTool";
-import { CaptionTool } from "./tools/CaptionTool";
-import { AdGeneratorTool } from "./tools/AdGeneratorTool";
-import { AutoAdTool } from "./tools/AutoAdTool";
-import { SocialMediaManagerTool } from "./tools/SocialMediaManagerTool";
-import { VideoCopywritingTool } from "./tools/VideoCopywritingTool";
-import { CopyrightCheckerTool } from "./tools/CopyrightCheckerTool";
-import { StoryVideoTool } from "./tools/StoryVideoTool";
-import { SceneSummarizerTool } from "./tools/SceneSummarizerTool";
-import { SongMTVTool } from "./tools/SongMTVTool";
+
+// Lazy load all tool components for code splitting
+const ImageTool = lazy(() => import("./tools/ImageTool").then(m => ({ default: m.ImageTool })));
+const VideoTool = lazy(() => import("./tools/VideoTool").then(m => ({ default: m.VideoTool })));
+const SpeechTool = lazy(() => import("./tools/SpeechTool").then(m => ({ default: m.SpeechTool })));
+const FaceSwapTool = lazy(() => import("./tools/FaceSwapTool").then(m => ({ default: m.FaceSwapTool })));
+const UpscaleTool = lazy(() => import("./tools/UpscaleTool").then(m => ({ default: m.UpscaleTool })));
+const BgRemoveTool = lazy(() => import("./tools/BgRemoveTool").then(m => ({ default: m.BgRemoveTool })));
+const BgStudioTool = lazy(() => import("./tools/BgStudioTool").then(m => ({ default: m.BgStudioTool })));
+const YouTubeToTextTool = lazy(() => import("./tools/YouTubeToTextTool").then(m => ({ default: m.YouTubeToTextTool })));
+const DocSlideTool = lazy(() => import("./tools/DocSlideTool").then(m => ({ default: m.DocSlideTool })));
+const CaptionTool = lazy(() => import("./tools/CaptionTool").then(m => ({ default: m.CaptionTool })));
+const AdGeneratorTool = lazy(() => import("./tools/AdGeneratorTool").then(m => ({ default: m.AdGeneratorTool })));
+const AutoAdTool = lazy(() => import("./tools/AutoAdTool").then(m => ({ default: m.AutoAdTool })));
+const SocialMediaManagerTool = lazy(() => import("./tools/SocialMediaManagerTool").then(m => ({ default: m.SocialMediaManagerTool })));
+const VideoCopywritingTool = lazy(() => import("./tools/VideoCopywritingTool").then(m => ({ default: m.VideoCopywritingTool })));
+const CopyrightCheckerTool = lazy(() => import("./tools/CopyrightCheckerTool").then(m => ({ default: m.CopyrightCheckerTool })));
+const StoryVideoTool = lazy(() => import("./tools/StoryVideoTool").then(m => ({ default: m.StoryVideoTool })));
+const SceneSummarizerTool = lazy(() => import("./tools/SceneSummarizerTool").then(m => ({ default: m.SceneSummarizerTool })));
+const SongMTVTool = lazy(() => import("./tools/SongMTVTool").then(m => ({ default: m.SongMTVTool })));
 
 import { ToolCardCompact } from "./ToolCardCompact";
 import { AIChatbot } from "./AIChatbot";
@@ -42,6 +44,15 @@ interface AIToolsTabProps {
 }
 
 type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv";
+
+const ToolLoadingFallback = () => (
+  <div className="flex items-center justify-center py-20">
+    <div className="text-center">
+      <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-3" />
+      <p className="text-xs text-muted-foreground">Loading tool...</p>
+    </div>
+  </div>
+);
 
 export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const navigate = useNavigate();
@@ -132,7 +143,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               <AIChatbot userId={userId} />
             </motion.div>
 
-            {/* 🔥 Premium Tools - NEW */}
+            {/* 🔥 Premium Tools */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.17 }}>
               <div className="flex items-center gap-2 mb-2">
                 <Crown className="w-4 h-4 text-primary" />
@@ -245,7 +256,9 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
             </motion.div>
           </motion.div>
         ) : (
-          renderActiveTool()
+          <Suspense fallback={<ToolLoadingFallback />}>
+            {renderActiveTool()}
+          </Suspense>
         )}
       </AnimatePresence>
     </div>
