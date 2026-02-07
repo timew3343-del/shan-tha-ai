@@ -26,93 +26,27 @@ export const PromoCodeRedeem = ({ userId }: PromoCodeRedeemProps) => {
 
     setIsRedeeming(true);
     try {
-      // Find the promo code
-      const { data: promoCode, error: findError } = await supabase
-        .from("promo_codes")
-        .select("*")
-        .eq("code", trimmed)
-        .eq("is_active", true)
-        .maybeSingle();
-
-      if (findError) throw findError;
-
-      if (!promoCode) {
-        toast({ title: "Code မမှန်ကန်ပါ", description: "သက်တမ်းကုန် သို့မဟုတ် မရှိသော Code ဖြစ်ပါသည်", variant: "destructive" });
-        return;
-      }
-
-      // Check expiry
-      if (promoCode.expires_at && new Date(promoCode.expires_at) < new Date()) {
-        toast({ title: "Code သက်တမ်းကုန်ပြီ", variant: "destructive" });
-        return;
-      }
-
-      // Check max uses
-      if (promoCode.max_uses !== null && promoCode.uses_count >= promoCode.max_uses) {
-        toast({ title: "Code အသုံးပြုမှု ကန့်သတ်ပြည့်ပြီ", variant: "destructive" });
-        return;
-      }
-
-      // Check if already used by this user
-      const { data: existingUse } = await supabase
-        .from("promo_code_uses")
-        .select("id")
-        .eq("promo_code_id", promoCode.id)
-        .eq("user_id", userId)
-        .maybeSingle();
-
-      if (existingUse) {
-        toast({ title: "ဤ Code ကို အသုံးပြုပြီးဖြစ်ပါသည်", variant: "destructive" });
-        return;
-      }
-
-      // Award bonus credits
-      if (promoCode.bonus_credits > 0) {
-        const { data: creditResult, error: creditError } = await supabase.rpc("add_user_credits", {
-          _user_id: userId,
-          _amount: promoCode.bonus_credits,
-        });
-
-        const resultObj = creditResult as { success?: boolean; error?: string } | null;
-        if (creditError || !resultObj?.success) {
-          throw new Error(resultObj?.error || "Credits ထည့်ရာတွင် ပြဿနာရှိပါသည်");
-        }
-      }
-
-      // Record usage
-      const { error: useError } = await supabase.from("promo_code_uses").insert({
-        promo_code_id: promoCode.id,
-        user_id: userId,
-        credits_awarded: promoCode.bonus_credits,
+      // Use secure server-side RPC for entire redemption flow
+      const { data, error } = await supabase.rpc("redeem_promo_code", {
+        _user_id: userId,
+        _code: trimmed,
       });
 
-      if (useError) {
-        if (useError.code === "23505") {
-          toast({ title: "ဤ Code ကို အသုံးပြုပြီးဖြစ်ပါသည်", variant: "destructive" });
-          return;
-        }
-        throw useError;
+      if (error) throw error;
+
+      const redeemResult = data as { success?: boolean; error?: string; bonus_credits?: number; discount_percent?: number } | null;
+
+      if (!redeemResult?.success) {
+        const errorMsg = redeemResult?.error || "Code မမှန်ကန်ပါ";
+        toast({ title: errorMsg, variant: "destructive" });
+        return;
       }
 
-      // Update uses count
-      await supabase
-        .from("promo_codes")
-        .update({ uses_count: promoCode.uses_count + 1 })
-        .eq("id", promoCode.id);
-
-      // Add audit log
-      await supabase.from("credit_audit_log").insert({
-        user_id: userId,
-        amount: promoCode.bonus_credits,
-        credit_type: "promo",
-        description: `Promo code: ${trimmed}`,
-      });
-
-      setResult({ bonus: promoCode.bonus_credits, discount: promoCode.discount_percent });
+      setResult({ bonus: redeemResult.bonus_credits || 0, discount: redeemResult.discount_percent || 0 });
       setRedeemed(true);
       toast({
         title: `🎉 Promo Code အသုံးပြုပြီးပါပြီ!`,
-        description: `${promoCode.bonus_credits} Credits ရရှိပါပြီ`,
+        description: `${redeemResult.bonus_credits} Credits ရရှိပါပြီ`,
       });
     } catch (error: any) {
       console.error("Promo redeem error:", error);
