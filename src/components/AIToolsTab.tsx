@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { 
   Image, Video, Volume2, Crown, Wallet, Users, Gift, 
   ZoomIn, Eraser, Sparkles, Youtube, FileText, Captions,
-  Megaphone, Briefcase
+  Megaphone, Briefcase, Crop, Film
 } from "lucide-react";
 import { ImageTool } from "./tools/ImageTool";
 import { VideoTool } from "./tools/VideoTool";
@@ -16,6 +16,8 @@ import { DocSlideTool } from "./tools/DocSlideTool";
 import { CaptionTool } from "./tools/CaptionTool";
 import { AdGeneratorTool } from "./tools/AdGeneratorTool";
 import { SocialMediaManagerTool } from "./tools/SocialMediaManagerTool";
+import { AutoResizerTool } from "./tools/AutoResizerTool";
+import { SceneSummarizerTool } from "./tools/SceneSummarizerTool";
 import { ToolCardCompact } from "./ToolCardCompact";
 import { AIChatbot } from "./AIChatbot";
 import { ReferralSection } from "./ReferralSection";
@@ -31,7 +33,7 @@ interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "youtube" | "docslide" | "caption" | "adgenerator" | "socialmedia";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "youtube" | "docslide" | "caption" | "adgenerator" | "socialmedia" | "autoresizer" | "scenesummarizer";
 
 export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const navigate = useNavigate();
@@ -199,6 +201,22 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                   onClick={() => setActiveTool("adgenerator")}
                   credits={costs.ad_generator}
                 />
+                <ToolCardCompact
+                  icon={Crop}
+                  title="Auto Resizer"
+                  description="Format ပြောင်း"
+                  gradient="bg-gradient-to-br from-lime-500 via-green-600 to-emerald-700"
+                  onClick={() => setActiveTool("autoresizer")}
+                  credits={0}
+                />
+                <ToolCardCompact
+                  icon={Film}
+                  title="Scene Summary"
+                  description="ဗီဒီယို ခွဲခြမ်း"
+                  gradient="bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-700"
+                  onClick={() => setActiveTool("scenesummarizer")}
+                  credits={costs.ai_chat * 3}
+                />
               </div>
             </motion.div>
 
@@ -332,6 +350,12 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
         )}
         {activeTool === "socialmedia" && (
           <SocialMediaManagerTool key="socialmedia" userId={userId} onBack={handleBack} />
+        )}
+        {activeTool === "autoresizer" && (
+          <AutoResizerTool key="autoresizer" userId={userId} onBack={handleBack} />
+        )}
+        {activeTool === "scenesummarizer" && (
+          <SceneSummarizerTool key="scenesummarizer" userId={userId} onBack={handleBack} />
         )}
       </AnimatePresence>
     </div>
