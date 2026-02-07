@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
+import { useCredits } from "@/hooks/useCredits";
 import { supabase } from "@/integrations/supabase/client";
 import { Upload, FileText, Loader2, Copy, X } from "lucide-react";
 import { motion } from "framer-motion";
@@ -16,6 +17,7 @@ interface SceneSummarizerToolProps {
 export const SceneSummarizerTool = ({ userId, onBack }: SceneSummarizerToolProps) => {
   const { toast } = useToast();
   const { costs } = useCreditCosts();
+  const { credits, refetch: refetchCredits } = useCredits(userId);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
@@ -23,7 +25,7 @@ export const SceneSummarizerTool = ({ userId, onBack }: SceneSummarizerToolProps
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<string | null>(null);
 
-  const creditCost = costs.ai_chat * 3; // 3x AI chat cost for video analysis
+  const creditCost = costs.scene_summarizer || costs.ai_chat * 3;
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -83,20 +85,23 @@ export const SceneSummarizerTool = ({ userId, onBack }: SceneSummarizerToolProps
   const handleSummarize = async () => {
     if (!videoFile || !userId) return;
 
+    if (credits < creditCost) {
+      toast({ title: "ခရက်ဒစ် မလုံလောက်ပါ", description: `${creditCost} Credits လိုအပ်ပါသည်`, variant: "destructive" });
+      return;
+    }
+
     setIsProcessing(true);
     setResult(null);
 
     try {
       toast({ title: "ဗီဒီယို ခွဲခြမ်းစိတ်ဖြာနေပါသည်...", description: "Frame များ ထုတ်ယူနေပါသည်" });
 
-      // Extract key frames from video
       const frames = await extractFrames(videoFile);
 
       if (frames.length === 0) {
         throw new Error("Frame များ ထုတ်ယူ၍ မရပါ");
       }
 
-      // Send frames to AI for analysis
       const { data, error } = await supabase.functions.invoke("ai-chat", {
         body: {
           message: customPrompt.trim() || 
@@ -109,7 +114,28 @@ export const SceneSummarizerTool = ({ userId, onBack }: SceneSummarizerToolProps
 
       if (data?.reply) {
         setResult(data.reply);
-        toast({ title: "ခွဲခြမ်းစိတ်ဖြာပြီးပါပြီ!" });
+
+        // Deduct credits after successful generation
+        const { data: deductResult, error: deductError } = await supabase.rpc("deduct_user_credits", {
+          _user_id: userId,
+          _amount: creditCost,
+          _action: "scene_summarizer",
+        });
+
+        if (deductError) {
+          console.error("Credit deduction error:", deductError);
+        }
+
+        // Log to credit audit
+        await supabase.from("credit_audit_log").insert({
+          user_id: userId,
+          amount: -creditCost,
+          credit_type: "scene_summarizer",
+          description: `Scene Summarizer - Video Analysis`,
+        });
+
+        refetchCredits();
+        toast({ title: "✅ ခွဲခြမ်းစိတ်ဖြာပြီးပါပြီ!", description: `${creditCost} Credits နုတ်ယူပြီးပါပြီ` });
       } else {
         throw new Error(data?.error || "Analysis failed");
       }
@@ -184,6 +210,12 @@ export const SceneSummarizerTool = ({ userId, onBack }: SceneSummarizerToolProps
             className="text-sm"
           />
 
+          {/* Credit Cost */}
+          <div className="gradient-card rounded-2xl p-3 border border-primary/20 flex items-center justify-between">
+            <span className="text-sm font-myanmar">ခွဲခြမ်းစိတ်ဖြာခ</span>
+            <span className="text-sm font-bold text-primary">{creditCost} Credits</span>
+          </div>
+
           {/* Analyze Button */}
           {!result && (
             <Button 
@@ -214,6 +246,10 @@ export const SceneSummarizerTool = ({ userId, onBack }: SceneSummarizerToolProps
           animate={{ opacity: 1, y: 0 }}
           className="space-y-3"
         >
+          <div className="gradient-card rounded-xl p-3 border border-green-500/30 bg-green-500/5">
+            <p className="text-xs text-green-400 font-myanmar">✅ Credits နုတ်ယူပြီးပါပြီ။ ရလဒ်ကို ကြည့်ရှုနိုင်ပါပြီ။</p>
+          </div>
+
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-primary">📝 Recap Script</h3>
             <button onClick={copyResult} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
@@ -241,6 +277,7 @@ export const SceneSummarizerTool = ({ userId, onBack }: SceneSummarizerToolProps
           💡 ဗီဒီယိုမှ Key Frames များကို AI ဖြင့် ခွဲခြမ်းစိတ်ဖြာပြီး 
           မြန်မာဘာသာဖြင့် Recap Script ရေးပေးပါသည်။ 
           Scene Highlights, Key Points နှင့် အကျဉ်းချုပ် ပါဝင်ပါသည်။
+          Credits ကို ရလဒ်ထွက်ပြီးမှသာ နုတ်ယူပါသည်။
         </p>
       </div>
     </motion.div>
