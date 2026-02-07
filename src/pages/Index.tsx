@@ -11,7 +11,7 @@ import { DosDontsTab } from "@/components/DosDontsTab";
 import { CourseTab } from "@/components/CourseTab";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { MaintenanceBanner } from "@/components/MaintenanceBanner";
-import { LogOut, User as UserIcon, HelpCircle, Shield } from "lucide-react";
+import { LogOut, User as UserIcon, HelpCircle, Shield, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useCredits } from "@/hooks/useCredits";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -104,6 +104,10 @@ const Index = () => {
               <DropdownMenuItem onClick={() => navigate("/support")} className="cursor-pointer">
                 <HelpCircle className="w-4 h-4 mr-2" />
                 Help & Support
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/about")} className="cursor-pointer">
+                <Info className="w-4 h-4 mr-2" />
+                About Myanmar AI
               </DropdownMenuItem>
               {isAdmin && (
                 <DropdownMenuItem onClick={() => navigate("/admin")} className="cursor-pointer">
