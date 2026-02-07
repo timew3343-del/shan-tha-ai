@@ -36,6 +36,7 @@ const TOOL_LABELS: Record<CreditCostKey, string> = {
   bg_studio: "BG Studio",
   song_mtv: "Song & MTV",
   auto_ad: "Auto Ad",
+  video_redesign: "Video Redesign",
 };
 
 interface ToolPricing {
