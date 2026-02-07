@@ -77,7 +77,7 @@ const PROCESSING_STEPS = [
 
 export const VideoCopywritingTool = ({ userId, onBack }: VideoCopywritingToolProps) => {
   const { toast } = useToast();
-  const { costs, profitMargin } = useCreditCosts();
+  const { costs } = useCreditCosts();
   const { credits, refetch: refetchCredits } = useCredits(userId);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -106,16 +106,15 @@ export const VideoCopywritingTool = ({ userId, onBack }: VideoCopywritingToolPro
   const selectedAspect = ASPECT_RATIOS.find(a => a.id === aspectRatio) || ASPECT_RATIOS[0];
 
   const calculateCreditCost = () => {
-    const baseCost = costs.ai_chat;
-    let apiCost = baseCost * selectedDuration.multiplier;
+    let totalCost = costs.ai_chat * selectedDuration.multiplier;
 
-    if (subtitlesOn) apiCost += ADDON_COSTS.subtitles;
-    if (logoFile) apiCost += ADDON_COSTS.logo;
-    if (highQuality) apiCost += ADDON_COSTS.highQuality;
-    if (voiceoverOn) apiCost += ADDON_COSTS.voiceover;
-    if (selectedAspect.extraCost > 0) apiCost += ADDON_COSTS.resize;
+    if (subtitlesOn) totalCost += ADDON_COSTS.subtitles;
+    if (logoFile) totalCost += ADDON_COSTS.logo;
+    if (highQuality) totalCost += ADDON_COSTS.highQuality;
+    if (voiceoverOn) totalCost += ADDON_COSTS.voiceover;
+    if (selectedAspect.extraCost > 0) totalCost += ADDON_COSTS.resize;
 
-    return Math.ceil(apiCost * (1 + profitMargin / 100));
+    return Math.ceil(totalCost);
   };
 
   const creditCost = calculateCreditCost();
@@ -497,7 +496,7 @@ Format the output professionally with clear sections.`;
           </motion.span>
         </div>
         <p className="text-[10px] text-muted-foreground mt-1">
-          Margin: {profitMargin}% • Duration: x{selectedDuration.multiplier}
+          Duration: x{selectedDuration.multiplier}
           {selectedAspect.extraCost > 0 ? ` • Resize: +${selectedAspect.extraCost}` : ""}
         </p>
       </motion.div>

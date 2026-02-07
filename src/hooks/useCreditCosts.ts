@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-// Base API costs (raw cost without profit margin)
+// Base API costs (raw cost without profit margin) - used as fallback only
 const BASE_API_COSTS = {
   image_generation: 2,
   video_generation: 7,
@@ -60,7 +60,7 @@ export interface CreditCosts {
   auto_ad: number;
 }
 
-function calculateCosts(margin: number): CreditCosts {
+function calculateDefaultCosts(margin: number = 40): CreditCosts {
   const result: any = {};
   for (const [key, baseCost] of Object.entries(BASE_API_COSTS)) {
     result[key] = Math.ceil(baseCost * (1 + margin / 100));
@@ -71,49 +71,61 @@ function calculateCosts(margin: number): CreditCosts {
 export { BASE_API_COSTS };
 
 export const useCreditCosts = () => {
-  const [profitMargin, setProfitMargin] = useState(40);
-  const [costs, setCosts] = useState<CreditCosts>(calculateCosts(40));
+  const [costs, setCosts] = useState<CreditCosts>(calculateDefaultCosts(40));
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchMargin = useCallback(async () => {
+  const fetchCosts = useCallback(async () => {
     try {
+      // Fetch pre-calculated credit costs (set by admin, readable by users via RLS)
       const { data, error } = await supabase
         .from("app_settings")
-        .select("value")
-        .eq("key", "profit_margin")
-        .maybeSingle();
+        .select("key, value")
+        .like("key", "credit_cost_%");
 
       if (error) {
-        console.error("Error fetching profit margin:", error);
+        console.error("Error fetching credit costs:", error);
         return;
       }
 
-      const margin = data?.value ? parseInt(data.value, 10) : 40;
-      setProfitMargin(margin);
-      setCosts(calculateCosts(margin));
+      const fetchedCosts: Partial<CreditCosts> = {};
+      data?.forEach((setting) => {
+        const toolKey = setting.key.replace("credit_cost_", "");
+        if (toolKey in BASE_API_COSTS) {
+          const val = parseInt(setting.value || "0", 10);
+          if (val > 0) {
+            fetchedCosts[toolKey as CreditCostKey] = val;
+          }
+        }
+      });
+
+      // Merge: use fetched values where available, fallback to default 40% margin
+      const defaults = calculateDefaultCosts(40);
+      setCosts({ ...defaults, ...fetchedCosts });
     } catch (error) {
-      console.error("Error fetching profit margin:", error);
+      console.error("Error fetching credit costs:", error);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchMargin();
+    fetchCosts();
 
-    // Subscribe to realtime changes on profit_margin
+    // Subscribe to realtime changes on credit_cost_* settings
     const channel = supabase
-      .channel("profit-margin-realtime")
+      .channel("credit-costs-realtime")
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "app_settings",
-          filter: "key=eq.profit_margin",
         },
-        () => {
-          fetchMargin();
+        (payload: any) => {
+          const key = payload?.new?.key || payload?.old?.key;
+          if (key && typeof key === "string" && key.startsWith("credit_cost_")) {
+            fetchCosts();
+          }
         }
       )
       .subscribe();
@@ -121,7 +133,7 @@ export const useCreditCosts = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchMargin]);
+  }, [fetchCosts]);
 
-  return { costs, profitMargin, isLoading, refetch: fetchMargin };
+  return { costs, isLoading, refetch: fetchCosts };
 };

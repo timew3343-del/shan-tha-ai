@@ -49,7 +49,7 @@ const PROCESSING_STEPS = [
 
 export const CopyrightCheckerTool = ({ userId, onBack }: CopyrightCheckerToolProps) => {
   const { toast } = useToast();
-  const { profitMargin } = useCreditCosts();
+  const { costs } = useCreditCosts();
   const { credits, refetch: refetchCredits } = useCredits(userId);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -63,8 +63,7 @@ export const CopyrightCheckerTool = ({ userId, onBack }: CopyrightCheckerToolPro
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [expandedIssues, setExpandedIssues] = useState<Set<number>>(new Set());
 
-  const BASE_COST = 3;
-  const creditCost = Math.ceil(BASE_COST * (1 + profitMargin / 100));
+  const creditCost = costs.copyright_check;
 
   const getScoreColor = (score: number) => {
     if (score >= 71) return "text-green-500";

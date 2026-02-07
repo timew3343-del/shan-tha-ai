@@ -55,7 +55,7 @@ const PROCESSING_STEPS = [
 
 export const StoryVideoTool = ({ userId, onBack }: StoryVideoToolProps) => {
   const { toast } = useToast();
-  const { profitMargin } = useCreditCosts();
+  const { costs } = useCreditCosts();
   const { credits, refetch: refetchCredits } = useCredits(userId);
 
   const [story, setStory] = useState("");
@@ -69,9 +69,8 @@ export const StoryVideoTool = ({ userId, onBack }: StoryVideoToolProps) => {
   const [scenes, setScenes] = useState<GeneratedScene[]>([]);
   const [characterId, setCharacterId] = useState("");
 
-  const baseCostPerScene = 4;
-  const totalBaseCost = baseCostPerScene * sceneCount;
-  const creditCost = Math.ceil(totalBaseCost * (1 + profitMargin / 100));
+  const perSceneCost = Math.ceil(costs.story_video / 5);
+  const creditCost = perSceneCost * sceneCount;
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -296,7 +295,7 @@ export const StoryVideoTool = ({ userId, onBack }: StoryVideoToolProps) => {
           </motion.span>
         </div>
         <p className="text-[10px] text-muted-foreground mt-1">
-          {sceneCount} scenes × {baseCostPerScene} base + {profitMargin}% margin
+          {sceneCount} scenes × {perSceneCost} credits/scene
         </p>
       </motion.div>
 
