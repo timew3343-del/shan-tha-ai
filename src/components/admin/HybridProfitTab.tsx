@@ -84,10 +84,10 @@ export const HybridProfitTab = () => {
 
         data?.forEach((setting) => {
           if (setting.key === "profit_margin") {
-            currentMargin = parseInt(setting.value || "40", 10);
+            currentMargin = Number(setting.value) || 40;
           }
           if (setting.key === "auto_ad_profit_margin") {
-            setAutoAdMargin(parseInt(setting.value || "50", 10));
+            setAutoAdMargin(Number(setting.value) || 50);
           }
           if (setting.key.startsWith("manual_price_")) {
             const toolKey = setting.key.replace("manual_price_", "");
