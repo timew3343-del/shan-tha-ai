@@ -168,13 +168,27 @@ export const HybridProfitTab = () => {
         .from("app_settings")
         .upsert({ key: "auto_ad_profit_margin", value: autoAdMargin.toString() }, { onConflict: "key" });
 
-      // Save per-tool manual settings
+      // Save per-tool manual settings AND publish pre-calculated credit costs
+      // Credit costs are stored as credit_cost_* so regular users can read them
+      // without ever seeing the raw profit margin values
       for (const tp of toolPricing) {
         await supabase
           .from("app_settings")
           .upsert({
             key: `manual_price_${tp.key}`,
             value: JSON.stringify({ price: tp.manualPrice, isManual: tp.isManual }),
+          }, { onConflict: "key" });
+
+        // Calculate effective cost: auto_ad uses its own margin, others use global/manual
+        const effectiveCost = tp.key === "auto_ad"
+          ? Math.ceil(tp.baseCost * (1 + autoAdMargin / 100))
+          : tp.effectivePrice;
+
+        await supabase
+          .from("app_settings")
+          .upsert({
+            key: `credit_cost_${tp.key}`,
+            value: effectiveCost.toString(),
           }, { onConflict: "key" });
       }
 
