@@ -5,7 +5,7 @@ import {
   BarChart3, Download, Settings, Activity, Sun, Moon,
   Bell, TrendingUp, DollarSign, Building,
   Save, Key, Plus, Trash2, Wallet, CreditCard as CardIcon, Image, X, Loader2,
-  Gift, ExternalLink, AlertTriangle, Power, Eye, EyeOff, Play, Settings2, Tag, MessageSquare
+  Gift, ExternalLink, AlertTriangle, Power, Eye, EyeOff, Play, Settings2, Tag, MessageSquare, Film
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import { GlobalMarginTab } from "@/components/admin/GlobalMarginTab";
 import { HybridProfitTab } from "@/components/admin/HybridProfitTab";
 import { PromoCodesTab } from "@/components/admin/PromoCodesTab";
 import { UserFeedbackTab } from "@/components/admin/UserFeedbackTab";
+import { ContentFactoryTab } from "@/components/admin/ContentFactoryTab";
 
 interface PendingTransaction {
   id: string;
@@ -860,6 +861,12 @@ export const Admin = () => {
               System
             </TabsTrigger>
           </TabsList>
+          <TabsList className="grid w-full grid-cols-1 mb-6">
+            <TabsTrigger value="content-factory" className="text-xs">
+              <Film className="w-4 h-4 mr-1" />
+              Content Factory
+            </TabsTrigger>
+          </TabsList>
 
           {/* Transactions Tab */}
           <TabsContent value="transactions" className="space-y-4">
@@ -1636,6 +1643,11 @@ export const Admin = () => {
                 </div>
               )}
             </div>
+          </TabsContent>
+
+          {/* Content Factory Tab */}
+          <TabsContent value="content-factory" className="space-y-4">
+            <ContentFactoryTab />
           </TabsContent>
         </Tabs>
       </div>

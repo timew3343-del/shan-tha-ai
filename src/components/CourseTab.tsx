@@ -1,7 +1,26 @@
-import { useState } from "react";
-import { BookOpen, Clock, Star, ChevronRight, ArrowLeft, Play, Lock, Crown } from "lucide-react";
+import { useState, useEffect } from "react";
+import { BookOpen, Clock, Star, ChevronRight, ArrowLeft, Play, Lock, Crown, Loader2, Wallet } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { useCredits } from "@/hooks/useCredits";
 
-const courses = [
+interface CourseTabProps {
+  userId?: string;
+}
+
+interface TutorialVideo {
+  id: string;
+  title: string;
+  description: string | null;
+  video_url: string | null;
+  video_type: string;
+  duration_seconds: number;
+  generated_date: string;
+}
+
+// Static courses (fallback when no DB tutorials exist yet)
+const STATIC_COURSES = [
   {
     id: 1,
     title: "AI အခြေခံ မိတ်ဆက်",
@@ -10,14 +29,7 @@ const courses = [
     lessons: 5,
     rating: 4.8,
     isLocked: false,
-    progress: 60,
-    videos: [
-      { id: 1, title: "AI ဆိုတာ ဘာလဲ", duration: "၃ မိနစ်", completed: true },
-      { id: 2, title: "AI ၏ သမိုင်းကြောင်း", duration: "၄ မိနစ်", completed: true },
-      { id: 3, title: "Machine Learning အခြေခံ", duration: "၃ မိနစ်", completed: true },
-      { id: 4, title: "Deep Learning မိတ်ဆက်", duration: "၃ မိနစ်", completed: false },
-      { id: 5, title: "AI ၏ အနာဂတ်", duration: "၂ မိနစ်", completed: false },
-    ],
+    progress: 0,
   },
   {
     id: 2,
@@ -27,17 +39,7 @@ const courses = [
     lessons: 8,
     rating: 4.9,
     isLocked: false,
-    progress: 30,
-    videos: [
-      { id: 1, title: "ChatGPT မိတ်ဆက်", duration: "၃ မိနစ်", completed: true },
-      { id: 2, title: "Prompt ရေးနည်း အခြေခံ", duration: "၄ မိနစ်", completed: true },
-      { id: 3, title: "ထိရောက်သော Prompts ရေးနည်း", duration: "၃ မိနစ်", completed: false },
-      { id: 4, title: "စာရေးသားခြင်းတွင် AI သုံးခြင်း", duration: "၃ မိနစ်", completed: false },
-      { id: 5, title: "ကုဒ်ရေးရာတွင် AI သုံးခြင်း", duration: "၄ မိနစ်", completed: false },
-      { id: 6, title: "သုတေသနလုပ်ငန်းများတွင် AI", duration: "၃ မိနစ်", completed: false },
-      { id: 7, title: "AI ဖြင့် ဘာသာပြန်ခြင်း", duration: "၂ မိနစ်", completed: false },
-      { id: 8, title: "အဆင့်မြင့် နည်းလမ်းများ", duration: "၃ မိနစ်", completed: false },
-    ],
+    progress: 0,
   },
   {
     id: 3,
@@ -46,20 +48,8 @@ const courses = [
     duration: "၃၀ မိနစ်",
     lessons: 10,
     rating: 4.7,
-    isLocked: false,
+    isLocked: true,
     progress: 0,
-    videos: [
-      { id: 1, title: "AI ပုံထုတ်ခြင်း မိတ်ဆက်", duration: "၃ မိနစ်", completed: false },
-      { id: 2, title: "Midjourney အသုံးပြုနည်း", duration: "၄ မိနစ်", completed: false },
-      { id: 3, title: "DALL-E အသုံးပြုနည်း", duration: "၃ မိနစ်", completed: false },
-      { id: 4, title: "Stable Diffusion အခြေခံ", duration: "၄ မိနစ်", completed: false },
-      { id: 5, title: "ပုံအရည်အသွေး မြှင့်တင်ခြင်း", duration: "၃ မိနစ်", completed: false },
-      { id: 6, title: "Style Transfer နည်းပညာ", duration: "၃ မိနစ်", completed: false },
-      { id: 7, title: "ပုံများ တည်းဖြတ်ခြင်း", duration: "၂ မိနစ်", completed: false },
-      { id: 8, title: "Logo ဒီဇိုင်းရေးဆွဲခြင်း", duration: "၃ မိနစ်", completed: false },
-      { id: 9, title: "Thumbnail ဖန်တီးခြင်း", duration: "၂ မိနစ်", completed: false },
-      { id: 10, title: "အဆင့်မြင့် ပုံထုတ်ခြင်း", duration: "၃ မိနစ်", completed: false },
-    ],
   },
   {
     id: 4,
@@ -70,198 +60,357 @@ const courses = [
     rating: 4.6,
     isLocked: true,
     progress: 0,
-    videos: [],
   },
 ];
 
-export const CourseTab = () => {
-  const [selectedCourse, setSelectedCourse] = useState<typeof courses[0] | null>(null);
+export const CourseTab = ({ userId }: CourseTabProps) => {
+  const { toast } = useToast();
+  const { credits, refetch: refetchCredits } = useCredits(userId);
+  const [hasAccess, setHasAccess] = useState(false);
+  const [accessPrice, setAccessPrice] = useState(500);
+  const [isPurchasing, setIsPurchasing] = useState(false);
+  const [isLoadingAccess, setIsLoadingAccess] = useState(true);
+  const [burmeseTutorials, setBurmeseTutorials] = useState<TutorialVideo[]>([]);
+  const [englishTutorials, setEnglishTutorials] = useState<TutorialVideo[]>([]);
+  const [activeSection, setActiveSection] = useState<"burmese" | "english">("burmese");
+  const [selectedVideo, setSelectedVideo] = useState<TutorialVideo | null>(null);
 
-  const completedCourses = courses.filter(c => c.progress === 100).length;
+  useEffect(() => {
+    checkAccess();
+    loadAccessPrice();
+    loadTutorials();
+  }, [userId]);
 
-  if (selectedCourse) {
-    const completedVideos = selectedCourse.videos.filter(v => v.completed).length;
-    const progressPercent = selectedCourse.videos.length > 0 
-      ? Math.round((completedVideos / selectedCourse.videos.length) * 100)
-      : 0;
+  const checkAccess = async () => {
+    if (!userId) {
+      setIsLoadingAccess(false);
+      return;
+    }
+    try {
+      const { data } = await supabase
+        .from("tutorial_purchases")
+        .select("id")
+        .eq("user_id", userId)
+        .limit(1);
 
+      setHasAccess((data?.length || 0) > 0);
+    } catch (error) {
+      console.error("Error checking access:", error);
+    } finally {
+      setIsLoadingAccess(false);
+    }
+  };
+
+  const loadAccessPrice = async () => {
+    try {
+      const { data } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "tutorial_access_fee")
+        .single();
+
+      if (data?.value) {
+        setAccessPrice(parseInt(data.value) || 500);
+      }
+    } catch {
+      // Use default
+    }
+  };
+
+  const loadTutorials = async () => {
+    try {
+      const { data } = await supabase
+        .from("daily_content_videos")
+        .select("*")
+        .in("video_type", ["burmese_tutorial", "english_tutorial"])
+        .eq("is_published", true)
+        .order("created_at", { ascending: false });
+
+      if (data) {
+        setBurmeseTutorials(data.filter((v) => v.video_type === "burmese_tutorial") as TutorialVideo[]);
+        setEnglishTutorials(data.filter((v) => v.video_type === "english_tutorial") as TutorialVideo[]);
+      }
+    } catch (error) {
+      console.error("Error loading tutorials:", error);
+    }
+  };
+
+  const handlePurchase = async () => {
+    if (!userId) {
+      toast({ title: "အကောင့်ဝင်ပါ", variant: "destructive" });
+      return;
+    }
+    if ((credits || 0) < accessPrice) {
+      toast({
+        title: "ခရက်ဒစ် မလုံလောက်ပါ",
+        description: `Lifetime Access ဝယ်ရန် ${accessPrice} Credits လိုအပ်ပါသည်`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsPurchasing(true);
+    try {
+      // Deduct credits
+      const { data: result, error: deductError } = await supabase.rpc("deduct_user_credits", {
+        _user_id: userId,
+        _amount: accessPrice,
+        _action: "Tutorial Lifetime Access",
+      });
+
+      const resultObj = result as { success?: boolean; error?: string } | null;
+      if (deductError || !resultObj?.success) {
+        throw new Error(resultObj?.error || "Credit deduction failed");
+      }
+
+      // Record purchase
+      const { error: insertError } = await supabase
+        .from("tutorial_purchases")
+        .insert({ user_id: userId, credits_paid: accessPrice });
+
+      if (insertError) throw insertError;
+
+      // Log to audit
+      await supabase.from("credit_audit_log").insert({
+        user_id: userId,
+        amount: -accessPrice,
+        credit_type: "tutorial_access",
+        description: `Tutorial Lifetime Access purchased for ${accessPrice} credits`,
+      });
+
+      setHasAccess(true);
+      refetchCredits();
+      toast({
+        title: "ဝယ်ယူပြီးပါပြီ! 🎉",
+        description: "သင်တန်းအားလုံးကို Lifetime Access ရရှိပြီးပါပြီ",
+      });
+    } catch (error: any) {
+      console.error("Purchase error:", error);
+      toast({
+        title: "အမှားရှိပါသည်",
+        description: error.message || "ဝယ်ယူရာတွင် ပြဿနာရှိပါသည်",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPurchasing(false);
+    }
+  };
+
+  if (selectedVideo && hasAccess) {
     return (
       <div className="flex flex-col gap-4 p-4 pb-24">
-        {/* Back Header */}
         <button
-          onClick={() => setSelectedCourse(null)}
+          onClick={() => setSelectedVideo(null)}
           className="flex items-center gap-2 text-primary hover:text-primary/80 transition-colors py-2"
         >
           <ArrowLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">သင်တန်းများသို့ ပြန်သွားမည်</span>
+          <span className="text-sm font-medium font-myanmar">သင်တန်းများသို့ ပြန်သွားမည်</span>
         </button>
 
-        {/* Course Header */}
-        <div className="gradient-card rounded-2xl p-4 border border-primary/30 shadow-gold animate-fade-up">
-          <h2 className="text-lg font-bold text-foreground mb-2">{selectedCourse.title}</h2>
-          <p className="text-sm text-muted-foreground mb-4">{selectedCourse.description}</p>
-          
-          <div className="flex items-center gap-4 text-xs text-muted-foreground mb-3">
-            <div className="flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              {selectedCourse.duration}
-            </div>
-            <div className="flex items-center gap-1">
-              <BookOpen className="w-3 h-3" />
-              {selectedCourse.lessons} သင်ခန်းစာ
-            </div>
-            <div className="flex items-center gap-1">
-              <Star className="w-3 h-3 text-primary fill-primary" />
-              {selectedCourse.rating}
-            </div>
-          </div>
+        <div className="gradient-card rounded-2xl p-4 border border-primary/30">
+          <h2 className="text-lg font-bold text-foreground mb-2 font-myanmar">{selectedVideo.title}</h2>
+          {selectedVideo.description && (
+            <p className="text-sm text-muted-foreground mb-4 font-myanmar">{selectedVideo.description}</p>
+          )}
 
-          <div className="h-2 bg-background rounded-full overflow-hidden">
-            <div 
-              className="h-full gradient-gold rounded-full transition-all duration-500"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            {completedVideos} / {selectedCourse.videos.length} ပြီးပြီ ({progressPercent}%)
-          </p>
-        </div>
-
-        {/* Video List */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-foreground px-1">ဗီဒီယိုများ</h3>
-          {selectedCourse.videos.map((video, index) => (
-            <div
-              key={video.id}
-              className={`gradient-card rounded-xl p-4 border transition-all duration-300 hover:scale-[1.01] cursor-pointer animate-fade-up ${
-                video.completed
-                  ? "border-primary/30 bg-primary/5"
-                  : "border-border/30 hover:border-primary/20"
-              }`}
-              style={{ animationDelay: `${index * 0.05}s` }}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                  video.completed ? "gradient-gold" : "bg-muted"
-                }`}>
-                  <Play className={`w-4 h-4 ${video.completed ? "text-primary-foreground" : "text-muted-foreground"}`} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium truncate ${video.completed ? "text-primary" : "text-foreground"}`}>
-                    {index + 1}. {video.title}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{video.duration}</p>
-                </div>
-                {video.completed && (
-                  <div className="text-primary text-xs font-medium">✓</div>
-                )}
-              </div>
+          {selectedVideo.video_url ? (
+            <div className="aspect-video rounded-xl overflow-hidden bg-black">
+              <video
+                src={selectedVideo.video_url}
+                controls
+                className="w-full h-full"
+                playsInline
+              />
             </div>
-          ))}
+          ) : (
+            <div className="aspect-video rounded-xl bg-secondary flex items-center justify-center">
+              <p className="text-sm text-muted-foreground font-myanmar">ဗီဒီယို မကြာမီ ထွက်ပါမည်</p>
+            </div>
+          )}
         </div>
       </div>
     );
   }
 
+  const hasTutorials = burmeseTutorials.length > 0 || englishTutorials.length > 0;
+
   return (
     <div className="flex flex-col gap-4 p-4 pb-24">
       {/* Header */}
       <div className="text-center pt-4">
-        <h1 className="text-xl font-bold mb-2 text-primary">AI သင်တန်းများ</h1>
-        <p className="text-muted-foreground text-sm">
+        <h1 className="text-xl font-bold mb-2 text-primary font-myanmar">AI သင်တန်းများ</h1>
+        <p className="text-muted-foreground text-sm font-myanmar">
           AI ကို အခြေခံမှ အဆင့်မြင့်အထိ လေ့လာပါ
         </p>
       </div>
 
-      {/* Progress Overview */}
-      <div className="gradient-card rounded-2xl p-4 border border-primary/30 shadow-gold animate-fade-up">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Crown className="w-5 h-5 text-primary" />
-            <span className="text-sm font-medium">သင်တန်း တိုးတက်မှု</span>
+      {/* Paywall - Show if not purchased */}
+      {!isLoadingAccess && !hasAccess && (
+        <div className="gradient-card rounded-2xl p-5 border border-primary/30 shadow-gold text-center">
+          <Crown className="w-10 h-10 text-primary mx-auto mb-3" />
+          <h2 className="text-lg font-bold text-foreground mb-2 font-myanmar">
+            Lifetime Access ဝယ်ယူပါ
+          </h2>
+          <p className="text-sm text-muted-foreground mb-4 font-myanmar">
+            သင်တန်းအားလုံး (မြန်မာ + English) ကို အကန့်အသတ်မရှိ ကြည့်ရှုနိုင်ပါသည်
+          </p>
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <Wallet className="w-5 h-5 text-primary" />
+            <span className="text-2xl font-bold text-primary">{accessPrice}</span>
+            <span className="text-sm text-muted-foreground">Credits</span>
           </div>
-          <span className="text-primary font-semibold text-sm">{completedCourses} / {courses.length} ပြီးပြီ</span>
-        </div>
-        <div className="h-2 bg-background rounded-full overflow-hidden">
-          <div 
-            className="h-full gradient-gold rounded-full transition-all duration-500"
-            style={{ width: `${(completedCourses / courses.length) * 100}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Course Cards Grid */}
-      <div className="grid grid-cols-2 gap-3">
-        {courses.map((course, index) => (
-          <div
-            key={course.id}
-            onClick={() => !course.isLocked && setSelectedCourse(course)}
-            className={`gradient-card rounded-2xl p-4 border transition-all duration-300 animate-fade-up ${
-              course.isLocked 
-                ? "border-border/30 opacity-60 cursor-not-allowed" 
-                : "border-primary/20 cursor-pointer hover:border-primary/40 hover:shadow-gold hover:scale-[1.02]"
-            }`}
-            style={{ animationDelay: `${index * 0.05}s` }}
+          <Button
+            onClick={handlePurchase}
+            disabled={isPurchasing || !userId}
+            className="w-full gradient-gold text-primary-foreground font-semibold rounded-xl h-12"
           >
-            {/* Icon */}
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 ${
-              course.isLocked 
-                ? "bg-muted" 
-                : course.progress > 0 
-                  ? "gradient-gold" 
-                  : "bg-primary/20 border border-primary/30"
-            }`}>
-              {course.isLocked ? (
-                <Lock className="w-5 h-5 text-muted-foreground" />
-              ) : (
-                <BookOpen className={`w-5 h-5 ${course.progress > 0 ? "text-primary-foreground" : "text-primary"}`} />
-              )}
-            </div>
-
-            {/* Title */}
-            <h3 className="font-semibold text-foreground text-sm mb-1 line-clamp-2 min-h-[2.5rem]">
-              {course.title}
-            </h3>
-
-            {/* Meta */}
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-              <span>{course.lessons} သင်ခန်းစာ</span>
-              <span>•</span>
-              <div className="flex items-center gap-0.5">
-                <Star className="w-3 h-3 text-primary fill-primary" />
-                {course.rating}
-              </div>
-            </div>
-
-            {/* Progress */}
-            {course.progress > 0 && !course.isLocked && (
-              <div>
-                <div className="h-1.5 bg-background rounded-full overflow-hidden">
-                  <div 
-                    className="h-full gradient-gold rounded-full"
-                    style={{ width: `${course.progress}%` }}
-                  />
-                </div>
-                <p className="text-xs text-primary mt-1">{course.progress}%</p>
-              </div>
+            {isPurchasing ? (
+              <Loader2 className="w-5 h-5 animate-spin mr-2" />
+            ) : (
+              <Crown className="w-5 h-5 mr-2" />
             )}
+            Lifetime Access ဝယ်မည် - {accessPrice} Credits
+          </Button>
+          <p className="text-xs text-muted-foreground mt-2 font-myanmar">
+            တစ်ကြိမ်ဝယ်ပြီးရင် အမြဲတမ်း ကြည့်ရှုနိုင်ပါသည်
+          </p>
+        </div>
+      )}
 
-            {!course.isLocked && course.progress === 0 && (
-              <div className="flex items-center gap-1 text-xs text-primary">
-                <span>စတင်မည်</span>
-                <ChevronRight className="w-3 h-3" />
+      {isLoadingAccess && (
+        <div className="flex justify-center py-8">
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+        </div>
+      )}
+
+      {/* Tutorial Sections - Only show if has access OR show previews */}
+      {hasTutorials && (
+        <>
+          {/* Section Toggle */}
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant={activeSection === "burmese" ? "default" : "outline"}
+              onClick={() => setActiveSection("burmese")}
+              className="rounded-xl font-myanmar"
+            >
+              🇲🇲 မြန်မာလို သင်တန်းများ
+            </Button>
+            <Button
+              variant={activeSection === "english" ? "default" : "outline"}
+              onClick={() => setActiveSection("english")}
+              className="rounded-xl font-myanmar"
+            >
+              🇬🇧 English Tutorials
+            </Button>
+          </div>
+
+          {/* Tutorial Videos */}
+          <div className="space-y-3">
+            {(activeSection === "burmese" ? burmeseTutorials : englishTutorials).map((video, index) => (
+              <div
+                key={video.id}
+                onClick={() => hasAccess && setSelectedVideo(video)}
+                className={`gradient-card rounded-xl p-4 border transition-all duration-300 ${
+                  hasAccess
+                    ? "border-primary/20 cursor-pointer hover:border-primary/40 hover:shadow-gold"
+                    : "border-border/30 opacity-70 cursor-not-allowed"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                    hasAccess ? "gradient-gold" : "bg-muted"
+                  }`}>
+                    {hasAccess ? (
+                      <Play className="w-4 h-4 text-primary-foreground" />
+                    ) : (
+                      <Lock className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate font-myanmar">
+                      {index + 1}. {video.title}
+                    </p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Clock className="w-3 h-3" />
+                      <span>{Math.ceil(video.duration_seconds / 60)} min</span>
+                      <span>•</span>
+                      <span>{video.generated_date}</span>
+                    </div>
+                  </div>
+                  {hasAccess && <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+                </div>
+              </div>
+            ))}
+
+            {(activeSection === "burmese" ? burmeseTutorials : englishTutorials).length === 0 && (
+              <div className="gradient-card rounded-xl p-6 border border-border/30 text-center">
+                <p className="text-sm text-muted-foreground font-myanmar">
+                  {activeSection === "burmese"
+                    ? "မြန်မာလို သင်တန်းဗီဒီယိုများ မကြာမီ ထွက်ပါမည်"
+                    : "English tutorial videos coming soon"}
+                </p>
               </div>
             )}
           </div>
-        ))}
-      </div>
+        </>
+      )}
 
-      {/* Unlock Message */}
-      <div className="gradient-card rounded-xl p-3 border border-primary/20 text-center animate-fade-up" style={{ animationDelay: "0.2s" }}>
-        <p className="text-xs text-muted-foreground">
-          🔓 ပိတ်ထားသော သင်တန်းများကို ဖွင့်ရန် ယခင်သင်တန်းများ ပြီးအောင်လုပ်ပါ
-        </p>
-      </div>
+      {/* Static Courses (Fallback) */}
+      {!hasTutorials && (
+        <>
+          {/* Progress Overview */}
+          <div className="gradient-card rounded-2xl p-4 border border-primary/30 shadow-gold">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Crown className="w-5 h-5 text-primary" />
+                <span className="text-sm font-medium font-myanmar">သင်တန်းများ</span>
+              </div>
+              <span className="text-primary font-semibold text-sm">{STATIC_COURSES.length} သင်တန်း</span>
+            </div>
+          </div>
+
+          {/* Course Cards Grid */}
+          <div className="grid grid-cols-2 gap-3">
+            {STATIC_COURSES.map((course, index) => (
+              <div
+                key={course.id}
+                className={`gradient-card rounded-2xl p-4 border transition-all duration-300 ${
+                  course.isLocked || !hasAccess
+                    ? "border-border/30 opacity-60 cursor-not-allowed"
+                    : "border-primary/20 cursor-pointer hover:border-primary/40 hover:shadow-gold hover:scale-[1.02]"
+                }`}
+              >
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-3 ${
+                  course.isLocked || !hasAccess ? "bg-muted" : "bg-primary/20 border border-primary/30"
+                }`}>
+                  {course.isLocked || !hasAccess ? (
+                    <Lock className="w-5 h-5 text-muted-foreground" />
+                  ) : (
+                    <BookOpen className="w-5 h-5 text-primary" />
+                  )}
+                </div>
+                <h3 className="font-semibold text-foreground text-sm mb-1 line-clamp-2 min-h-[2.5rem] font-myanmar">
+                  {course.title}
+                </h3>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                  <span>{course.lessons} သင်ခန်းစာ</span>
+                  <span>•</span>
+                  <div className="flex items-center gap-0.5">
+                    <Star className="w-3 h-3 text-primary fill-primary" />
+                    {course.rating}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="gradient-card rounded-xl p-3 border border-primary/20 text-center">
+            <p className="text-xs text-muted-foreground font-myanmar">
+              🔓 Lifetime Access ဝယ်ယူပြီးရင် သင်တန်းအားလုံး ဖွင့်ပေးပါမည်
+            </p>
+          </div>
+        </>
+      )}
     </div>
   );
 };
