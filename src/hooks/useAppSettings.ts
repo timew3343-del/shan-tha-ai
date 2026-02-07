@@ -7,6 +7,8 @@ export interface AppSettings {
   daily_ad_limit: number;
   campaign_approval_reward: number;
   ad_timer_duration: number;
+  profit_margin?: number;
+  auto_ad_profit_margin?: number;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -14,6 +16,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   daily_ad_limit: 10,
   campaign_approval_reward: 100,
   ad_timer_duration: 60,
+  profit_margin: 40,
+  auto_ad_profit_margin: 50,
 };
 
 export const useAppSettings = () => {
@@ -32,6 +36,8 @@ export const useAppSettings = () => {
           "daily_ad_limit",
           "campaign_approval_reward",
           "ad_timer_duration",
+          "profit_margin",
+          "auto_ad_profit_margin",
         ]);
 
       if (error) {
@@ -42,15 +48,18 @@ export const useAppSettings = () => {
       if (data && data.length > 0) {
         const loadedSettings: Partial<AppSettings> = {};
         data.forEach((setting) => {
-          const value = parseInt(setting.value || "0", 10);
-          if (setting.key === "ad_reward_amount") {
-            loadedSettings.ad_reward_amount = value || DEFAULT_SETTINGS.ad_reward_amount;
-          } else if (setting.key === "daily_ad_limit") {
-            loadedSettings.daily_ad_limit = value || DEFAULT_SETTINGS.daily_ad_limit;
-          } else if (setting.key === "campaign_approval_reward") {
-            loadedSettings.campaign_approval_reward = value || DEFAULT_SETTINGS.campaign_approval_reward;
-          } else if (setting.key === "ad_timer_duration") {
-            loadedSettings.ad_timer_duration = value || DEFAULT_SETTINGS.ad_timer_duration;
+          const value = Number(setting.value) || 0;
+          const keyMap: Record<string, keyof AppSettings> = {
+            ad_reward_amount: "ad_reward_amount",
+            daily_ad_limit: "daily_ad_limit",
+            campaign_approval_reward: "campaign_approval_reward",
+            ad_timer_duration: "ad_timer_duration",
+            profit_margin: "profit_margin",
+            auto_ad_profit_margin: "auto_ad_profit_margin",
+          };
+          const settingKey = keyMap[setting.key];
+          if (settingKey) {
+            loadedSettings[settingKey] = value || DEFAULT_SETTINGS[settingKey];
           }
         });
         setSettings((prev) => ({ ...prev, ...loadedSettings }));

@@ -28,7 +28,7 @@ export const GlobalMarginTab = () => {
           .maybeSingle();
         
         if (data?.value) {
-          setMargin(parseInt(data.value, 10));
+          setMargin(Number(data.value) || 40);
         }
       } catch (err) {
         console.error("Error loading margin:", err);
