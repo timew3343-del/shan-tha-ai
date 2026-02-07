@@ -33,7 +33,7 @@ export const UserFeedback = forwardRef<HTMLDivElement, UserFeedbackProps>(({ use
       const { error } = await supabase.from("user_feedback").insert({
         user_id: userId,
         user_name: user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User",
-        user_email: user?.email || "",
+        user_email: null,
         message: message.trim(),
       });
 
