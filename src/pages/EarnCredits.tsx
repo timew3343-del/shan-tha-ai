@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCredits } from "@/hooks/useCredits";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import { AdWatchModal } from "@/components/AdWatchModal";
+import { PromoCodeRedeem } from "@/components/PromoCodeRedeem";
 import { motion } from "framer-motion";
 
 const EarnCredits = () => {
@@ -276,6 +277,9 @@ const EarnCredits = () => {
           timerDuration={settings.ad_timer_duration}
           rewardAmount={settings.ad_reward_amount}
         />
+
+        {/* Promo Code Section */}
+        {user && <PromoCodeRedeem userId={user.id} />}
 
         {/* Campaign Submission Section */}
         <div className="gradient-card rounded-2xl p-5 border border-primary/20">
