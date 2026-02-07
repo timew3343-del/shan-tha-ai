@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { 
   Image, Video, Volume2, Crown, Wallet, Gift, 
   ZoomIn, Eraser, Sparkles, Youtube, FileText, Captions,
-  Megaphone, Briefcase, Shield, BookOpen
+  Megaphone, Briefcase, Shield, BookOpen, Camera, Film
 } from "lucide-react";
 import { ImageTool } from "./tools/ImageTool";
 import { VideoTool } from "./tools/VideoTool";
@@ -19,6 +19,8 @@ import { SocialMediaManagerTool } from "./tools/SocialMediaManagerTool";
 import { VideoCopywritingTool } from "./tools/VideoCopywritingTool";
 import { CopyrightCheckerTool } from "./tools/CopyrightCheckerTool";
 import { StoryVideoTool } from "./tools/StoryVideoTool";
+import { SceneSummarizerTool } from "./tools/SceneSummarizerTool";
+import { LiveCameraChatTool } from "./tools/LiveCameraChatTool";
 import { ToolCardCompact } from "./ToolCardCompact";
 import { AIChatbot } from "./AIChatbot";
 import { ReferralSection } from "./ReferralSection";
@@ -34,7 +36,7 @@ interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "youtube" | "docslide" | "caption" | "adgenerator" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "youtube" | "docslide" | "caption" | "adgenerator" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "livecamera";
 
 export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const navigate = useNavigate();
@@ -70,6 +72,8 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
       case "videocopywriting": return <VideoCopywritingTool key="videocopywriting" userId={userId} onBack={handleBack} />;
       case "copyrightchecker": return <CopyrightCheckerTool key="copyrightchecker" userId={userId} onBack={handleBack} />;
       case "storyvideo": return <StoryVideoTool key="storyvideo" userId={userId} onBack={handleBack} />;
+      case "scenesummarizer": return <SceneSummarizerTool key="scenesummarizer" userId={userId} onBack={handleBack} />;
+      case "livecamera": return <LiveCameraChatTool key="livecamera" userId={userId} onBack={handleBack} />;
       default: return null;
     }
   };
@@ -145,8 +149,9 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                 <ToolCardCompact icon={Captions} title="AI Caption" description="စာတန်းထိုး" gradient="bg-gradient-to-br from-amber-500 via-orange-600 to-red-700" onClick={() => setActiveTool("caption")} credits={costs.caption_per_minute} />
                 <ToolCardCompact icon={Megaphone} title="AI Ad" description="ကြော်ငြာ ဖန်တီး" gradient="bg-gradient-to-br from-pink-500 via-fuchsia-600 to-purple-700" onClick={() => setActiveTool("adgenerator")} credits={costs.ad_generator} />
                 <ToolCardCompact icon={Crown} title="Video Copywriting" description="AI ကြော်ငြာ ဖန်တီး" gradient="bg-gradient-to-br from-amber-500 via-yellow-600 to-orange-700" onClick={() => setActiveTool("videocopywriting")} credits={costs.ai_chat * 3} badge="PRO" badgeTooltip="Our most powerful AI video tool" />
-                <ToolCardCompact icon={Shield} title="Copyright Check" description="Copyright စစ်ဆေး" gradient="bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-700" onClick={() => setActiveTool("copyrightchecker")} credits={Math.ceil(3 * 1.4)} badge="NEW" badgeTooltip="AI Copyright Safety Analysis" />
-                <ToolCardCompact icon={BookOpen} title="Story → Video" description="ပုံပြင်မှ ဗီဒီယို" gradient="bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-700" onClick={() => setActiveTool("storyvideo")} credits={Math.ceil(20 * 1.4)} badge="NEW" badgeTooltip="AI Story-to-Video with Character Lock" />
+                <ToolCardCompact icon={Shield} title="Copyright Check" description="Copyright စစ်ဆေး" gradient="bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-700" onClick={() => setActiveTool("copyrightchecker")} credits={costs.copyright_check} badge="NEW" badgeTooltip="AI Copyright Safety Analysis" />
+                <ToolCardCompact icon={BookOpen} title="Story → Video" description="ပုံပြင်မှ ဗီဒီယို" gradient="bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-700" onClick={() => setActiveTool("storyvideo")} credits={costs.story_video} badge="NEW" badgeTooltip="AI Story-to-Video with Character Lock" />
+                <ToolCardCompact icon={Film} title="Scene Summarizer" description="ဗီဒီယို ခွဲခြမ်းစိတ်ဖြာ" gradient="bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-700" onClick={() => setActiveTool("scenesummarizer")} credits={costs.scene_summarizer} />
               </div>
             </motion.div>
 
@@ -162,6 +167,17 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               </div>
             </motion.div>
 
+            {/* AI Live Camera */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.32 }}>
+              <div className="flex items-center gap-2 mb-2">
+                <Camera className="w-4 h-4 text-primary" />
+                <h2 className="text-sm font-semibold text-foreground font-myanmar">AI Live Camera</h2>
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                <ToolCardCompact icon={Camera} title="AI Live Camera Chat" description="ကင်မရာ + AI Real-time Chat" gradient="bg-gradient-to-br from-rose-500 via-pink-600 to-fuchsia-700" onClick={() => setActiveTool("livecamera")} credits={costs.live_camera_chat} badge="LIVE" badgeTooltip="Real-time AI Camera Analysis" />
+              </div>
+            </motion.div>
+
             {/* Social Media */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.33 }}>
               <div className="flex items-center gap-2 mb-2">
@@ -169,7 +185,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                 <h2 className="text-sm font-semibold text-foreground font-myanmar">Social Media & Photoshoot</h2>
               </div>
               <div className="grid grid-cols-1 gap-2">
-                <ToolCardCompact icon={Briefcase} title="AI Social Media Manager" description="Content Calendar + Professional Photoshoot" gradient="bg-gradient-to-br from-fuchsia-500 via-pink-600 to-rose-700" onClick={() => setActiveTool("socialmedia")} credits={(costs as any).social_media_agent || 25} />
+                <ToolCardCompact icon={Briefcase} title="AI Social Media Manager" description="Content Calendar + Professional Photoshoot" gradient="bg-gradient-to-br from-fuchsia-500 via-pink-600 to-rose-700" onClick={() => setActiveTool("socialmedia")} credits={costs.social_media_agent} />
               </div>
             </motion.div>
 

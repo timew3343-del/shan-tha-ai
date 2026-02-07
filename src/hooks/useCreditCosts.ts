@@ -22,6 +22,9 @@ const BASE_API_COSTS = {
   live_camera_chat: 1,
   social_media_agent: 18,
   photoshoot: 6,
+  story_video: 20,
+  copyright_check: 3,
+  scene_summarizer: 3,
 };
 
 export type CreditCostKey = keyof typeof BASE_API_COSTS;
@@ -46,6 +49,9 @@ export interface CreditCosts {
   live_camera_chat: number;
   social_media_agent: number;
   photoshoot: number;
+  story_video: number;
+  copyright_check: number;
+  scene_summarizer: number;
 }
 
 function calculateCosts(margin: number): CreditCosts {

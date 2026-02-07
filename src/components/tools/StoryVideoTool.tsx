@@ -202,11 +202,11 @@ export const StoryVideoTool = ({ userId, onBack }: StoryVideoToolProps) => {
         <Slider
           value={[sceneCount]}
           onValueChange={(v) => setSceneCount(v[0])}
-          min={1} max={20} step={1}
+          min={1} max={50} step={1}
           className="mb-2"
         />
         <div className="flex justify-between text-xs text-muted-foreground">
-          <span>1 scene</span><span>10</span><span>20 scenes</span>
+          <span>1 scene</span><span>25</span><span>50 scenes</span>
         </div>
       </div>
 

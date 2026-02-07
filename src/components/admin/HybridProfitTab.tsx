@@ -30,6 +30,9 @@ const TOOL_LABELS: Record<CreditCostKey, string> = {
   live_camera_chat: "Live Camera Chat",
   social_media_agent: "Social Media Agent",
   photoshoot: "Photoshoot",
+  story_video: "Story → Video",
+  copyright_check: "Copyright Check",
+  scene_summarizer: "Scene Summarizer",
 };
 
 interface ToolPricing {
