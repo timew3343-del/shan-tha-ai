@@ -53,3 +53,12 @@ verify_jwt = false
 
 [functions.story-to-video]
 verify_jwt = false
+
+[functions.bg-studio]
+verify_jwt = false
+
+[functions.generate-song]
+verify_jwt = false
+
+[functions.auto-ad]
+verify_jwt = false

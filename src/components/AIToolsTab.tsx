@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { 
   Image, Video, Volume2, Crown, Wallet, Gift, 
   ZoomIn, Eraser, Sparkles, Youtube, FileText, Captions,
-  Megaphone, Briefcase, Shield, BookOpen, ListChecks
+  Megaphone, Briefcase, Shield, BookOpen, ListChecks,
+  Music, Palette, Zap
 } from "lucide-react";
 import { ImageTool } from "./tools/ImageTool";
 import { VideoTool } from "./tools/VideoTool";
@@ -11,15 +12,18 @@ import { SpeechTool } from "./tools/SpeechTool";
 import { FaceSwapTool } from "./tools/FaceSwapTool";
 import { UpscaleTool } from "./tools/UpscaleTool";
 import { BgRemoveTool } from "./tools/BgRemoveTool";
+import { BgStudioTool } from "./tools/BgStudioTool";
 import { YouTubeToTextTool } from "./tools/YouTubeToTextTool";
 import { DocSlideTool } from "./tools/DocSlideTool";
 import { CaptionTool } from "./tools/CaptionTool";
 import { AdGeneratorTool } from "./tools/AdGeneratorTool";
+import { AutoAdTool } from "./tools/AutoAdTool";
 import { SocialMediaManagerTool } from "./tools/SocialMediaManagerTool";
 import { VideoCopywritingTool } from "./tools/VideoCopywritingTool";
 import { CopyrightCheckerTool } from "./tools/CopyrightCheckerTool";
 import { StoryVideoTool } from "./tools/StoryVideoTool";
 import { SceneSummarizerTool } from "./tools/SceneSummarizerTool";
+import { SongMTVTool } from "./tools/SongMTVTool";
 
 import { ToolCardCompact } from "./ToolCardCompact";
 import { AIChatbot } from "./AIChatbot";
@@ -37,7 +41,7 @@ interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "youtube" | "docslide" | "caption" | "adgenerator" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv";
 
 export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const navigate = useNavigate();
@@ -66,15 +70,18 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
       case "faceswap": return <FaceSwapTool key="faceswap" userId={userId} onBack={handleBack} />;
       case "upscale": return <UpscaleTool key="upscale" userId={userId} onBack={handleBack} />;
       case "bgremove": return <BgRemoveTool key="bgremove" userId={userId} onBack={handleBack} />;
+      case "bgstudio": return <BgStudioTool key="bgstudio" userId={userId} onBack={handleBack} />;
       case "youtube": return <YouTubeToTextTool key="youtube" userId={userId} onBack={handleBack} />;
       case "docslide": return <DocSlideTool key="docslide" userId={userId} onBack={handleBack} />;
       case "caption": return <CaptionTool key="caption" userId={userId} onBack={handleBack} />;
       case "adgenerator": return <AdGeneratorTool key="adgenerator" userId={userId} onBack={handleBack} />;
+      case "autoad": return <AutoAdTool key="autoad" userId={userId} onBack={handleBack} />;
       case "socialmedia": return <SocialMediaManagerTool key="socialmedia" userId={userId} onBack={handleBack} />;
       case "videocopywriting": return <VideoCopywritingTool key="videocopywriting" userId={userId} onBack={handleBack} />;
       case "copyrightchecker": return <CopyrightCheckerTool key="copyrightchecker" userId={userId} onBack={handleBack} />;
       case "storyvideo": return <StoryVideoTool key="storyvideo" userId={userId} onBack={handleBack} />;
       case "scenesummarizer": return <SceneSummarizerTool key="scenesummarizer" userId={userId} onBack={handleBack} />;
+      case "songmtv": return <SongMTVTool key="songmtv" userId={userId} onBack={handleBack} />;
       default: return null;
     }
   };
@@ -125,6 +132,18 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               <AIChatbot userId={userId} />
             </motion.div>
 
+            {/* 🔥 Premium Tools - NEW */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.17 }}>
+              <div className="flex items-center gap-2 mb-2">
+                <Crown className="w-4 h-4 text-primary" />
+                <h2 className="text-sm font-semibold text-foreground font-myanmar">Premium Tools</h2>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <ToolCardCompact icon={Music} title={t('tool.songMtv') || 'AI သီချင်း & MTV'} description={t('tool.songMtv.desc') || 'သီချင်းနှင့် MTV ဖန်တီး'} gradient="bg-gradient-to-br from-rose-500 via-pink-600 to-fuchsia-700" onClick={() => setActiveTool("songmtv")} credits={costs.song_mtv} badge="PREMIUM" badgeTooltip="AI Song & MTV Creator" />
+                <ToolCardCompact icon={Zap} title={t('tool.autoAd') || 'Auto ကြော်ငြာ'} description={t('tool.autoAd.desc') || 'AI အော်တိုကြော်ငြာ'} gradient="bg-gradient-to-br from-orange-500 via-amber-600 to-yellow-700" onClick={() => setActiveTool("autoad")} credits={costs.auto_ad} badge="PREMIUM" badgeTooltip="Full Auto Ad Generator" />
+              </div>
+            </motion.div>
+
             {/* Image Tools */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
               <div className="flex items-center gap-2 mb-2">
@@ -135,6 +154,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                 <ToolCardCompact icon={Image} title={t('tool.imageGen')} description={t('tool.imageGen.desc')} gradient="bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700" onClick={() => setActiveTool("image")} credits={costs.image_generation} size="small" />
                 <ToolCardCompact icon={ZoomIn} title={t('tool.upscale')} description={t('tool.upscale.desc')} gradient="bg-gradient-to-br from-cyan-500 via-cyan-600 to-blue-700" onClick={() => setActiveTool("upscale")} credits={costs.upscale} size="small" />
                 <ToolCardCompact icon={Eraser} title={t('tool.bgRemove')} description={t('tool.bgRemove.desc')} gradient="bg-gradient-to-br from-teal-500 via-teal-600 to-emerald-700" onClick={() => setActiveTool("bgremove")} credits={costs.bg_remove} size="small" />
+                <ToolCardCompact icon={Palette} title={t('tool.bgStudio') || 'BG Studio'} description={t('tool.bgStudio.desc') || 'နောက်ခံပြောင်း'} gradient="bg-gradient-to-br from-violet-500 via-purple-600 to-fuchsia-700" onClick={() => setActiveTool("bgstudio")} credits={costs.bg_studio} size="small" badge="NEW" badgeTooltip="AI Background Studio" />
               </div>
             </motion.div>
 
@@ -206,6 +226,22 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               <p className="text-xs text-muted-foreground leading-relaxed font-myanmar">
                 {t('dashboard.tipText')}
               </p>
+            </motion.div>
+
+            {/* Footer */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
+              <div className="border-t border-border/30 pt-4 mt-2">
+                <div className="text-center space-y-2">
+                  <p className="text-xs text-muted-foreground font-myanmar">© 2025 Myanmar AI Studio</p>
+                  <div className="flex items-center justify-center gap-4 text-[10px] text-muted-foreground">
+                    <a href="/about" className="hover:text-primary transition-colors">Terms of Service</a>
+                    <span>•</span>
+                    <a href="/about" className="hover:text-primary transition-colors">Privacy Policy</a>
+                    <span>•</span>
+                    <a href="/support" className="hover:text-primary transition-colors">Contact</a>
+                  </div>
+                </div>
+              </div>
             </motion.div>
           </motion.div>
         ) : (

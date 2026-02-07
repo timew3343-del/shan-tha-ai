@@ -25,6 +25,9 @@ const BASE_API_COSTS = {
   story_video: 20,
   copyright_check: 3,
   scene_summarizer: 3,
+  bg_studio: 2,
+  song_mtv: 15,
+  auto_ad: 18,
 };
 
 export type CreditCostKey = keyof typeof BASE_API_COSTS;
@@ -52,6 +55,9 @@ export interface CreditCosts {
   story_video: number;
   copyright_check: number;
   scene_summarizer: number;
+  bg_studio: number;
+  song_mtv: number;
+  auto_ad: number;
 }
 
 function calculateCosts(margin: number): CreditCosts {
