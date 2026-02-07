@@ -35,13 +35,26 @@ export const useLiveRecording = (): UseLiveRecordingReturn => {
 
   const startRecording = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        } 
-      });
+      // Check if getUserMedia is available
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Microphone access requires HTTPS connection");
+      }
+
+      let stream: MediaStream;
+      
+      // Try with preferred constraints, then fallback for mobile
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          } 
+        });
+      } catch {
+        // Fallback: simple audio constraint for older mobile browsers
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
       
       streamRef.current = stream;
       
@@ -53,9 +66,19 @@ export const useLiveRecording = (): UseLiveRecordingReturn => {
       source.connect(analyzer);
       analyzerRef.current = analyzer;
       
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
-      });
+      // Determine best supported mimeType for mobile compatibility
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+          ? 'audio/webm'
+          : MediaRecorder.isTypeSupported('audio/mp4')
+            ? 'audio/mp4'
+            : MediaRecorder.isTypeSupported('audio/aac')
+              ? 'audio/aac'
+              : '';
+      
+      const recorderOptions = mimeType ? { mimeType } : {};
+      const mediaRecorder = new MediaRecorder(stream, recorderOptions);
       
       audioChunksRef.current = [];
       
@@ -66,7 +89,8 @@ export const useLiveRecording = (): UseLiveRecordingReturn => {
       };
       
       mediaRecorder.onstop = () => {
-        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const recordedMimeType = mediaRecorder.mimeType || mimeType || 'audio/webm';
+        const blob = new Blob(audioChunksRef.current, { type: recordedMimeType });
         setAudioBlob(blob);
       };
       

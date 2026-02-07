@@ -40,18 +40,51 @@ export const AIChatbot = ({ userId }: AIChatbotProps) => {
 
   const openCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" }, width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: false,
-      });
+      // Check if getUserMedia is available (requires HTTPS)
+      if (!navigator.mediaDevices?.getUserMedia) {
+        toast({ title: "ကင်မရာ မရနိုင်ပါ", description: "HTTPS connection လိုအပ်ပါသည်။ Browser ကို update လုပ်ပါ", variant: "destructive" });
+        return;
+      }
+
+      let stream: MediaStream;
+      
+      // Try preferred constraints first, then fallback for mobile compatibility
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: false,
+        });
+      } catch {
+        try {
+          // Fallback: try front camera
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "user" },
+            audio: false,
+          });
+        } catch {
+          // Final fallback: any camera
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        }
+      }
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute('playsinline', 'true');
+        videoRef.current.setAttribute('webkit-playsinline', 'true');
         await videoRef.current.play();
       }
       streamRef.current = stream;
       setCameraOpen(true);
-    } catch {
-      toast({ title: "ကင်မရာ ဖွင့်၍မရပါ", description: "ကင်မရာခွင့်ပြုချက် ပေးပါ", variant: "destructive" });
+    } catch (err: any) {
+      console.error("Camera error:", err);
+      const isPermissionDenied = err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError";
+      toast({
+        title: "ကင်မရာ ဖွင့်၍မရပါ",
+        description: isPermissionDenied
+          ? "ကင်မရာခွင့်ပြုချက် ပေးပါ။ Settings → Site Settings → Camera → Allow"
+          : "ကင်မရာ ဖွင့်ရာတွင် ပြဿနာရှိပါသည်။ Browser ကို refresh လုပ်ပြီး ထပ်စမ်းပါ",
+        variant: "destructive",
+      });
     }
   };
 
