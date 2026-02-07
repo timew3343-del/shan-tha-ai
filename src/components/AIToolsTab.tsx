@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { 
   Image, Video, Volume2, Crown, Wallet, Gift, 
   ZoomIn, Eraser, Sparkles, Youtube, FileText, Captions,
-  Megaphone, Briefcase, Shield
+  Megaphone, Briefcase, Shield, BookOpen
 } from "lucide-react";
 import { ImageTool } from "./tools/ImageTool";
 import { VideoTool } from "./tools/VideoTool";
@@ -18,6 +18,7 @@ import { AdGeneratorTool } from "./tools/AdGeneratorTool";
 import { SocialMediaManagerTool } from "./tools/SocialMediaManagerTool";
 import { VideoCopywritingTool } from "./tools/VideoCopywritingTool";
 import { CopyrightCheckerTool } from "./tools/CopyrightCheckerTool";
+import { StoryVideoTool } from "./tools/StoryVideoTool";
 import { ToolCardCompact } from "./ToolCardCompact";
 import { AIChatbot } from "./AIChatbot";
 import { ReferralSection } from "./ReferralSection";
@@ -33,7 +34,7 @@ interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "youtube" | "docslide" | "caption" | "adgenerator" | "socialmedia" | "videocopywriting" | "copyrightchecker";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "youtube" | "docslide" | "caption" | "adgenerator" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo";
 
 export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const navigate = useNavigate();
@@ -68,6 +69,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
       case "socialmedia": return <SocialMediaManagerTool key="socialmedia" userId={userId} onBack={handleBack} />;
       case "videocopywriting": return <VideoCopywritingTool key="videocopywriting" userId={userId} onBack={handleBack} />;
       case "copyrightchecker": return <CopyrightCheckerTool key="copyrightchecker" userId={userId} onBack={handleBack} />;
+      case "storyvideo": return <StoryVideoTool key="storyvideo" userId={userId} onBack={handleBack} />;
       default: return null;
     }
   };
@@ -144,6 +146,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                 <ToolCardCompact icon={Megaphone} title="AI Ad" description="ကြော်ငြာ ဖန်တီး" gradient="bg-gradient-to-br from-pink-500 via-fuchsia-600 to-purple-700" onClick={() => setActiveTool("adgenerator")} credits={costs.ad_generator} />
                 <ToolCardCompact icon={Crown} title="Video Copywriting" description="AI ကြော်ငြာ ဖန်တီး" gradient="bg-gradient-to-br from-amber-500 via-yellow-600 to-orange-700" onClick={() => setActiveTool("videocopywriting")} credits={costs.ai_chat * 3} badge="PRO" badgeTooltip="Our most powerful AI video tool" />
                 <ToolCardCompact icon={Shield} title="Copyright Check" description="Copyright စစ်ဆေး" gradient="bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-700" onClick={() => setActiveTool("copyrightchecker")} credits={Math.ceil(3 * 1.4)} badge="NEW" badgeTooltip="AI Copyright Safety Analysis" />
+                <ToolCardCompact icon={BookOpen} title="Story → Video" description="ပုံပြင်မှ ဗီဒီယို" gradient="bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-700" onClick={() => setActiveTool("storyvideo")} credits={Math.ceil(20 * 1.4)} badge="NEW" badgeTooltip="AI Story-to-Video with Character Lock" />
               </div>
             </motion.div>
 

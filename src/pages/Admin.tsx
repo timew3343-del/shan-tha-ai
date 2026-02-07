@@ -20,6 +20,7 @@ import { CreditAuditTab } from "@/components/admin/CreditAuditTab";
 import { AppSettingsTab } from "@/components/admin/AppSettingsTab";
 import { ToolAnalyticsTab } from "@/components/admin/ToolAnalyticsTab";
 import { GlobalMarginTab } from "@/components/admin/GlobalMarginTab";
+import { HybridProfitTab } from "@/components/admin/HybridProfitTab";
 import { PromoCodesTab } from "@/components/admin/PromoCodesTab";
 import { UserFeedbackTab } from "@/components/admin/UserFeedbackTab";
 
@@ -1115,6 +1116,8 @@ export const Admin = () => {
                 )}
               </Button>
             </div>
+            {/* Hybrid Profit Manager */}
+            <HybridProfitTab />
           </TabsContent>
 
           {/* Promo Codes Tab */}
