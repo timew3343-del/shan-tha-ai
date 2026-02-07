@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.copyright-check]
 verify_jwt = false
+
+[functions.story-to-video]
+verify_jwt = false

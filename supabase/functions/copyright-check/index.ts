@@ -213,7 +213,7 @@ If the content appears original and safe, give a high score with minor suggestio
     await supabaseAdmin.from("credit_audit_log").insert({
       user_id: userId,
       amount: -creditCost,
-      credit_type: "deduction",
+      credit_type: "copyright_check",
       description: `Copyright Safety Check (${contentType})`,
     });
 
