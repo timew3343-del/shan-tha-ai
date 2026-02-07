@@ -5,7 +5,7 @@ import {
   BarChart3, Download, Settings, Activity, Sun, Moon,
   Bell, TrendingUp, DollarSign, Building,
   Save, Key, Plus, Trash2, Wallet, CreditCard as CardIcon, Image, X, Loader2,
-  Gift, ExternalLink, AlertTriangle, Power, Eye, EyeOff, Play, Settings2, Tag
+  Gift, ExternalLink, AlertTriangle, Power, Eye, EyeOff, Play, Settings2, Tag, MessageSquare
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import { AppSettingsTab } from "@/components/admin/AppSettingsTab";
 import { ToolAnalyticsTab } from "@/components/admin/ToolAnalyticsTab";
 import { GlobalMarginTab } from "@/components/admin/GlobalMarginTab";
 import { PromoCodesTab } from "@/components/admin/PromoCodesTab";
+import { UserFeedbackTab } from "@/components/admin/UserFeedbackTab";
 
 interface PendingTransaction {
   id: string;
@@ -836,7 +837,7 @@ export const Admin = () => {
               စာရင်း
             </TabsTrigger>
           </TabsList>
-          <TabsList className="grid w-full grid-cols-4 mb-6">
+          <TabsList className="grid w-full grid-cols-5 mb-6">
             <TabsTrigger value="pricing" className="text-xs">
               <DollarSign className="w-4 h-4 mr-1" />
               စျေးနှုန်း
@@ -844,6 +845,10 @@ export const Admin = () => {
             <TabsTrigger value="promo" className="text-xs">
               <Tag className="w-4 h-4 mr-1" />
               Promo
+            </TabsTrigger>
+            <TabsTrigger value="feedback" className="text-xs">
+              <MessageSquare className="w-4 h-4 mr-1" />
+              Feedback
             </TabsTrigger>
             <TabsTrigger value="appsettings" className="text-xs">
               <Settings2 className="w-4 h-4 mr-1" />
@@ -1115,6 +1120,11 @@ export const Admin = () => {
           {/* Promo Codes Tab */}
           <TabsContent value="promo" className="space-y-4">
             <PromoCodesTab />
+          </TabsContent>
+
+          {/* User Feedback Tab */}
+          <TabsContent value="feedback" className="space-y-4">
+            <UserFeedbackTab />
           </TabsContent>
 
           {/* App Settings Tab */}

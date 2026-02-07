@@ -17,12 +17,13 @@ import { CaptionTool } from "./tools/CaptionTool";
 import { AdGeneratorTool } from "./tools/AdGeneratorTool";
 import { SocialMediaManagerTool } from "./tools/SocialMediaManagerTool";
 import { AutoResizerTool } from "./tools/AutoResizerTool";
-import { SceneSummarizerTool } from "./tools/SceneSummarizerTool";
+import { VideoCopywritingTool } from "./tools/VideoCopywritingTool";
 import { ToolCardCompact } from "./ToolCardCompact";
 import { AIChatbot } from "./AIChatbot";
 import { ReferralSection } from "./ReferralSection";
 import { LowCreditAlert } from "./LowCreditAlert";
 import { CreditDisplay } from "./CreditDisplay";
+import { UserFeedback } from "./UserFeedback";
 import { VideoEditor } from "./VideoEditor";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { useCredits } from "@/hooks/useCredits";
@@ -33,7 +34,7 @@ interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "youtube" | "docslide" | "caption" | "adgenerator" | "socialmedia" | "autoresizer" | "scenesummarizer";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "youtube" | "docslide" | "caption" | "adgenerator" | "socialmedia" | "autoresizer" | "videocopywriting";
 
 export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const navigate = useNavigate();
@@ -210,12 +211,14 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                   credits={0}
                 />
                 <ToolCardCompact
-                  icon={Film}
-                  title="Scene Summary"
-                  description="ဗီဒီယို ခွဲခြမ်း"
-                  gradient="bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-700"
-                  onClick={() => setActiveTool("scenesummarizer")}
+                  icon={Crown}
+                  title="Video Copywriting"
+                  description="AI ကြော်ငြာ ဖန်တီး"
+                  gradient="bg-gradient-to-br from-amber-500 via-yellow-600 to-orange-700"
+                  onClick={() => setActiveTool("videocopywriting")}
                   credits={costs.ai_chat * 3}
+                  badge="PRO"
+                  badgeTooltip="Our most powerful AI video tool"
                 />
               </div>
             </motion.div>
@@ -303,6 +306,15 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               <ReferralSection userId={userId} />
             </motion.div>
 
+            {/* User Feedback */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.42 }}
+            >
+              <UserFeedback userId={userId} />
+            </motion.div>
+
             {/* Info Card */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -354,8 +366,8 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
         {activeTool === "autoresizer" && (
           <AutoResizerTool key="autoresizer" userId={userId} onBack={handleBack} />
         )}
-        {activeTool === "scenesummarizer" && (
-          <SceneSummarizerTool key="scenesummarizer" userId={userId} onBack={handleBack} />
+        {activeTool === "videocopywriting" && (
+          <VideoCopywritingTool key="videocopywriting" userId={userId} onBack={handleBack} />
         )}
       </AnimatePresence>
     </div>
