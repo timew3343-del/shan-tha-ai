@@ -1,5 +1,11 @@
 import { LucideIcon } from "lucide-react";
 import { motion } from "framer-motion";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface ToolCardCompactProps {
   icon: LucideIcon;
@@ -9,6 +15,8 @@ interface ToolCardCompactProps {
   onClick: () => void;
   credits?: number;
   size?: "small" | "default";
+  badge?: string;
+  badgeTooltip?: string;
 }
 
 export const ToolCardCompact = ({ 
@@ -18,7 +26,9 @@ export const ToolCardCompact = ({
   gradient, 
   onClick,
   credits,
-  size = "default"
+  size = "default",
+  badge,
+  badgeTooltip,
 }: ToolCardCompactProps) => {
   const isSmall = size === "small";
   
@@ -34,6 +44,26 @@ export const ToolCardCompact = ({
     >
       {/* Shimmer effect */}
       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+      
+      {/* PRO Badge */}
+      {badge && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="absolute top-1.5 right-1.5 z-20">
+                <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-md bg-gradient-to-r from-amber-400 to-yellow-500 text-black shadow-lg animate-pulse">
+                  {badge}
+                </span>
+              </div>
+            </TooltipTrigger>
+            {badgeTooltip && (
+              <TooltipContent side="top" className="text-xs">
+                {badgeTooltip}
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
+      )}
       
       <div className="flex flex-col items-center gap-1.5 relative z-10">
         <div className={`${isSmall ? 'w-10 h-10' : 'w-12 h-12'} rounded-xl bg-background/20 backdrop-blur-sm flex items-center justify-center border border-white/20 shadow-lg`}>
