@@ -4,7 +4,7 @@ import {
   Image, Video, Volume2, Crown, Wallet, Gift, 
   ZoomIn, Eraser, Sparkles, Youtube, FileText, Captions,
   Megaphone, Briefcase, Shield, BookOpen, ListChecks,
-  Music, Palette, Zap, Loader2
+  Music, Palette, Zap, Loader2, Wand2
 } from "lucide-react";
 
 // Lazy load all tool components for code splitting
@@ -26,6 +26,7 @@ const CopyrightCheckerTool = lazy(() => import("./tools/CopyrightCheckerTool").t
 const StoryVideoTool = lazy(() => import("./tools/StoryVideoTool").then(m => ({ default: m.StoryVideoTool })));
 const SceneSummarizerTool = lazy(() => import("./tools/SceneSummarizerTool").then(m => ({ default: m.SceneSummarizerTool })));
 const SongMTVTool = lazy(() => import("./tools/SongMTVTool").then(m => ({ default: m.SongMTVTool })));
+const VideoRedesignTool = lazy(() => import("./tools/VideoRedesignTool").then(m => ({ default: m.VideoRedesignTool })));
 
 import { ToolCardCompact } from "./ToolCardCompact";
 import { AIChatbot } from "./AIChatbot";
@@ -43,7 +44,7 @@ interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv" | "videoredesign";
 
 const ToolLoadingFallback = () => (
   <div className="flex items-center justify-center py-20">
@@ -93,6 +94,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
       case "storyvideo": return <StoryVideoTool key="storyvideo" userId={userId} onBack={handleBack} />;
       case "scenesummarizer": return <SceneSummarizerTool key="scenesummarizer" userId={userId} onBack={handleBack} />;
       case "songmtv": return <SongMTVTool key="songmtv" userId={userId} onBack={handleBack} />;
+      case "videoredesign": return <VideoRedesignTool key="videoredesign" userId={userId} onBack={handleBack} />;
       default: return null;
     }
   };
@@ -178,6 +180,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               <div className="grid grid-cols-2 gap-2">
                 <ToolCardCompact icon={Video} title={t('tool.videoGen')} description={t('tool.videoGen.desc')} gradient="bg-gradient-to-br from-red-500 via-rose-600 to-pink-700" onClick={() => setActiveTool("video")} credits={costs.video_generation} />
                 <ToolCardCompact icon={Users} title={t('tool.faceSwap')} description={t('tool.faceSwap.desc')} gradient="bg-gradient-to-br from-purple-500 via-violet-600 to-indigo-700" onClick={() => setActiveTool("faceswap")} credits={costs.face_swap} />
+                <ToolCardCompact icon={Wand2} title="AI Video Redesign" description="ဗီဒီယို Style ပြောင်း" gradient="bg-gradient-to-br from-violet-500 via-fuchsia-600 to-pink-700" onClick={() => setActiveTool("videoredesign")} credits={costs.video_redesign} badge="NEW" badgeTooltip="AI Video Style Transfer" />
                 <ToolCardCompact icon={Captions} title={t('tool.caption')} description={t('tool.caption.desc')} gradient="bg-gradient-to-br from-amber-500 via-orange-600 to-red-700" onClick={() => setActiveTool("caption")} credits={costs.caption_per_minute} />
                 <ToolCardCompact icon={Megaphone} title={t('tool.adGen')} description={t('tool.adGen.desc')} gradient="bg-gradient-to-br from-pink-500 via-fuchsia-600 to-purple-700" onClick={() => setActiveTool("adgenerator")} credits={costs.ad_generator} />
                 <ToolCardCompact icon={Crown} title={t('tool.videoCopy')} description={t('tool.videoCopy.desc')} gradient="bg-gradient-to-br from-amber-500 via-yellow-600 to-orange-700" onClick={() => setActiveTool("videocopywriting")} credits={costs.ai_chat * 3} badge="PRO" badgeTooltip="Our most powerful AI video tool" />

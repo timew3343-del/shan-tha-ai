@@ -62,3 +62,6 @@ verify_jwt = false
 
 [functions.auto-ad]
 verify_jwt = false
+
+[functions.video-redesign]
+verify_jwt = false

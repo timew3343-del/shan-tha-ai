@@ -28,6 +28,7 @@ const BASE_API_COSTS = {
   bg_studio: 2,
   song_mtv: 15,
   auto_ad: 18,
+  video_redesign: 21,
 };
 
 export type CreditCostKey = keyof typeof BASE_API_COSTS;
@@ -58,6 +59,7 @@ export interface CreditCosts {
   bg_studio: number;
   song_mtv: number;
   auto_ad: number;
+  video_redesign: number;
 }
 
 function calculateDefaultCosts(margin: number = 40): CreditCosts {
