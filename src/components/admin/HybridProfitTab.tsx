@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Lock, Unlock, Save, Loader2, Shield, TrendingUp, ToggleLeft, ToggleRight, AlertTriangle } from "lucide-react";
+import { Lock, Unlock, Save, Loader2, Shield, TrendingUp, ToggleLeft, ToggleRight, AlertTriangle, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
@@ -51,6 +51,7 @@ interface ToolPricing {
 export const HybridProfitTab = () => {
   const { toast } = useToast();
   const [margin, setMargin] = useState(40);
+  const [autoAdMargin, setAutoAdMargin] = useState(50);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isLocked, setIsLocked] = useState(true);
@@ -84,6 +85,9 @@ export const HybridProfitTab = () => {
         data?.forEach((setting) => {
           if (setting.key === "profit_margin") {
             currentMargin = parseInt(setting.value || "40", 10);
+          }
+          if (setting.key === "auto_ad_profit_margin") {
+            setAutoAdMargin(parseInt(setting.value || "50", 10));
           }
           if (setting.key.startsWith("manual_price_")) {
             const toolKey = setting.key.replace("manual_price_", "");
@@ -158,6 +162,11 @@ export const HybridProfitTab = () => {
       await supabase
         .from("app_settings")
         .upsert({ key: "profit_margin", value: margin.toString() }, { onConflict: "key" });
+
+      // Save Auto Ad specific margin
+      await supabase
+        .from("app_settings")
+        .upsert({ key: "auto_ad_profit_margin", value: autoAdMargin.toString() }, { onConflict: "key" });
 
       // Save per-tool manual settings
       for (const tp of toolPricing) {
@@ -260,6 +269,40 @@ export const HybridProfitTab = () => {
         />
         <div className="flex justify-between text-xs text-muted-foreground">
           <span>10%</span><span>50%</span><span>100%</span>
+        </div>
+      </div>
+
+      {/* Auto Ad Specific Profit Margin */}
+      <div className="gradient-card rounded-xl p-4 border border-orange-500/30 bg-orange-500/5">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center">
+            <Zap className="w-4 h-4 text-orange-500" />
+          </div>
+          <div>
+            <h4 className="font-semibold text-foreground text-sm">Auto Ad Profit %</h4>
+            <p className="text-[10px] text-muted-foreground">Auto ကြော်ငြာအပ်ရန် အတွက် သီးသန့် အမြတ်နှုန်း</p>
+          </div>
+          <span className="text-2xl font-bold text-orange-500 ml-auto">{autoAdMargin}%</span>
+        </div>
+        <Slider
+          value={[autoAdMargin]}
+          onValueChange={(val) => !isLocked && setAutoAdMargin(val[0])}
+          min={10} max={150} step={5}
+          disabled={isLocked}
+          className="mb-2"
+        />
+        <div className="flex justify-between text-xs text-muted-foreground">
+          <span>10%</span><span>50%</span><span>100%</span><span>150%</span>
+        </div>
+        <div className="mt-2 p-2 rounded-lg bg-secondary/30">
+          <div className="flex justify-between text-xs">
+            <span className="text-muted-foreground">Base Cost:</span>
+            <span className="text-foreground font-medium">{BASE_API_COSTS.auto_ad} Credits</span>
+          </div>
+          <div className="flex justify-between text-xs mt-1">
+            <span className="text-muted-foreground">User Price:</span>
+            <span className="text-orange-500 font-bold">{Math.ceil(BASE_API_COSTS.auto_ad * (1 + autoAdMargin / 100))} Credits/platform</span>
+          </div>
         </div>
       </div>
 

@@ -38,15 +38,19 @@ const Auth = () => {
   const { toast } = useToast();
 
   useEffect(() => {
+    let isMounted = true;
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
-        navigate("/");
+      if (!isMounted) return;
+      if (session?.user && event !== 'INITIAL_SESSION') {
+        navigate("/", { replace: true });
       }
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!isMounted) return;
       if (session?.user) {
-        navigate("/");
+        navigate("/", { replace: true });
       }
     });
 
@@ -62,7 +66,10 @@ const Auth = () => {
         if (data) setGuideVideos(data as GuideVideo[]);
       });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, [navigate]);
 
   const validateForm = () => {
