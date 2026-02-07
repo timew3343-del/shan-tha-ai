@@ -131,6 +131,57 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_content_videos: {
+        Row: {
+          api_cost_credits: number | null
+          created_at: string
+          description: string | null
+          duration_seconds: number | null
+          facebook_caption: string | null
+          generated_date: string
+          hashtags: string[] | null
+          id: string
+          is_published: boolean | null
+          thumbnail_url: string | null
+          title: string
+          updated_at: string
+          video_type: string
+          video_url: string | null
+        }
+        Insert: {
+          api_cost_credits?: number | null
+          created_at?: string
+          description?: string | null
+          duration_seconds?: number | null
+          facebook_caption?: string | null
+          generated_date?: string
+          hashtags?: string[] | null
+          id?: string
+          is_published?: boolean | null
+          thumbnail_url?: string | null
+          title: string
+          updated_at?: string
+          video_type?: string
+          video_url?: string | null
+        }
+        Update: {
+          api_cost_credits?: number | null
+          created_at?: string
+          description?: string | null
+          duration_seconds?: number | null
+          facebook_caption?: string | null
+          generated_date?: string
+          hashtags?: string[] | null
+          id?: string
+          is_published?: boolean | null
+          thumbnail_url?: string | null
+          title?: string
+          updated_at?: string
+          video_type?: string
+          video_url?: string | null
+        }
+        Relationships: []
+      }
       pricing_packages: {
         Row: {
           created_at: string
@@ -404,6 +455,27 @@ export type Database = {
           screenshot_url?: string | null
           status?: string
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      tutorial_purchases: {
+        Row: {
+          credits_paid: number
+          id: string
+          purchased_at: string
+          user_id: string
+        }
+        Insert: {
+          credits_paid: number
+          id?: string
+          purchased_at?: string
+          user_id: string
+        }
+        Update: {
+          credits_paid?: number
+          id?: string
+          purchased_at?: string
           user_id?: string
         }
         Relationships: []

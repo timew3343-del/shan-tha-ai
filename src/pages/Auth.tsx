@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Mail, Lock, Eye, EyeOff, Loader2, Crown, ArrowRight, ArrowLeft } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, Loader2, Crown, ArrowRight, ArrowLeft, Play } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -18,6 +18,13 @@ const emailSchema = z.object({
 
 type AuthMode = "login" | "signup" | "forgot";
 
+interface GuideVideo {
+  id: string;
+  title: string;
+  video_url: string | null;
+  description: string | null;
+}
+
 const Auth = () => {
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
@@ -26,6 +33,7 @@ const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [resetSent, setResetSent] = useState(false);
+  const [guideVideos, setGuideVideos] = useState<GuideVideo[]>([]);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -41,6 +49,18 @@ const Auth = () => {
         navigate("/");
       }
     });
+
+    // Load guide videos for unauthenticated users
+    supabase
+      .from("daily_content_videos")
+      .select("id, title, video_url, description")
+      .eq("video_type", "guide")
+      .eq("is_published", true)
+      .order("created_at", { ascending: false })
+      .limit(3)
+      .then(({ data }) => {
+        if (data) setGuideVideos(data as GuideVideo[]);
+      });
 
     return () => subscription.unsubscribe();
   }, [navigate]);
@@ -281,8 +301,50 @@ const Auth = () => {
         </div>
       </div>
 
+      {/* Guide Videos for New Users */}
+      {guideVideos.length > 0 && (
+        <div className="w-full max-w-md mt-6 space-y-3 animate-fade-up" style={{ animationDelay: "0.3s" }}>
+          <h3 className="text-sm font-semibold text-primary text-center font-myanmar">
+            📖 အသုံးပြုနည်း လမ်းညွှန်
+          </h3>
+          {guideVideos.map((video) => (
+            <div key={video.id} className="gradient-card rounded-2xl overflow-hidden border border-primary/20">
+              {video.video_url ? (
+                <video
+                  src={video.video_url}
+                  controls
+                  playsInline
+                  className="w-full aspect-video"
+                  poster=""
+                />
+              ) : (
+                <div className="w-full aspect-video bg-secondary flex items-center justify-center">
+                  <Play className="w-8 h-8 text-muted-foreground" />
+                </div>
+              )}
+              <div className="p-3">
+                <p className="text-sm font-medium text-foreground font-myanmar">{video.title}</p>
+                {video.description && (
+                  <p className="text-xs text-muted-foreground mt-1 font-myanmar">{video.description}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Promo Info for New Users */}
+      <div className="w-full max-w-md mt-4 gradient-card rounded-2xl p-4 border border-primary/20 text-center animate-fade-up" style={{ animationDelay: "0.4s" }}>
+        <p className="text-sm text-foreground font-myanmar font-semibold mb-1">
+          🎁 ပထမဆုံးအကြိမ် ငွေဖြည့်သူများအတွက်
+        </p>
+        <p className="text-xs text-muted-foreground font-myanmar">
+          Bonus Credit ၂၀% ပိုပေးမည် • AI ပုံဆွဲခြင်း၊ Video နှင့် Speech ပြောင်းခြင်း အားလုံး တစ်နေရာတည်းမှာ
+        </p>
+      </div>
+
       {/* Footer */}
-      <p className="mt-6 text-xs text-muted-foreground text-center animate-fade-up" style={{ animationDelay: "0.2s" }}>
+      <p className="mt-6 text-xs text-muted-foreground text-center animate-fade-up" style={{ animationDelay: "0.5s" }}>
         ဝန်ဆောင်မှုစည်းမျဉ်းများကို လက်ခံပြီး ဆက်လက်ဆောင်ရွက်ပါ
       </p>
     </div>

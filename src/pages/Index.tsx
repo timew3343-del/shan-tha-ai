@@ -139,7 +139,7 @@ const Index = () => {
         
         {activeTab === "ai-tools" && <AIToolsTab userId={user.id} />}
         {activeTab === "dos-donts" && <DosDontsTab />}
-        {activeTab === "course" && <CourseTab />}
+        {activeTab === "course" && <CourseTab userId={user.id} />}
       </div>
       
       <BottomNavigation activeTab={activeTab} onTabChange={setActiveTab} />
