@@ -33,6 +33,9 @@ const TOOL_LABELS: Record<CreditCostKey, string> = {
   story_video: "Story → Video",
   copyright_check: "Copyright Check",
   scene_summarizer: "Scene Summarizer",
+  bg_studio: "BG Studio",
+  song_mtv: "Song & MTV",
+  auto_ad: "Auto Ad",
 };
 
 interface ToolPricing {
