@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { useCredits } from "@/hooks/useCredits";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, FileText, Loader2, Copy, X } from "lucide-react";
+import { Upload, FileText, Loader2, Copy, X, ListChecks } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface SceneSummarizerToolProps {
@@ -174,8 +174,8 @@ export const SceneSummarizerTool = ({ userId, onBack }: SceneSummarizerToolProps
       className="p-4 pb-24 space-y-4"
     >
       <ToolHeader 
-        title="Video Scene Summarizer" 
-        subtitle="ဗီဒီယို ခွဲခြမ်းစိတ်ဖြာမည်" 
+        title="ဗီဒီယို အကျဥ်းချုပ်ပြန်ထုတ်ခြင်း" 
+        subtitle="Video Summary & Recap" 
         onBack={onBack} 
       />
 

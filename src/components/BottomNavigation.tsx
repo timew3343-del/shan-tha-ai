@@ -1,19 +1,22 @@
 import { forwardRef } from "react";
 import { Wand2, BookCheck, GraduationCap } from "lucide-react";
+import { useLanguage } from "@/i18n/LanguageContext";
 
 interface BottomNavigationProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
 }
 
-const tabs = [
-  { id: "ai-tools", label: "AI ကိရိယာများ", icon: Wand2 },
-  { id: "dos-donts", label: "လမ်းညွှန်", icon: BookCheck },
-  { id: "course", label: "သင်တန်း", icon: GraduationCap },
-];
-
 export const BottomNavigation = forwardRef<HTMLElement, BottomNavigationProps>(
   ({ activeTab, onTabChange }, ref) => {
+    const { t } = useLanguage();
+
+    const tabs = [
+      { id: "ai-tools", label: t('nav.aiTools'), icon: Wand2 },
+      { id: "dos-donts", label: t('nav.guide'), icon: BookCheck },
+      { id: "course", label: t('nav.course'), icon: GraduationCap },
+    ];
+
     return (
       <nav ref={ref} className="fixed bottom-0 left-0 right-0 z-50 glass-effect border-t border-border">
         <div className="flex items-center justify-around px-2 py-3 max-w-lg mx-auto">
