@@ -228,6 +228,37 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
         />
       </div>
 
+      {/* Aspect Ratio / Platform Selection */}
+      <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+        <label className="block text-sm font-medium text-primary mb-2 font-myanmar">
+          Platform / Aspect Ratio
+        </label>
+        <div className="grid grid-cols-4 gap-1.5">
+          {[
+            { key: "square", label: "1:1", icon: "📸", desc: "IG/FB Post" },
+            { key: "portrait", label: "9:16", icon: "🎵", desc: "TikTok/Reels" },
+            { key: "landscape", label: "16:9", icon: "▶️", desc: "YT/FB Cover" },
+            { key: "free", label: "Free", icon: "🖼️", desc: "Custom" },
+          ].map(ar => (
+            <button
+              key={ar.key}
+              onClick={() => {
+                const dims: Record<string, {w: number; h: number}> = {
+                  square: {w: 1024, h: 1024}, portrait: {w: 768, h: 1344},
+                  landscape: {w: 1344, h: 768}, free: {w: 1024, h: 1024}
+                };
+                (window as any).__imageAspect = dims[ar.key];
+              }}
+              className="flex flex-col items-center gap-0.5 p-2 rounded-xl border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all text-center"
+            >
+              <span className="text-sm">{ar.icon}</span>
+              <span className="text-[10px] font-medium">{ar.label}</span>
+              <span className="text-[8px] text-muted-foreground">{ar.desc}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Prompt Input */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">
         <label className="block text-sm font-medium text-primary mb-2 font-myanmar">

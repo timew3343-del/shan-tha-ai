@@ -6,6 +6,44 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+async function processOneImage(imageBase64: string, replicateKey: string): Promise<string | null> {
+  const imageDataUrl = imageBase64.startsWith("data:") ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
+
+  const predResponse = await fetch("https://api.replicate.com/v1/predictions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${replicateKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      version: "7bc557ac4295d5b50bab0dd5b7e0590d1a066be9905de16d5d9445cd46ecdbc8",
+      input: {
+        image: imageDataUrl,
+        upscale: 2,
+        face_upsample: true,
+        background_enhance: true,
+        codeformer_fidelity: 0.7,
+      },
+    }),
+  });
+
+  if (!predResponse.ok) {
+    console.error("Replicate create error:", predResponse.status, await predResponse.text());
+    return null;
+  }
+
+  let prediction = await predResponse.json();
+  let waited = 0;
+  while (prediction.status !== "succeeded" && prediction.status !== "failed" && waited < 120) {
+    await new Promise(r => setTimeout(r, 3000));
+    waited += 3;
+    const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
+      headers: { Authorization: `Bearer ${replicateKey}` },
+    });
+    prediction = await pollRes.json();
+  }
+
+  if (prediction.status !== "succeeded") return null;
+  return typeof prediction.output === "string" ? prediction.output : prediction.output?.[0] || null;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -19,13 +57,13 @@ serve(async (req) => {
 
     const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const token = authHeader.replace("Bearer ", "");
-    const { data: claims, error: claimsError } = await supabaseAdmin.auth.getClaims(token);
-    if (claimsError || !claims?.claims?.sub) {
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+    if (userError || !user) {
       return new Response(JSON.stringify({ error: "Invalid token" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const userId = claims.claims.sub;
+    const userId = user.id;
 
     let body: any;
     try { body = await req.json(); } catch {
@@ -34,25 +72,27 @@ serve(async (req) => {
       });
     }
 
-    const { imageBase64 } = body;
-    if (!imageBase64 || typeof imageBase64 !== "string") {
-      return new Response(JSON.stringify({ error: "Image is required" }), {
+    // Support both legacy single-image and new bulk mode
+    const imageList: string[] = body.images || (body.imageBase64 ? [body.imageBase64] : []);
+    if (imageList.length === 0) {
+      return new Response(JSON.stringify({ error: "At least one image is required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    if (imageBase64.length > 15728640) {
-      return new Response(JSON.stringify({ error: "Image too large (max 10MB)" }), {
+    if (imageList.length > 10) {
+      return new Response(JSON.stringify({ error: "Maximum 10 images allowed" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     // Credit check
     const { data: costSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "credit_cost_photo_restoration").maybeSingle();
-    const creditCost = costSetting?.value ? parseInt(costSetting.value, 10) : 10;
+    const creditCostPerImage = costSetting?.value ? parseInt(costSetting.value, 10) : 10;
+    const totalCost = creditCostPerImage * imageList.length;
 
     const { data: profile } = await supabaseAdmin.from("profiles").select("credit_balance").eq("user_id", userId).single();
-    if (!profile || profile.credit_balance < creditCost) {
-      return new Response(JSON.stringify({ error: "Insufficient credits", required: creditCost }), {
+    if (!profile || profile.credit_balance < totalCost) {
+      return new Response(JSON.stringify({ error: "Insufficient credits", required: totalCost }), {
         status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -64,60 +104,45 @@ serve(async (req) => {
       });
     }
 
-    // Create prediction using CodeFormer
-    console.log(`Photo restore for user ${userId}`);
-    const imageDataUrl = imageBase64.startsWith("data:") ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
+    console.log(`Photo restore for user ${userId}: ${imageList.length} images, cost=${totalCost}`);
 
-    const predResponse = await fetch("https://api.replicate.com/v1/predictions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${REPLICATE_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        version: "7bc557ac4295d5b50bab0dd5b7e0590d1a066be9905de16d5d9445cd46ecdbc8",
-        input: {
-          image: imageDataUrl,
-          upscale: 2,
-          face_upsample: true,
-          background_enhance: true,
-          codeformer_fidelity: 0.7,
-        },
-      }),
-    });
+    // Process all images in parallel
+    const results = await Promise.all(
+      imageList.map(img => processOneImage(img, REPLICATE_API_KEY))
+    );
 
-    if (!predResponse.ok) {
-      const errText = await predResponse.text();
-      console.error("Replicate create error:", predResponse.status, errText);
-      return new Response(JSON.stringify({ error: "Photo restoration service error" }), {
+    const successfulResults = results.filter((r): r is string => r !== null);
+
+    if (successfulResults.length === 0) {
+      return new Response(JSON.stringify({ error: "All photo restorations failed" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    let prediction = await predResponse.json();
-    const maxWait = 120;
-    let waited = 0;
-
-    while (prediction.status !== "succeeded" && prediction.status !== "failed" && waited < maxWait) {
-      await new Promise(r => setTimeout(r, 3000));
-      waited += 3;
-      const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
-        headers: { Authorization: `Bearer ${REPLICATE_API_KEY}` },
-      });
-      prediction = await pollRes.json();
-    }
-
-    if (prediction.status !== "succeeded") {
-      return new Response(JSON.stringify({ error: "Photo restoration timed out or failed" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Deduct credits
+    // Deduct credits only for successful restorations
+    const actualCost = creditCostPerImage * successfulResults.length;
     await supabaseAdmin.rpc("deduct_user_credits", {
-      _user_id: userId, _amount: creditCost, _action: "Photo Restoration",
+      _user_id: userId, _amount: actualCost, _action: `Photo Restoration (${successfulResults.length} images)`,
     });
 
-    const outputUrl = typeof prediction.output === "string" ? prediction.output : prediction.output?.[0] || prediction.output;
+    // Legacy single-image response format compatibility
+    if (body.imageBase64 && !body.images) {
+      return new Response(JSON.stringify({ 
+        success: true, 
+        imageUrl: successfulResults[0], 
+        creditsUsed: actualCost 
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    return new Response(JSON.stringify({ success: true, imageUrl: outputUrl, creditsUsed: creditCost }), {
+    return new Response(JSON.stringify({ 
+      success: true, 
+      results: successfulResults, 
+      creditsUsed: actualCost,
+      totalProcessed: successfulResults.length,
+      totalRequested: imageList.length,
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: any) {

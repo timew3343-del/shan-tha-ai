@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Language, translations } from './translations';
+import { translations, LANGUAGES } from './translations';
 
 interface LanguageContextType {
-  language: Language;
-  setLanguage: (lang: Language) => void;
+  language: string;
+  setLanguage: (lang: string) => void;
   t: (key: string) => string;
 }
 
@@ -12,17 +12,17 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 const STORAGE_KEY = 'app_language';
 
 export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [language, setLanguageState] = useState<Language>(() => {
+  const [language, setLanguageState] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored && translations[stored as Language]) {
-        return stored as Language;
+      if (stored && LANGUAGES.some(l => l.code === stored)) {
+        return stored;
       }
     }
     return 'my'; // Default to Myanmar
   });
 
-  const setLanguage = (lang: Language) => {
+  const setLanguage = (lang: string) => {
     setLanguageState(lang);
     localStorage.setItem(STORAGE_KEY, lang);
   };
