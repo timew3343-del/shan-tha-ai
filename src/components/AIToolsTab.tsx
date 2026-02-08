@@ -5,7 +5,8 @@ import {
   ZoomIn, Eraser, Sparkles, Youtube, FileText, Captions,
   Megaphone, Briefcase, Shield, BookOpen, ListChecks,
   Music, Palette, Zap, Loader2, Wand2, Search, Home,
-  Mic, PenTool, Camera
+  Mic, PenTool, Camera, ImagePlus, Type, Shirt, Star,
+  GraduationCap, LineChart, Pen, Scale, MessageCircle, Heart
 } from "lucide-react";
 
 // Lazy load all tool components
@@ -30,6 +31,17 @@ const SongMTVTool = lazy(() => import("./tools/SongMTVTool").then(m => ({ defaul
 const VideoRedesignTool = lazy(() => import("./tools/VideoRedesignTool").then(m => ({ default: m.VideoRedesignTool })));
 const LogoDesignTool = lazy(() => import("./tools/LogoDesignTool").then(m => ({ default: m.LogoDesignTool })));
 const LiveCameraChatTool = lazy(() => import("./tools/LiveCameraChatTool").then(m => ({ default: m.LiveCameraChatTool })));
+const PhotoRestoreTool = lazy(() => import("./tools/PhotoRestoreTool").then(m => ({ default: m.PhotoRestoreTool })));
+const SpellcheckTool = lazy(() => import("./tools/SpellcheckTool").then(m => ({ default: m.SpellcheckTool })));
+const VirtualTryOnTool = lazy(() => import("./tools/VirtualTryOnTool").then(m => ({ default: m.VirtualTryOnTool })));
+const AstrologyTool = lazy(() => import("./tools/AstrologyTool").then(m => ({ default: m.AstrologyTool })));
+const InteriorDesignTool = lazy(() => import("./tools/InteriorDesignTool").then(m => ({ default: m.InteriorDesignTool })));
+const CVBuilderTool = lazy(() => import("./tools/CVBuilderTool").then(m => ({ default: m.CVBuilderTool })));
+const BusinessConsultantTool = lazy(() => import("./tools/BusinessConsultantTool").then(m => ({ default: m.BusinessConsultantTool })));
+const CreativeWriterTool = lazy(() => import("./tools/CreativeWriterTool").then(m => ({ default: m.CreativeWriterTool })));
+const LegalAdvisorTool = lazy(() => import("./tools/LegalAdvisorTool").then(m => ({ default: m.LegalAdvisorTool })));
+const MessagePolisherTool = lazy(() => import("./tools/MessagePolisherTool").then(m => ({ default: m.MessagePolisherTool })));
+const NutritionPlannerTool = lazy(() => import("./tools/NutritionPlannerTool").then(m => ({ default: m.NutritionPlannerTool })));
 
 import { ToolCardCompact } from "./ToolCardCompact";
 import { AIChatbot } from "./AIChatbot";
@@ -49,7 +61,7 @@ interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv" | "videoredesign" | "logodesign" | "livecamera";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv" | "videoredesign" | "logodesign" | "livecamera" | "photorestore" | "spellcheck" | "virtualtryon" | "astrology" | "interiordesign" | "cvbuilder" | "bizconsultant" | "creativewriter" | "legaladvisor" | "messagepolisher" | "nutritionplanner";
 
 type ToolCategory = "all" | "image" | "video" | "audio" | "premium";
 
@@ -134,6 +146,18 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
     // Social/Doc
     { id: "socialmedia", icon: Briefcase, titleKey: "tool.socialMedia", fallbackTitle: "AI Studio Management", descKey: "tool.socialMedia.desc", fallbackDesc: "စိတ်ကြိုက် မီဒီယာမှာလုပ်ရန် ပလန်ဆွဲခိုင်းခြင်း", gradient: "bg-gradient-to-br from-fuchsia-500 via-pink-600 to-rose-700", credits: costs.social_media_agent, category: ["premium"] },
     { id: "docslide", icon: FileText, titleKey: "tool.docSlide", fallbackTitle: "AI Doc & Slide", descKey: "tool.docSlide.desc", fallbackDesc: "PDF, PPTX, DOCX ဖန်တီးမည်", gradient: "bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-700", credits: docSlideCost, category: ["audio"] },
+    // New Tools
+    { id: "photorestore", icon: ImagePlus, titleKey: "", fallbackTitle: "AI ဓာတ်ပုံဟောင်း ပြုပြင်သူ", descKey: "", fallbackDesc: "ပုံဟောင်းများ ပြုပြင်ခြင်း", gradient: "bg-gradient-to-br from-amber-500 via-orange-600 to-red-700", credits: costs.photo_restoration, category: ["image"], badge: "NEW" },
+    { id: "spellcheck", icon: Type, titleKey: "", fallbackTitle: "AI မြန်မာစာ သတ်ပုံစစ်", descKey: "", fallbackDesc: "သတ်ပုံနှင့် သဒ္ဒါ စစ်ဆေး", gradient: "bg-gradient-to-br from-green-500 via-emerald-600 to-teal-700", credits: costs.myanmar_spellcheck, category: ["audio"], badge: "NEW" },
+    { id: "virtualtryon", icon: Shirt, titleKey: "", fallbackTitle: "AI အင်္ကျီလဲဝတ်ကြည့်", descKey: "", fallbackDesc: "အဝတ်အစား စမ်းဝတ်ကြည့်", gradient: "bg-gradient-to-br from-pink-500 via-rose-600 to-red-700", credits: costs.virtual_tryon, category: ["image", "premium"], badge: "NEW" },
+    { id: "astrology", icon: Star, titleKey: "", fallbackTitle: "AI ဟောစာတမ်း", descKey: "", fallbackDesc: "ကံကြမ္မာ ဟောကြားချက်", gradient: "bg-gradient-to-br from-indigo-500 via-purple-600 to-violet-700", credits: costs.myanmar_astrology, category: ["premium"], badge: "NEW" },
+    { id: "interiordesign", icon: Home, titleKey: "", fallbackTitle: "AI အိမ်တွင်း ဒီဇိုင်နာ", descKey: "", fallbackDesc: "အခန်း ပြန်လည်ဒီဇိုင်းဆွဲ", gradient: "bg-gradient-to-br from-teal-500 via-cyan-600 to-blue-700", credits: costs.interior_design, category: ["image", "premium"], badge: "NEW" },
+    { id: "cvbuilder", icon: GraduationCap, titleKey: "", fallbackTitle: "AI CV & Cover Letter", descKey: "", fallbackDesc: "ကိုယ်ရေးရာဇဝင် ဖန်တီး", gradient: "bg-gradient-to-br from-blue-500 via-indigo-600 to-purple-700", credits: costs.cv_builder, category: ["audio"], badge: "NEW" },
+    { id: "bizconsultant", icon: LineChart, titleKey: "", fallbackTitle: "AI စီးပွားရေး အကြံပေး", descKey: "", fallbackDesc: "ရင်းနှီးမြှုပ်နှံမှု ခွဲခြမ်းစိတ်ဖြာ", gradient: "bg-gradient-to-br from-emerald-500 via-green-600 to-lime-700", credits: costs.business_consultant, category: ["premium"], badge: "NEW" },
+    { id: "creativewriter", icon: Pen, titleKey: "", fallbackTitle: "AI ကဗျာ/ဝတ္ထုတို", descKey: "", fallbackDesc: "မြန်မာ စာပေ ဖန်တီး", gradient: "bg-gradient-to-br from-rose-500 via-pink-600 to-fuchsia-700", credits: costs.creative_writer, category: ["audio"], badge: "NEW" },
+    { id: "legaladvisor", icon: Scale, titleKey: "", fallbackTitle: "AI ဥပဒေ အကြံပေး", descKey: "", fallbackDesc: "ဥပဒေ ခွဲခြမ်းစိတ်ဖြာ", gradient: "bg-gradient-to-br from-slate-500 via-gray-600 to-zinc-700", credits: costs.legal_advisor, category: ["premium"], badge: "NEW" },
+    { id: "messagepolisher", icon: MessageCircle, titleKey: "", fallbackTitle: "AI စာ ပြေပြစ်အောင်ပြင်", descKey: "", fallbackDesc: "စာတို ယဉ်ကျေးစွာ ပြင်ဆင်", gradient: "bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-700", credits: costs.message_polisher, category: ["audio"], badge: "NEW" },
+    { id: "nutritionplanner", icon: Heart, titleKey: "", fallbackTitle: "AI ကယ်လိုရီ တွက်သူ", descKey: "", fallbackDesc: "အစားအစာ အာဟာရ ခွဲခြမ်း", gradient: "bg-gradient-to-br from-red-500 via-rose-600 to-pink-700", credits: costs.nutrition_planner, category: ["premium"], badge: "NEW" },
   ], [costs, docSlideCost]);
 
   const filteredTools = useMemo(() => {
@@ -175,6 +199,17 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
       case "videoredesign": return <VideoRedesignTool key="videoredesign" userId={userId} onBack={handleBack} />;
       case "logodesign": return <LogoDesignTool key="logodesign" userId={userId} onBack={handleBack} />;
       case "livecamera": return <LiveCameraChatTool key="livecamera" userId={userId} onBack={handleBack} />;
+      case "photorestore": return <PhotoRestoreTool key="photorestore" userId={userId} onBack={handleBack} />;
+      case "spellcheck": return <SpellcheckTool key="spellcheck" userId={userId} onBack={handleBack} />;
+      case "virtualtryon": return <VirtualTryOnTool key="virtualtryon" userId={userId} onBack={handleBack} />;
+      case "astrology": return <AstrologyTool key="astrology" userId={userId} onBack={handleBack} />;
+      case "interiordesign": return <InteriorDesignTool key="interiordesign" userId={userId} onBack={handleBack} />;
+      case "cvbuilder": return <CVBuilderTool key="cvbuilder" userId={userId} onBack={handleBack} />;
+      case "bizconsultant": return <BusinessConsultantTool key="bizconsultant" userId={userId} onBack={handleBack} />;
+      case "creativewriter": return <CreativeWriterTool key="creativewriter" userId={userId} onBack={handleBack} />;
+      case "legaladvisor": return <LegalAdvisorTool key="legaladvisor" userId={userId} onBack={handleBack} />;
+      case "messagepolisher": return <MessagePolisherTool key="messagepolisher" userId={userId} onBack={handleBack} />;
+      case "nutritionplanner": return <NutritionPlannerTool key="nutritionplanner" userId={userId} onBack={handleBack} />;
       default: return null;
     }
   };

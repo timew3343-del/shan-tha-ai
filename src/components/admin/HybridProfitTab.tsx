@@ -38,6 +38,17 @@ const TOOL_LABELS: Record<CreditCostKey, string> = {
   auto_ad: "Auto Ad",
   video_redesign: "Video Redesign",
   logo_design: "Logo & Graphic Design",
+  photo_restoration: "Photo Restoration",
+  myanmar_spellcheck: "Myanmar Spellcheck",
+  virtual_tryon: "Virtual Try-On",
+  myanmar_astrology: "Myanmar Astrology",
+  interior_design: "Interior Design",
+  cv_builder: "CV Builder",
+  business_consultant: "Business Consultant",
+  creative_writer: "Creative Writer",
+  legal_advisor: "Legal Advisor",
+  message_polisher: "Message Polisher",
+  nutrition_planner: "Nutrition Planner",
 };
 
 interface ToolPricing {

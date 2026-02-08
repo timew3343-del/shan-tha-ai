@@ -65,3 +65,15 @@ verify_jwt = false
 
 [functions.video-redesign]
 verify_jwt = false
+
+[functions.ai-tool]
+verify_jwt = false
+
+[functions.photo-restore]
+verify_jwt = false
+
+[functions.virtual-tryon]
+verify_jwt = false
+
+[functions.interior-design]
+verify_jwt = false
