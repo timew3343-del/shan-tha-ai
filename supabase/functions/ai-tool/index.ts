@@ -6,7 +6,15 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const TOOL_CONFIGS: Record<string, { systemPrompt: string; costKey: string; baseCost: number; actionLabel: string }> = {
+interface ToolConfig {
+  systemPrompt: string;
+  costKey: string;
+  baseCost: number;
+  actionLabel: string;
+  model?: string;
+}
+
+const TOOL_CONFIGS: Record<string, ToolConfig> = {
   spellcheck: {
     systemPrompt: `You are an expert Myanmar language proofreader and editor. Your job is to:
 1. Check the given Myanmar text for spelling errors, grammar issues, and awkward phrasing.
@@ -53,6 +61,7 @@ Respond in Myanmar language. Be specific with numbers and actionable recommendat
     costKey: "credit_cost_business_consultant",
     baseCost: 2,
     actionLabel: "Business Consultant",
+    model: "google/gemini-2.5-flash",
   },
   creative_writer: {
     systemPrompt: `You are a talented Myanmar creative writer (စာရေးဆရာ) skilled in poetry and short stories. Based on the user's request:
@@ -75,6 +84,7 @@ Respond in Myanmar language.`,
     costKey: "credit_cost_legal_advisor",
     baseCost: 2,
     actionLabel: "Legal Advisor",
+    model: "google/gemini-2.5-flash",
   },
   message_polisher: {
     systemPrompt: `You are a professional communication expert for Myanmar business contexts. The user will provide a rough, casual, or emotional message and specify the recipient type. Your task:
@@ -96,6 +106,50 @@ Use Myanmar food names and measurements. Be practical and culturally relevant.`,
     costKey: "credit_cost_nutrition_planner",
     baseCost: 2,
     actionLabel: "Nutrition Planner",
+  },
+  // New tools #32-#40
+  car_dealer: {
+    systemPrompt: `You are a Myanmar car market expert (ကားအရောင်းအဝယ် ပညာရှင်). Analyze the car details provided and give a comprehensive valuation report in Burmese. Include estimated market price in MMK, market trends, resale value advice, buy/sell recommendation, and pros/cons of the model. Be specific with numbers and data.`,
+    costKey: "credit_cost_car_dealer",
+    baseCost: 2,
+    actionLabel: "Car Dealer & Valuation",
+  },
+  health_checker: {
+    systemPrompt: `You are an AI Health Advisor (ကျန်းမာရေး အကြံပေး). Analyze symptoms and provide health guidance in Burmese. Include possible conditions, symptom analysis, specialist recommendations, self-care steps, and emergency warnings. Always include a medical disclaimer that this is AI advice and users should consult a doctor.`,
+    costKey: "credit_cost_health_checker",
+    baseCost: 1,
+    actionLabel: "Health Symptom Checker",
+  },
+  baby_namer: {
+    systemPrompt: `You are a Myanmar naming expert (ကင္ကုဗေဒ ပညာရှင်). Generate meaningful names based on Myanmar astrology and naming conventions. Provide name meanings, auspicious reasons, and traditional letter associations. All output in Burmese.`,
+    costKey: "credit_cost_baby_namer",
+    baseCost: 1,
+    actionLabel: "Baby & Business Namer",
+  },
+  legal_doc: {
+    systemPrompt: `You are a Myanmar legal document expert (ဥပဒေ စာချုပ်ရေးသားသူ). Generate professional legal contracts and documents in formal Myanmar legal language. Include title, date, parties, terms & conditions (at least 8 clauses), rights & obligations, breach conditions, and signature sections.`,
+    costKey: "credit_cost_legal_doc",
+    baseCost: 2,
+    actionLabel: "Legal Document Creator",
+    model: "google/gemini-2.5-flash",
+  },
+  smart_chef: {
+    systemPrompt: `You are a Myanmar cooking expert (မြန်မာ ဟင်းချက်ပညာရှင်) and grocery calculator. Suggest recipes based on available ingredients, provide step-by-step cooking instructions, ingredient lists with quantities, estimated costs in MMK, nutrition info, cooking time, and pro tips. All in Burmese.`,
+    costKey: "credit_cost_smart_chef",
+    baseCost: 1,
+    actionLabel: "Smart Chef & Grocery Calc",
+  },
+  travel_planner: {
+    systemPrompt: `You are a global travel expert (ကမ္ဘာလှည့် ခရီးသွား လမ်းညွှန်). Create complete day-by-day travel itineraries in Burmese. Include trip summary, daily plan with times and activities, transport suggestions, hotel recommendations, estimated costs in USD and MMK, must-visit places, travel tips, visa info, weather, and local food recommendations. Be practical for Myanmar travelers.`,
+    costKey: "credit_cost_travel_planner",
+    baseCost: 2,
+    actionLabel: "Travel Planner",
+  },
+  voice_translator: {
+    systemPrompt: `You are a professional translator. Translate the given text accurately. Only return the translation, nothing else. Maintain the tone and meaning of the original text.`,
+    costKey: "credit_cost_voice_translator",
+    baseCost: 2,
+    actionLabel: "Voice Translator",
   },
 };
 
@@ -133,10 +187,13 @@ serve(async (req) => {
       });
     }
 
-    const { toolType, inputs, imageBase64, imageType } = body;
+    const { toolType, inputs, prompt, imageBase64, imageType } = body;
+
+    console.log(`AI Tool request: toolType=${toolType}, hasInputs=${!!inputs}, hasPrompt=${!!prompt}`);
 
     if (!toolType || !TOOL_CONFIGS[toolType]) {
-      return new Response(JSON.stringify({ error: "Invalid tool type" }), {
+      console.error(`Invalid tool type: "${toolType}". Available: ${Object.keys(TOOL_CONFIGS).join(", ")}`);
+      return new Response(JSON.stringify({ error: `Invalid tool type: ${toolType}` }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -164,14 +221,19 @@ serve(async (req) => {
       });
     }
 
-    // Build user message from inputs
+    // Build user message from inputs OR prompt (support both formats)
     let userText = "";
-    if (inputs && typeof inputs === "object") {
+    if (prompt && typeof prompt === "string") {
+      // Direct prompt format (used by newer tools)
+      userText = prompt;
+    } else if (inputs && typeof inputs === "object") {
+      // Key-value inputs format (used by original tools)
       userText = Object.entries(inputs)
         .filter(([_, v]) => v && String(v).trim())
         .map(([k, v]) => `${k}: ${v}`)
         .join("\n");
     }
+
     if (!userText.trim()) {
       return new Response(JSON.stringify({ error: "Input is required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -180,12 +242,16 @@ serve(async (req) => {
 
     // Build message content
     const userContent: any[] = [];
-    if (imageBase64 && imageType) {
-      userContent.push({ type: "image_url", image_url: { url: `data:${imageType};base64,${imageBase64}` } });
+    if (imageBase64) {
+      const resolvedImageType = imageType || "image/jpeg";
+      userContent.push({ type: "image_url", image_url: { url: `data:${resolvedImageType};base64,${imageBase64}` } });
     }
     userContent.push({ type: "text", text: userText });
 
-    console.log(`AI Tool [${toolType}] for user ${userId}`);
+    // Use configured model or default
+    const model = config.model || "google/gemini-3-flash-preview";
+
+    console.log(`AI Tool [${toolType}] for user ${userId}, model=${model}`);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -194,9 +260,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: toolType === "legal_advisor" || toolType === "business_consultant"
-          ? "google/gemini-2.5-flash"
-          : "google/gemini-3-flash-preview",
+        model,
         messages: [
           { role: "system", content: config.systemPrompt },
           { role: "user", content: userContent },
