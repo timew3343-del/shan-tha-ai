@@ -43,14 +43,36 @@ serve(async (req) => {
     const userId = claims.claims.sub;
     console.log(`User ${userId} requesting YouTube to text`);
 
-    const { videoId, language }: YouTubeRequest = await req.json();
+    // Parse and validate request body
+    let body: YouTubeRequest;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid request body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const { videoId, language } = body;
 
-    if (!videoId) {
+    if (!videoId || typeof videoId !== "string") {
       return new Response(
         JSON.stringify({ error: "Video ID is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Validate video ID format (YouTube IDs are 11 chars, alphanumeric + _ -)
+    if (!/^[a-zA-Z0-9_-]{6,20}$/.test(videoId)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid video ID format" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate language
+    const validLanguages = ['my', 'en', 'th', 'zh', 'ja', 'ko'];
+    const safeLang = validLanguages.includes(language) ? language : 'en';
 
     // Fetch global profit margin and calculate credit cost
     const { data: marginSetting } = await supabaseAdmin
@@ -107,7 +129,7 @@ serve(async (req) => {
       'ko': 'Korean',
     };
 
-    const languageName = languageNames[language] || 'English';
+    const languageName = languageNames[safeLang] || 'English';
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
     // Use Lovable AI to extract and transcribe

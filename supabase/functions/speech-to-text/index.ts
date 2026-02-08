@@ -65,12 +65,28 @@ serve(async (req) => {
     const userId = claims.claims.sub;
     console.log(`User ${userId} requesting speech-to-text`);
 
-    // Parse request body
-    const { audioBase64, language }: STTRequest = await req.json();
+    // Parse and validate request body
+    let body: STTRequest;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid request body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const { audioBase64, language } = body;
 
-    if (!audioBase64) {
+    if (!audioBase64 || typeof audioBase64 !== "string") {
       return new Response(
         JSON.stringify({ error: "Audio data is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (audioBase64.length > 26214400) { // ~25MB
+      return new Response(
+        JSON.stringify({ error: "Audio too large (max 25MB)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

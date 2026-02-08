@@ -53,11 +53,35 @@ serve(async (req) => {
     const userId = claims.claims.sub;
     console.log(`User ${userId} requesting video redesign`);
 
-    const { inputVideo, prompt } = await req.json();
+    // Parse and validate request body
+    let parsedBody: { inputVideo?: string; prompt?: string };
+    try {
+      parsedBody = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid request body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const { inputVideo, prompt } = parsedBody;
 
-    if (!inputVideo || !prompt) {
+    if (!inputVideo || typeof inputVideo !== "string" || !prompt || typeof prompt !== "string") {
       return new Response(
         JSON.stringify({ error: "Input video and prompt are required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (inputVideo.length > 52428800) { // ~50MB
+      return new Response(
+        JSON.stringify({ error: "Video too large (max 50MB)" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (prompt.length > 5000) {
+      return new Response(
+        JSON.stringify({ error: "Prompt too long (max 5000 characters)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

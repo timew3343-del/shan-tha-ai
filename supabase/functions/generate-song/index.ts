@@ -24,7 +24,23 @@ serve(async (req) => {
     }
 
     const userId = claims.claims.sub as string;
-    const { serviceOption, topic, genre, mood, audioBase64 } = await req.json();
+
+    // Parse and validate request body
+    let parsedBody: { serviceOption?: string; topic?: string; genre?: string; mood?: string; audioBase64?: string };
+    try {
+      parsedBody = await req.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid request body" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const { serviceOption, topic, genre, mood, audioBase64 } = parsedBody;
+
+    if (!serviceOption || !["song_only", "mtv_only", "full_auto"].includes(serviceOption)) {
+      return new Response(JSON.stringify({ error: "Invalid service option" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    if (topic && typeof topic === "string" && topic.length > 5000) {
+      return new Response(JSON.stringify({ error: "Topic too long" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     console.log(`Song/MTV: user=${userId}, option=${serviceOption}, genre=${genre}, mood=${mood}`);
 
