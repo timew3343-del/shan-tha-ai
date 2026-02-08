@@ -5,7 +5,7 @@ import {
   ZoomIn, Eraser, Sparkles, Youtube, FileText, Captions,
   Megaphone, Briefcase, Shield, BookOpen, ListChecks,
   Music, Palette, Zap, Loader2, Wand2, Search, Home,
-  Mic, PenTool
+  Mic, PenTool, Camera
 } from "lucide-react";
 
 // Lazy load all tool components
@@ -29,6 +29,7 @@ const SceneSummarizerTool = lazy(() => import("./tools/SceneSummarizerTool").the
 const SongMTVTool = lazy(() => import("./tools/SongMTVTool").then(m => ({ default: m.SongMTVTool })));
 const VideoRedesignTool = lazy(() => import("./tools/VideoRedesignTool").then(m => ({ default: m.VideoRedesignTool })));
 const LogoDesignTool = lazy(() => import("./tools/LogoDesignTool").then(m => ({ default: m.LogoDesignTool })));
+const LiveCameraChatTool = lazy(() => import("./tools/LiveCameraChatTool").then(m => ({ default: m.LiveCameraChatTool })));
 
 import { ToolCardCompact } from "./ToolCardCompact";
 import { AIChatbot } from "./AIChatbot";
@@ -47,7 +48,7 @@ interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv" | "videoredesign" | "logodesign";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv" | "videoredesign" | "logodesign" | "livecamera";
 
 type ToolCategory = "all" | "image" | "video" | "audio" | "premium";
 
@@ -108,6 +109,8 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
     // Premium
     { id: "songmtv", icon: Music, titleKey: "tool.songMtv", fallbackTitle: "သီချင်းထုတ်မယ်/MTV ထုတ်မယ်", descKey: "tool.songMtv.desc", fallbackDesc: "AI အသုံးပြု၍ သီချင်းနှင့် MTV များ ဖန်တီးပေးခြင်း", gradient: "bg-gradient-to-br from-rose-500 via-pink-600 to-fuchsia-700", credits: costs.song_mtv, category: ["premium", "audio"], badge: "PREMIUM", badgeTooltip: "AI Song & MTV Creator" },
     { id: "autoad", icon: Zap, titleKey: "tool.autoAd", fallbackTitle: "AI ကို ကြော်ငြာ အပ်ခြင်း", descKey: "tool.autoAd.desc", fallbackDesc: "AI မှ သင်အပ်သောကြော်ငြာကို ဖန်တီးပေးပါလိမ့်မည်", gradient: "bg-gradient-to-br from-orange-500 via-amber-600 to-yellow-700", credits: costs.auto_ad, category: ["premium", "video"], badge: "PREMIUM", badgeTooltip: "Full Auto Ad Generator" },
+    // Live Camera - placed prominently
+    { id: "livecamera", icon: Camera, titleKey: "", fallbackTitle: "Live AI Vision & Voice", descKey: "", fallbackDesc: "ကင်မရာ+အသံ+AI", gradient: "bg-gradient-to-br from-red-500 via-rose-500 to-pink-600", credits: costs.live_camera_chat, category: ["premium", "video"], badge: "LIVE", badgeTooltip: "Real-time AI Vision + Voice" },
     // Image
     { id: "image", icon: Image, titleKey: "tool.imageGen", fallbackTitle: "ပုံထုတ်ရန်", descKey: "tool.imageGen.desc", fallbackDesc: "AI ပုံဆွဲ", gradient: "bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-700", credits: costs.image_generation, category: ["image"], size: "small" },
     { id: "upscale", icon: ZoomIn, titleKey: "tool.upscale", fallbackTitle: "4K Upscale", descKey: "tool.upscale.desc", fallbackDesc: "Resolution မြှင့်", gradient: "bg-gradient-to-br from-cyan-500 via-cyan-600 to-blue-700", credits: costs.upscale, category: ["image"], size: "small" },
@@ -135,7 +138,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const filteredTools = useMemo(() => {
     let filtered = tools;
     if (activeCategory !== "all") {
-      filtered = filtered.filter(t => t.category.includes(activeCategory));
+      filtered = filtered.filter(tool => tool.category.includes(activeCategory));
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -146,7 +149,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
       });
     }
     return filtered;
-  }, [tools, activeCategory, searchQuery]);
+  }, [tools, activeCategory, searchQuery, t]);
 
   const renderActiveTool = () => {
     switch (activeTool) {
@@ -170,6 +173,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
       case "songmtv": return <SongMTVTool key="songmtv" userId={userId} onBack={handleBack} />;
       case "videoredesign": return <VideoRedesignTool key="videoredesign" userId={userId} onBack={handleBack} />;
       case "logodesign": return <LogoDesignTool key="logodesign" userId={userId} onBack={handleBack} />;
+      case "livecamera": return <LiveCameraChatTool key="livecamera" userId={userId} onBack={handleBack} />;
       default: return null;
     }
   };
@@ -208,7 +212,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               <AIChatbot userId={userId} />
             </motion.div>
 
-            {/* Search Bar */}
+            {/* Search Bar - Glassmorphism */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.17 }}>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -216,16 +220,16 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Tool ရှာရန်... (e.g. Face, Video, Logo)"
-                  className="pl-9 h-10 rounded-2xl bg-card/40 backdrop-blur-xl border border-white/10 text-sm font-myanmar"
+                  className="pl-9 h-10 rounded-2xl bg-card/40 backdrop-blur-xl border border-white/10 text-sm font-myanmar placeholder:text-muted-foreground/60"
                 />
               </div>
             </motion.div>
 
-            {/* Category Tabs */}
+            {/* Category Tabs - Glassmorphism + Glow */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.19 }}>
-              <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1">
+              <div className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                 {CATEGORIES.map((cat) => {
-                  const Icon = cat.icon;
+                  const CatIcon = cat.icon;
                   const isActive = activeCategory === cat.key;
                   return (
                     <button
@@ -233,11 +237,11 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                       onClick={() => setActiveCategory(cat.key)}
                       className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-medium whitespace-nowrap transition-all duration-300 font-myanmar ${
                         isActive
-                          ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30"
+                          ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30 ring-1 ring-primary/50"
                           : "bg-card/40 backdrop-blur-xl border border-white/10 text-muted-foreground hover:bg-primary/10 hover:text-primary"
                       }`}
                     >
-                      <Icon className="w-3.5 h-3.5" />
+                      <CatIcon className="w-3.5 h-3.5" />
                       {cat.label}
                     </button>
                   );
