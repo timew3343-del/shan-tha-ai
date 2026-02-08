@@ -36,6 +36,7 @@ import { AIChatbot } from "./AIChatbot";
 import { ReferralSection } from "./ReferralSection";
 import { LowCreditAlert } from "./LowCreditAlert";
 import { UserFeedback } from "./UserFeedback";
+import { TutorialManager, DASHBOARD_TOUR_STEPS } from "./TutorialManager";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { useCredits } from "@/hooks/useCredits";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -181,6 +182,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   return (
     <div className="min-h-screen">
       <LowCreditAlert credits={credits} show={showLowCreditAlert} onClose={() => setShowLowCreditAlert(false)} />
+      {activeTool === "home" && <TutorialManager tourKey="dashboard" steps={DASHBOARD_TOUR_STEPS} />}
 
       <AnimatePresence mode="wait">
         {activeTool === "home" ? (
@@ -197,7 +199,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
 
             {/* Top-up Buttons */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="flex gap-2">
-              <button onClick={() => navigate("/top-up")} className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-primary/10 border border-primary/30 hover:bg-primary/20 transition-all">
+              <button id="topup-btn" onClick={() => navigate("/top-up")} className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-primary/10 border border-primary/30 hover:bg-primary/20 transition-all">
                 <Wallet className="w-5 h-5 text-primary" />
                 <span className="text-sm text-primary font-medium font-myanmar">{t('dashboard.topupBtn')}</span>
               </button>
@@ -214,7 +216,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
 
             {/* Search Bar - Glassmorphism */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.17 }}>
-              <div className="relative">
+              <div id="search-bar" className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   value={searchQuery}
@@ -227,7 +229,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
 
             {/* Category Tabs - Glassmorphism + Glow */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.19 }}>
-              <div className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+              <div id="category-tabs" className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                 {CATEGORIES.map((cat) => {
                   const CatIcon = cat.icon;
                   const isActive = activeCategory === cat.key;
@@ -251,7 +253,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
 
             {/* Tools Grid */}
             <LayoutGroup>
-              <motion.div layout className="grid grid-cols-2 gap-2">
+              <motion.div id="tools-grid" layout className="grid grid-cols-2 gap-2">
                 <AnimatePresence mode="popLayout">
                   {filteredTools.map((tool, idx) => (
                     <motion.div
