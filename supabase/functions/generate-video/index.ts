@@ -77,11 +77,35 @@ serve(async (req) => {
     const userId = claims.claims.sub;
     console.log(`User ${userId} requesting video generation`);
 
-    const { prompt, image, speechText }: GenerateVideoRequest = await req.json();
+    // Parse and validate request body
+    let body: GenerateVideoRequest;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid request body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const { prompt, image, speechText } = body;
 
-    if (!image) {
+    if (!image || typeof image !== "string") {
       return new Response(
         JSON.stringify({ error: "ဗီဒီယိုထုတ်ရန် ပုံတစ်ပုံထည့်ရန်လိုအပ်ပါသည်" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (image.length > 20971520) { // ~20MB
+      return new Response(
+        JSON.stringify({ error: "Image too large (max 20MB)" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (prompt && typeof prompt === "string" && prompt.length > 5000) {
+      return new Response(
+        JSON.stringify({ error: "Prompt too long" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

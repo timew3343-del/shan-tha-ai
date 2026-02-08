@@ -65,12 +65,35 @@ serve(async (req) => {
     const userId = claims.claims.sub;
     console.log(`User ${userId} requesting image generation`);
 
-    // Parse request body first
-    const { prompt, referenceImage }: GenerateImageRequest = await req.json();
+    // Parse and validate request body
+    let body: GenerateImageRequest;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid request body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const { prompt, referenceImage } = body;
 
-    if (!prompt || prompt.trim() === "") {
+    if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
       return new Response(
         JSON.stringify({ error: "Prompt is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (prompt.length > 5000) {
+      return new Response(
+        JSON.stringify({ error: "Prompt too long (max 5000 characters)" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (referenceImage && referenceImage.length > 10485760) {
+      return new Response(
+        JSON.stringify({ error: "Reference image too large (max 10MB)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

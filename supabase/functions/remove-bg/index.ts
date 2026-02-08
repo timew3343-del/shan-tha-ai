@@ -64,11 +64,26 @@ serve(async (req) => {
     const userId = claims.claims.sub;
     console.log(`User ${userId} requesting background removal`);
 
-    const { imageBase64 } = await req.json();
-    if (!imageBase64) {
+    // Parse and validate request body
+    let parsedBody: { imageBase64?: string };
+    try {
+      parsedBody = await req.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid request body" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const { imageBase64 } = parsedBody;
+
+    if (!imageBase64 || typeof imageBase64 !== "string") {
       return new Response(JSON.stringify({ error: "Image is required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (imageBase64.length > 10485760) { // ~10MB
+      return new Response(JSON.stringify({ error: "Image too large (max 10MB)" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 

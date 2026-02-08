@@ -48,12 +48,43 @@ serve(async (req) => {
     const userId = claims.claims.sub;
     console.log(`User ${userId} requesting AI chat`);
 
-    // Parse request body
-    const { message, imageBase64, imageType }: ChatRequest = await req.json();
+    // Parse and validate request body
+    let body: ChatRequest;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid request body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const { message, imageBase64, imageType } = body;
 
-    if (!message?.trim()) {
+    if (!message || typeof message !== "string" || !message.trim()) {
       return new Response(
         JSON.stringify({ error: "Message is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Input length limits
+    if (message.length > 10000) {
+      return new Response(
+        JSON.stringify({ error: "Message too long (max 10000 characters)" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (imageBase64 && imageBase64.length > 10485760) { // ~10MB
+      return new Response(
+        JSON.stringify({ error: "Image too large (max 10MB)" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (imageType && !["image/jpeg", "image/png", "image/gif", "image/webp"].includes(imageType)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid image type" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

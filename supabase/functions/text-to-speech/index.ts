@@ -66,12 +66,28 @@ serve(async (req) => {
     const userId = claims.claims.sub;
     console.log(`User ${userId} requesting text-to-speech`);
 
-    // Parse request body
-    const { text, voice, language }: TTSRequest = await req.json();
+    // Parse and validate request body
+    let body: TTSRequest;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid request body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const { text, voice, language } = body;
 
-    if (!text || text.trim() === "") {
+    if (!text || typeof text !== "string" || !text.trim()) {
       return new Response(
         JSON.stringify({ error: "Text is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (text.length > 10000) {
+      return new Response(
+        JSON.stringify({ error: "Text too long (max 10000 characters)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

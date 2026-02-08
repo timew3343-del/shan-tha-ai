@@ -46,12 +46,43 @@ serve(async (req) => {
     }
 
     const userId = claims.claims.sub as string;
-    const body: ContentCalendarRequest = await req.json();
+    // Parse and validate request body
+    let body: ContentCalendarRequest;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid request body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     const { mode, images, businessDescription, numDays = 7, themePrompt, themeName, selectedImageIndex } = body;
 
-    if (!images || images.length === 0 || !businessDescription) {
+    if (!images || !Array.isArray(images) || images.length === 0 || !businessDescription || typeof businessDescription !== "string") {
       return new Response(
         JSON.stringify({ error: "Images and business description are required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Limit images array to prevent OOM
+    if (images.length > 20) {
+      return new Response(
+        JSON.stringify({ error: "Too many images (max 20)" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (businessDescription.length > 2000) {
+      return new Response(
+        JSON.stringify({ error: "Business description too long (max 2000 characters)" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!["calendar", "photoshoot"].includes(mode)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid mode" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

@@ -70,11 +70,35 @@ serve(async (req) => {
     const userId = claims.claims.sub;
     console.log(`User ${userId} requesting face swap`);
 
-    const { targetVideo, faceImage, isLiveCamera }: FaceSwapRequest = await req.json();
+    // Parse and validate request body
+    let body: FaceSwapRequest;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid request body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const { targetVideo, faceImage, isLiveCamera } = body;
 
-    if (!targetVideo || !faceImage) {
+    if (!targetVideo || typeof targetVideo !== "string" || !faceImage || typeof faceImage !== "string") {
       return new Response(
         JSON.stringify({ error: "Target video and face image are required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Size limits: ~50MB for video, ~10MB for face image
+    if (targetVideo.length > 52428800) {
+      return new Response(
+        JSON.stringify({ error: "Video too large (max 50MB)" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (faceImage.length > 10485760) {
+      return new Response(
+        JSON.stringify({ error: "Face image too large (max 10MB)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

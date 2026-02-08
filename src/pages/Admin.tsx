@@ -97,7 +97,7 @@ export const Admin = () => {
   // Face swap enabled state
   const [faceSwapEnabled, setFaceSwapEnabled] = useState(true);
 
-  // API Keys state
+   // API Keys state - stores masked values for display, raw values only on save
   const [geminiApiKey, setGeminiApiKey] = useState("");
   const [stabilityApiKey, setStabilityApiKey] = useState("");
   const [replicateApiToken, setReplicateApiToken] = useState("");
@@ -106,6 +106,8 @@ export const Admin = () => {
   const [shotstackApiKey, setShotstackApiKey] = useState("");
   const [acrcloudAccessKey, setAcrcloudAccessKey] = useState("");
   const [acrcloudAccessSecret, setAcrcloudAccessSecret] = useState("");
+  // Track which keys have been loaded vs modified
+  const [apiKeyStatus, setApiKeyStatus] = useState<Record<string, boolean>>({});
   const [isSavingApiKeys, setIsSavingApiKeys] = useState(false);
   
   // Password visibility for API keys
@@ -189,19 +191,19 @@ export const Admin = () => {
   useEffect(() => {
     setApiHealth({
       gemini: { 
-        status: geminiApiKey ? "configured" : "no_key", 
+        status: apiKeyStatus["gemini_api_key"] || geminiApiKey.length > 0 ? "configured" : "no_key", 
         lastCheck: new Date() 
       },
       stability: { 
-        status: stabilityApiKey ? "configured" : "no_key", 
+        status: apiKeyStatus["stability_api_key"] || stabilityApiKey.length > 0 ? "configured" : "no_key", 
         lastCheck: new Date() 
       },
       replicate: { 
-        status: replicateApiToken ? "configured" : "no_key", 
+        status: apiKeyStatus["replicate_api_token"] || replicateApiToken.length > 0 ? "configured" : "no_key", 
         lastCheck: new Date() 
       },
     });
-  }, [geminiApiKey, stabilityApiKey, replicateApiToken]);
+  }, [apiKeyStatus, geminiApiKey, stabilityApiKey, replicateApiToken]);
 
   const loadSettings = async () => {
     try {
@@ -216,32 +218,47 @@ export const Admin = () => {
 
       if (data) {
         const loadedPayments: PaymentMethod[] = [];
+        const keyConfigured: Record<string, boolean> = {};
+        
+        // Helper to mask an API key for display (show only last 4 chars)
+        const maskKey = (key: string): string => {
+          if (!key || key.length < 8) return key ? "••••••••" : "";
+          return "••••••••" + key.slice(-4);
+        };
         
         data.forEach((setting) => {
           switch (setting.key) {
             case "gemini_api_key":
-              setGeminiApiKey(setting.value || "");
+              setGeminiApiKey(maskKey(setting.value || ""));
+              keyConfigured["gemini_api_key"] = !!(setting.value);
               break;
             case "stability_api_key":
-              setStabilityApiKey(setting.value || "");
+              setStabilityApiKey(maskKey(setting.value || ""));
+              keyConfigured["stability_api_key"] = !!(setting.value);
               break;
             case "replicate_api_token":
-              setReplicateApiToken(setting.value || "");
+              setReplicateApiToken(maskKey(setting.value || ""));
+              keyConfigured["replicate_api_token"] = !!(setting.value);
               break;
             case "stripe_publishable_key":
-              setStripePublishableKey(setting.value || "");
+              setStripePublishableKey(maskKey(setting.value || ""));
+              keyConfigured["stripe_publishable_key"] = !!(setting.value);
               break;
             case "stripe_secret_key":
-              setStripeSecretKey(setting.value || "");
+              setStripeSecretKey(maskKey(setting.value || ""));
+              keyConfigured["stripe_secret_key"] = !!(setting.value);
               break;
             case "shotstack_api_key":
-              setShotstackApiKey(setting.value || "");
+              setShotstackApiKey(maskKey(setting.value || ""));
+              keyConfigured["shotstack_api_key"] = !!(setting.value);
               break;
             case "acrcloud_access_key":
-              setAcrcloudAccessKey(setting.value || "");
+              setAcrcloudAccessKey(maskKey(setting.value || ""));
+              keyConfigured["acrcloud_access_key"] = !!(setting.value);
               break;
             case "acrcloud_access_secret":
-              setAcrcloudAccessSecret(setting.value || "");
+              setAcrcloudAccessSecret(maskKey(setting.value || ""));
+              keyConfigured["acrcloud_access_secret"] = !!(setting.value);
               break;
             case "is_maintenance_mode":
               setIsMaintenanceMode(setting.value === "true");
@@ -258,6 +275,8 @@ export const Admin = () => {
             } catch {}
           }
         });
+        
+        setApiKeyStatus(keyConfigured);
         
         if (loadedPayments.length > 0) {
           setPaymentMethods(loadedPayments);
@@ -491,6 +510,9 @@ export const Admin = () => {
       ];
 
       for (const update of updates) {
+        // Skip saving masked values - only save if admin entered a new key
+        if (update.value.startsWith("••••")) continue;
+        
         const { error } = await supabase
           .from("app_settings")
           .upsert({ key: update.key, value: update.value }, { onConflict: "key" });
