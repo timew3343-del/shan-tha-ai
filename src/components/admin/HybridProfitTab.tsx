@@ -49,6 +49,15 @@ const TOOL_LABELS: Record<CreditCostKey, string> = {
   legal_advisor: "Legal Advisor",
   message_polisher: "Message Polisher",
   nutrition_planner: "Nutrition Planner",
+  car_dealer: "Car Dealer & Valuation",
+  exterior_design: "Exterior House Design",
+  voice_translator: "Voice Translator",
+  health_checker: "Health Symptom Checker",
+  baby_namer: "Baby & Business Namer",
+  legal_doc: "Legal Document Creator",
+  style_transfer: "Artistic Style Transfer",
+  smart_chef: "Smart Chef & Grocery",
+  travel_planner: "Travel Planner",
 };
 
 interface ToolPricing {

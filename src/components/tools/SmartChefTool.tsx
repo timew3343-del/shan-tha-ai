@@ -1,0 +1,97 @@
+import { useState } from "react";
+import { Loader2, ChefHat, Copy, Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import { useCredits } from "@/hooks/useCredits";
+import { useCreditCosts } from "@/hooks/useCreditCosts";
+import { supabase } from "@/integrations/supabase/client";
+import { ToolHeader } from "@/components/ToolHeader";
+import { motion } from "framer-motion";
+import ReactMarkdown from "react-markdown";
+
+interface Props { userId?: string; onBack: () => void; }
+
+export const SmartChefTool = ({ userId, onBack }: Props) => {
+  const { toast } = useToast();
+  const { credits, refetch } = useCredits(userId);
+  const { costs } = useCreditCosts();
+  const [ingredients, setIngredients] = useState("");
+  const [servings, setServings] = useState("2");
+  const [result, setResult] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const cost = (costs as any).smart_chef || 2;
+
+  const handleGenerate = async () => {
+    if (!userId || !ingredients.trim()) return;
+    setIsLoading(true);
+    setResult(null);
+    try {
+      const prompt = `You are a Myanmar cooking expert and grocery calculator. Provide recipes and costs in Burmese.
+
+Available Ingredients: ${ingredients}
+Number of Servings: ${servings}
+
+Provide:
+1. **ဟင်းအမည်** (Dish name - suggest 2-3 dishes possible with these ingredients)
+2. **ချက်ပြုတ်နည်း** (Step-by-step cooking instructions in Burmese)
+3. **လိုအပ်သော ပစ္စည်းများ** (Full ingredient list with quantities)
+4. **ခန့်မှန်း ကုန်ကျစရိတ်** (Estimated cost in MMK for Myanmar market)
+5. **အာဟာရ အချက်အလက်** (Basic nutrition info)
+6. **ချက်ပြုတ်ချိန်** (Cooking time)
+7. **အကြံပြုချက်** (Pro tips)
+
+Use Myanmar Kyat for all prices. Be practical and helpful.`;
+
+      const { data, error } = await supabase.functions.invoke("ai-tool", {
+        body: { userId, toolType: "smart_chef", prompt },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setResult(data?.result);
+      refetch();
+      toast({ title: "အောင်မြင်ပါသည်!", description: `ဟင်းချက်နည်း ဖန်တီးပြီး (${data.creditsUsed} Cr)` });
+    } catch (e: any) {
+      toast({ title: "အမှားရှိပါသည်", description: e.message, variant: "destructive" });
+    } finally { setIsLoading(false); }
+  };
+
+  const handleCopy = () => {
+    if (result) { navigator.clipboard.writeText(result); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4 p-4 pb-24">
+      <ToolHeader title="AI ဟင်းချက်နည်းနှင့် ဈေးဖိုးတွက်ချက်သူ" subtitle="ပါဝင်ပစ္စည်းများဖြင့် ဟင်းချက်နည်း ရှာဖွေခြင်း" onBack={onBack} />
+
+      <div className="gradient-card rounded-2xl p-4 border border-primary/20 space-y-3">
+        <div>
+          <label className="text-xs text-muted-foreground font-myanmar">ရှိနေသော ပစ္စည်းများ</label>
+          <Textarea value={ingredients} onChange={(e) => setIngredients(e.target.value)} placeholder="ဥပမာ - ကြက်သား၊ ကြက်သွန်နီ၊ ချင်း၊ ငရုတ်သီး..." className="mt-1 min-h-[80px] font-myanmar" />
+        </div>
+        <div>
+          <label className="text-xs text-muted-foreground font-myanmar">ဦးရေ</label>
+          <Input value={servings} onChange={(e) => setServings(e.target.value)} type="number" min="1" max="20" className="mt-1" />
+        </div>
+      </div>
+
+      <Button onClick={handleGenerate} disabled={isLoading || !ingredients.trim() || credits < cost} className="w-full bg-primary text-primary-foreground rounded-2xl py-4">
+        {isLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />ရှာဖွေနေသည်...</> : <><ChefHat className="w-4 h-4 mr-2" />ဟင်းချက်နည်း ရှာမည် ({cost} Cr)</>}
+      </Button>
+
+      {result && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="gradient-card rounded-2xl p-4 border border-primary/30 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-primary font-myanmar">🍳 ဟင်းချက်နည်း</h3>
+            <Button size="sm" variant="ghost" onClick={handleCopy}>{copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}</Button>
+          </div>
+          <div className="prose prose-sm dark:prose-invert max-w-none font-myanmar text-sm">
+            <ReactMarkdown>{result}</ReactMarkdown>
+          </div>
+        </motion.div>
+      )}
+    </motion.div>
+  );
+};

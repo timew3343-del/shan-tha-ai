@@ -41,6 +41,16 @@ const BASE_API_COSTS = {
   legal_advisor: 2,
   message_polisher: 1,
   nutrition_planner: 2,
+  // New tools
+  car_dealer: 1,
+  exterior_design: 3,
+  voice_translator: 2,
+  health_checker: 1,
+  baby_namer: 1,
+  legal_doc: 1,
+  style_transfer: 3,
+  smart_chef: 1,
+  travel_planner: 1,
 };
 
 export type CreditCostKey = keyof typeof BASE_API_COSTS;
@@ -84,6 +94,15 @@ export interface CreditCosts {
   legal_advisor: number;
   message_polisher: number;
   nutrition_planner: number;
+  car_dealer: number;
+  exterior_design: number;
+  voice_translator: number;
+  health_checker: number;
+  baby_namer: number;
+  legal_doc: number;
+  style_transfer: number;
+  smart_chef: number;
+  travel_planner: number;
 }
 
 function calculateDefaultCosts(margin: number = 40): CreditCosts {
