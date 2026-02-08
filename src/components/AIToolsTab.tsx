@@ -272,11 +272,11 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               className="rounded-2xl p-3 border border-primary/30 bg-card/60 backdrop-blur-xl"
             >
               <p className="text-[10px] leading-relaxed text-muted-foreground font-myanmar text-center">
-                ဤ Studio ရှိ Tools အားလုံးကို ရိုးရိုး (Standard) Version များ လုံးဝမသုံးဘဲ၊ အဆင့်မြင့်ဆုံး{' '}
+                Myanmar Ai Studio ရှိ Tools အားလုံးကို ရိုးရိုး (Standard) Version များ လုံးဝမသုံးဘဲ၊ အဆင့်မြင့်ဆုံး{' '}
                 <span className="font-bold animate-golden-glow">'PRO' Version</span>{' '}
-                API Keys များဖြင့်သာ အားလုံးကို ချိတ်ဆက်ထားပါသည်။ ထို့ပြင် အသုံးပြုသူ၏ မေးခွန်းများကို အလိုအလျောက် စဉ်းစားတွေးတောပြီး အကောင်းဆုံးအဖြေထုတ်ပေးနိုင်သော{' '}
+                များကိုသာ အသုံးပြုထားပါတယ် ထို့ပြင် အသုံးပြုသူ၏ မေးခွန်းများကို အလိုအလျောက် စဉ်းစားတွေးတောပြီး အကောင်းဆုံးအဖြေထုတ်ပေးနိုင်သော{' '}
                 <span className="font-bold animate-golden-glow">'Agentic AI'</span>{' '}
-                စနစ်ကိုသာ အခြေခံထားပါသည်။
+                စနစ်ကိုသာ အခြေခံထားပါသသည် ဒါကြောင့် Credit ကိုဝယ် ဖြည့်၍ အရည်သွေးမြင့်စွာ အသုံးပြုကြပါ
               </p>
             </motion.div>
 
