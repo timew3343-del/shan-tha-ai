@@ -75,7 +75,7 @@ interface AIToolsTabProps {
 
 type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv" | "videoredesign" | "logodesign" | "livecamera" | "photorestore" | "spellcheck" | "virtualtryon" | "astrology" | "interiordesign" | "cvbuilder" | "bizconsultant" | "creativewriter" | "legaladvisor" | "messagepolisher" | "nutritionplanner" | "cardealer" | "exteriordesign" | "voicetranslator" | "healthchecker" | "babynamer" | "legaldoc" | "styletransfer" | "smartchef" | "travelplanner";
 
-type ToolCategory = "all" | "image" | "video" | "audio" | "premium";
+type ToolCategory = "all" | "image" | "video" | "audio" | "premium" | "health" | "legal" | "lifestyle";
 
 interface ToolDef {
   id: ActiveTool;
@@ -97,6 +97,9 @@ const CATEGORIES: { key: ToolCategory; label: string; icon: any }[] = [
   { key: "image", label: "ပုံရိပ် Tools", icon: Image },
   { key: "video", label: "ဗီဒီယို Tools", icon: Video },
   { key: "audio", label: "အသံနှင့်စာ", icon: Mic },
+  { key: "health", label: "ကျန်းမာရေး", icon: Heart },
+  { key: "legal", label: "ဥပဒေ/စီးပွား", icon: Scale },
+  { key: "lifestyle", label: "လူနေမှုပုံစံ", icon: Sparkles },
   { key: "premium", label: "Premium", icon: Crown },
 ];
 
@@ -141,12 +144,12 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
     { id: "bgremove", icon: Eraser, titleKey: "tool.bgRemove", fallbackTitle: "BG Remove", descKey: "tool.bgRemove.desc", fallbackDesc: "Background ဖယ်", gradient: "bg-gradient-to-br from-teal-500 via-teal-600 to-emerald-700", credits: costs.bg_remove, category: ["image"], size: "small" },
     { id: "bgstudio", icon: Palette, titleKey: "tool.bgStudio", fallbackTitle: "ပစ္စည်းပုံထည့်/အော်တို ဘတ်ဂရောင်းချိန်း", descKey: "tool.bgStudio.desc", fallbackDesc: "ကုန်ပစ္စည်းပုံရိပ်များကို နောက်ခံအလှများ အလိုအလျောက် ပြောင်းလဲပေးခြင်း", gradient: "bg-gradient-to-br from-violet-500 via-purple-600 to-fuchsia-700", credits: costs.bg_studio, category: ["image"], size: "small", badge: "NEW" },
     { id: "logodesign", icon: PenTool, titleKey: "", fallbackTitle: "Logo & Graphic Design", descKey: "", fallbackDesc: "Logo၊ FB Cover ဒီဇိုင်း", gradient: "bg-gradient-to-br from-pink-500 via-rose-600 to-red-700", credits: costs.logo_design, category: ["image"], size: "small", badge: "NEW" },
-    { id: "faceswap", icon: Users, titleKey: "tool.faceSwap", fallbackTitle: "မျက်နှာပြောင်း", descKey: "tool.faceSwap.desc", fallbackDesc: "Face Swap", gradient: "bg-gradient-to-br from-purple-500 via-violet-600 to-indigo-700", credits: costs.face_swap, category: ["image", "video"] },
+    { id: "faceswap", icon: Users, titleKey: "tool.faceSwap", fallbackTitle: "မျက်နှာပြောင်း", descKey: "tool.faceSwap.desc", fallbackDesc: "Face Swap", gradient: "bg-gradient-to-br from-purple-500 via-violet-600 to-indigo-700", credits: costs.face_swap, category: ["image"] },
     { id: "photorestore", icon: ImagePlus, titleKey: "", fallbackTitle: "AI ဓာတ်ပုံဟောင်း ပြုပြင်သူ", descKey: "", fallbackDesc: "ပုံဟောင်းများ ပြုပြင်ခြင်း", gradient: "bg-gradient-to-br from-amber-500 via-orange-600 to-red-700", credits: costs.photo_restoration, category: ["image"], badge: "NEW" },
     { id: "virtualtryon", icon: Shirt, titleKey: "", fallbackTitle: "AI အင်္ကျီလဲဝတ်ကြည့်", descKey: "", fallbackDesc: "အဝတ်အစား စမ်းဝတ်ကြည့်", gradient: "bg-gradient-to-br from-pink-500 via-rose-600 to-red-700", credits: costs.virtual_tryon, category: ["image", "premium"], badge: "NEW" },
     { id: "styletransfer", icon: Paintbrush, titleKey: "", fallbackTitle: "AI Art Style Transfer", descKey: "", fallbackDesc: "ဓာတ်ပုံ → အနုပညာ", gradient: "bg-gradient-to-br from-fuchsia-500 via-purple-600 to-indigo-700", credits: (costs as any).style_transfer || 3, category: ["image"], badge: "NEW" },
-    { id: "exteriordesign", icon: Building2, titleKey: "", fallbackTitle: "AI အိမ်ပြင်ပ ဒီဇိုင်နာ", descKey: "", fallbackDesc: "အိမ်ပြင်ပ 3D ဒီဇိုင်း", gradient: "bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-700", credits: (costs as any).exterior_design || 5, category: ["image", "premium"], badge: "NEW" },
-    { id: "interiordesign", icon: Home, titleKey: "", fallbackTitle: "AI အိမ်တွင်း ဒီဇိုင်နာ", descKey: "", fallbackDesc: "အခန်း ပြန်လည်ဒီဇိုင်းဆွဲ", gradient: "bg-gradient-to-br from-teal-500 via-cyan-600 to-blue-700", credits: costs.interior_design, category: ["image", "premium"], badge: "NEW" },
+    { id: "exteriordesign", icon: Building2, titleKey: "", fallbackTitle: "AI အိမ်ပြင်ပ ဒီဇိုင်နာ", descKey: "", fallbackDesc: "အိမ်ပြင်ပ 3D ဒီဇိုင်း", gradient: "bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-700", credits: (costs as any).exterior_design || 5, category: ["image", "lifestyle"], badge: "NEW" },
+    { id: "interiordesign", icon: Home, titleKey: "", fallbackTitle: "AI အိမ်တွင်း ဒီဇိုင်နာ", descKey: "", fallbackDesc: "အခန်း ပြန်လည်ဒီဇိုင်းဆွဲ", gradient: "bg-gradient-to-br from-teal-500 via-cyan-600 to-blue-700", credits: costs.interior_design, category: ["image", "lifestyle"], badge: "NEW" },
     // Video
     { id: "video", icon: Video, titleKey: "tool.videoGen", fallbackTitle: "ဗီဒီယိုထုတ်ရန်", descKey: "tool.videoGen.desc", fallbackDesc: "ပုံမှ ဗီဒီယို", gradient: "bg-gradient-to-br from-red-500 via-rose-600 to-pink-700", credits: costs.video_generation, category: ["video"] },
     { id: "videoredesign", icon: Wand2, titleKey: "", fallbackTitle: "AI Video Redesign", descKey: "", fallbackDesc: "ဗီဒီယို Style ပြောင်း", gradient: "bg-gradient-to-br from-violet-500 via-fuchsia-600 to-pink-700", credits: costs.video_redesign, category: ["video"], badge: "NEW" },
@@ -159,25 +162,27 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
     // Audio/Text
     { id: "speech", icon: Volume2, titleKey: "tool.tts", fallbackTitle: "အသံ ↔ စာ", descKey: "tool.tts.desc", fallbackDesc: "Text-to-Speech & STT", gradient: "bg-gradient-to-br from-emerald-500 via-green-600 to-teal-700", credits: costs.text_to_speech, category: ["audio"] },
     { id: "youtube", icon: Youtube, titleKey: "tool.youtubeText", fallbackTitle: "YouTube → စာ", descKey: "tool.youtubeText.desc", fallbackDesc: "ဗီဒီယိုမှ စာထုတ်", gradient: "bg-gradient-to-br from-red-500 via-red-600 to-rose-700", credits: costs.youtube_to_text, category: ["audio"] },
-    { id: "voicetranslator", icon: Languages, titleKey: "", fallbackTitle: "AI အသံ ဘာသာပြန်စက်", descKey: "", fallbackDesc: "မြန်မာ → နိုင်ငံခြား ဘာသာပြန်", gradient: "bg-gradient-to-br from-indigo-500 via-blue-600 to-cyan-700", credits: (costs as any).voice_translator || 3, category: ["audio", "premium"], badge: "NEW" },
+    { id: "voicetranslator", icon: Languages, titleKey: "", fallbackTitle: "AI အသံ ဘာသာပြန်စက်", descKey: "", fallbackDesc: "မြန်မာ → နိုင်ငံခြား ဘာသာပြန်", gradient: "bg-gradient-to-br from-indigo-500 via-blue-600 to-cyan-700", credits: (costs as any).voice_translator || 3, category: ["audio"], badge: "NEW" },
     { id: "spellcheck", icon: Type, titleKey: "", fallbackTitle: "AI မြန်မာစာ သတ်ပုံစစ်", descKey: "", fallbackDesc: "သတ်ပုံနှင့် သဒ္ဒါ စစ်ဆေး", gradient: "bg-gradient-to-br from-green-500 via-emerald-600 to-teal-700", credits: costs.myanmar_spellcheck, category: ["audio"], badge: "NEW" },
     { id: "creativewriter", icon: Pen, titleKey: "", fallbackTitle: "AI ကဗျာ/ဝတ္ထုတို", descKey: "", fallbackDesc: "မြန်မာ စာပေ ဖန်တီး", gradient: "bg-gradient-to-br from-rose-500 via-pink-600 to-fuchsia-700", credits: costs.creative_writer, category: ["audio"], badge: "NEW" },
     { id: "messagepolisher", icon: MessageCircle, titleKey: "", fallbackTitle: "AI စာ ပြေပြစ်အောင်ပြင်", descKey: "", fallbackDesc: "စာတို ယဉ်ကျေးစွာ ပြင်ဆင်", gradient: "bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-700", credits: costs.message_polisher, category: ["audio"], badge: "NEW" },
     // Social/Doc
     { id: "socialmedia", icon: Briefcase, titleKey: "tool.socialMedia", fallbackTitle: "AI Studio Management", descKey: "tool.socialMedia.desc", fallbackDesc: "စိတ်ကြိုက် မီဒီယာမှာလုပ်ရန် ပလန်ဆွဲခိုင်းခြင်း", gradient: "bg-gradient-to-br from-fuchsia-500 via-pink-600 to-rose-700", credits: costs.social_media_agent, category: ["premium"] },
     { id: "docslide", icon: FileText, titleKey: "tool.docSlide", fallbackTitle: "AI Doc & Slide", descKey: "tool.docSlide.desc", fallbackDesc: "PDF, PPTX, DOCX ဖန်တီးမည်", gradient: "bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-700", credits: docSlideCost, category: ["audio"] },
-    { id: "cvbuilder", icon: GraduationCap, titleKey: "", fallbackTitle: "AI CV & Cover Letter", descKey: "", fallbackDesc: "ကိုယ်ရေးရာဇဝင် ဖန်တီး", gradient: "bg-gradient-to-br from-blue-500 via-indigo-600 to-purple-700", credits: costs.cv_builder, category: ["audio"], badge: "NEW" },
-    { id: "legaldoc", icon: FileCheck, titleKey: "", fallbackTitle: "AI ဥပဒေ စာချုပ်", descKey: "", fallbackDesc: "ပရော်ဖက်ရှင်နယ် စာချုပ် ဖန်တီး", gradient: "bg-gradient-to-br from-slate-500 via-zinc-600 to-neutral-700", credits: (costs as any).legal_doc || 3, category: ["audio", "premium"], badge: "NEW" },
-    // Premium specialty
-    { id: "bizconsultant", icon: LineChart, titleKey: "", fallbackTitle: "AI စီးပွားရေး အကြံပေး", descKey: "", fallbackDesc: "ရင်းနှီးမြှုပ်နှံမှု ခွဲခြမ်းစိတ်ဖြာ", gradient: "bg-gradient-to-br from-emerald-500 via-green-600 to-lime-700", credits: costs.business_consultant, category: ["premium"], badge: "NEW" },
-    { id: "legaladvisor", icon: Scale, titleKey: "", fallbackTitle: "AI ဥပဒေ အကြံပေး", descKey: "", fallbackDesc: "ဥပဒေ ခွဲခြမ်းစိတ်ဖြာ", gradient: "bg-gradient-to-br from-slate-500 via-gray-600 to-zinc-700", credits: costs.legal_advisor, category: ["premium"], badge: "NEW" },
-    { id: "astrology", icon: Star, titleKey: "", fallbackTitle: "AI ဟောစာတမ်း", descKey: "", fallbackDesc: "ကံကြမ္မာ ဟောကြားချက်", gradient: "bg-gradient-to-br from-indigo-500 via-purple-600 to-violet-700", credits: costs.myanmar_astrology, category: ["premium"], badge: "NEW" },
-    { id: "babynamer", icon: Baby, titleKey: "", fallbackTitle: "AI နာမည်ပေး ကင်္ကုဗေဒ", descKey: "", fallbackDesc: "ကံကောင်းသော နာမည်များ", gradient: "bg-gradient-to-br from-pink-400 via-rose-500 to-fuchsia-600", credits: (costs as any).baby_namer || 2, category: ["premium"], badge: "NEW" },
-    { id: "cardealer", icon: Car, titleKey: "", fallbackTitle: "AI ကားဈေးနှုန်း ခန့်မှန်းသူ", descKey: "", fallbackDesc: "ကား ဈေးကွက် ခွဲခြမ်းစိတ်ဖြာ", gradient: "bg-gradient-to-br from-blue-500 via-sky-600 to-cyan-700", credits: (costs as any).car_dealer || 3, category: ["premium"], badge: "NEW" },
-    { id: "healthchecker", icon: Stethoscope, titleKey: "", fallbackTitle: "AI ရောဂါလက္ခဏာစစ်", descKey: "", fallbackDesc: "ကျန်းမာရေး အကြံပြုချက်", gradient: "bg-gradient-to-br from-red-400 via-rose-500 to-pink-600", credits: (costs as any).health_checker || 2, category: ["premium"], badge: "NEW" },
-    { id: "nutritionplanner", icon: Heart, titleKey: "", fallbackTitle: "AI ကယ်လိုရီ တွက်သူ", descKey: "", fallbackDesc: "အစားအစာ အာဟာရ ခွဲခြမ်း", gradient: "bg-gradient-to-br from-red-500 via-rose-600 to-pink-700", credits: costs.nutrition_planner, category: ["premium"], badge: "NEW" },
-    { id: "smartchef", icon: ChefHat, titleKey: "", fallbackTitle: "AI ဟင်းချက်နည်း", descKey: "", fallbackDesc: "ဟင်းချက်နည်းနှင့် ဈေးဖိုးတွက်", gradient: "bg-gradient-to-br from-orange-400 via-amber-500 to-yellow-600", credits: (costs as any).smart_chef || 2, category: ["premium"], badge: "NEW" },
-    { id: "travelplanner", icon: Plane, titleKey: "", fallbackTitle: "AI ခရီးသွား လမ်းညွှန်", descKey: "", fallbackDesc: "ကမ္ဘာပတ် ခရီးစဉ် ပလန်", gradient: "bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-600", credits: (costs as any).travel_planner || 3, category: ["premium"], badge: "NEW" },
+    { id: "cvbuilder", icon: GraduationCap, titleKey: "", fallbackTitle: "AI CV & Cover Letter", descKey: "", fallbackDesc: "ကိုယ်ရေးရာဇဝင် ဖန်တီး", gradient: "bg-gradient-to-br from-blue-500 via-indigo-600 to-purple-700", credits: costs.cv_builder, category: ["legal"], badge: "NEW" },
+    { id: "legaldoc", icon: FileCheck, titleKey: "", fallbackTitle: "AI ဥပဒေ စာချုပ်", descKey: "", fallbackDesc: "ပရော်ဖက်ရှင်နယ် စာချုပ် ဖန်တီး", gradient: "bg-gradient-to-br from-slate-500 via-zinc-600 to-neutral-700", credits: (costs as any).legal_doc || 3, category: ["legal"], badge: "NEW" },
+    // Legal & Business
+    { id: "bizconsultant", icon: LineChart, titleKey: "", fallbackTitle: "AI စီးပွားရေး အကြံပေး", descKey: "", fallbackDesc: "ရင်းနှီးမြှုပ်နှံမှု ခွဲခြမ်းစိတ်ဖြာ", gradient: "bg-gradient-to-br from-emerald-500 via-green-600 to-lime-700", credits: costs.business_consultant, category: ["legal"], badge: "NEW" },
+    { id: "legaladvisor", icon: Scale, titleKey: "", fallbackTitle: "AI ဥပဒေ အကြံပေး", descKey: "", fallbackDesc: "ဥပဒေ ခွဲခြမ်းစိတ်ဖြာ", gradient: "bg-gradient-to-br from-slate-500 via-gray-600 to-zinc-700", credits: costs.legal_advisor, category: ["legal"], badge: "NEW" },
+    // Health
+    { id: "healthchecker", icon: Stethoscope, titleKey: "", fallbackTitle: "AI ရောဂါလက္ခဏာစစ်", descKey: "", fallbackDesc: "ကျန်းမာရေး အကြံပြုချက်", gradient: "bg-gradient-to-br from-red-400 via-rose-500 to-pink-600", credits: (costs as any).health_checker || 2, category: ["health"], badge: "NEW" },
+    { id: "nutritionplanner", icon: Heart, titleKey: "", fallbackTitle: "AI ကယ်လိုရီ တွက်သူ", descKey: "", fallbackDesc: "အစားအစာ အာဟာရ ခွဲခြမ်း", gradient: "bg-gradient-to-br from-red-500 via-rose-600 to-pink-700", credits: costs.nutrition_planner, category: ["health"], badge: "NEW" },
+    // Lifestyle
+    { id: "astrology", icon: Star, titleKey: "", fallbackTitle: "AI ဟောစာတမ်း", descKey: "", fallbackDesc: "ကံကြမ္မာ ဟောကြားချက်", gradient: "bg-gradient-to-br from-indigo-500 via-purple-600 to-violet-700", credits: costs.myanmar_astrology, category: ["lifestyle"], badge: "NEW" },
+    { id: "babynamer", icon: Baby, titleKey: "", fallbackTitle: "AI နာမည်ပေး ကင်္ကုဗေဒ", descKey: "", fallbackDesc: "ကံကောင်းသော နာမည်များ", gradient: "bg-gradient-to-br from-pink-400 via-rose-500 to-fuchsia-600", credits: (costs as any).baby_namer || 2, category: ["lifestyle"], badge: "NEW" },
+    { id: "cardealer", icon: Car, titleKey: "", fallbackTitle: "AI ကားဈေးနှုန်း ခန့်မှန်းသူ", descKey: "", fallbackDesc: "ကား ဈေးကွက် ခွဲခြမ်းစိတ်ဖြာ", gradient: "bg-gradient-to-br from-blue-500 via-sky-600 to-cyan-700", credits: (costs as any).car_dealer || 3, category: ["lifestyle"], badge: "NEW" },
+    { id: "smartchef", icon: ChefHat, titleKey: "", fallbackTitle: "AI ဟင်းချက်နည်း", descKey: "", fallbackDesc: "ဟင်းချက်နည်းနှင့် ဈေးဖိုးတွက်", gradient: "bg-gradient-to-br from-orange-400 via-amber-500 to-yellow-600", credits: (costs as any).smart_chef || 2, category: ["lifestyle"], badge: "NEW" },
+    { id: "travelplanner", icon: Plane, titleKey: "", fallbackTitle: "AI ခရီးသွား လမ်းညွှန်", descKey: "", fallbackDesc: "ကမ္ဘာပတ် ခရီးစဉ် ပလန်", gradient: "bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-600", credits: (costs as any).travel_planner || 3, category: ["lifestyle"], badge: "NEW" },
   ], [costs, docSlideCost]);
 
   const filteredTools = useMemo(() => {
@@ -262,6 +267,19 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               <p className="text-muted-foreground text-xs font-myanmar">{t('dashboard.subtitle')}</p>
             </div>
 
+            {/* PRO Agentic AI Banner */}
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
+              className="rounded-2xl p-3 border border-primary/30 bg-card/60 backdrop-blur-xl"
+            >
+              <p className="text-[10px] leading-relaxed text-muted-foreground font-myanmar text-center">
+                ဤ Studio ရှိ Tools အားလုံးကို ရိုးရိုး (Standard) Version များ လုံးဝမသုံးဘဲ၊ အဆင့်မြင့်ဆုံး{' '}
+                <span className="font-bold animate-golden-glow">'PRO' Version</span>{' '}
+                API Keys များဖြင့်သာ အားလုံးကို ချိတ်ဆက်ထားပါသည်။ ထို့ပြင် အသုံးပြုသူ၏ မေးခွန်းများကို အလိုအလျောက် စဉ်းစားတွေးတောပြီး အကောင်းဆုံးအဖြေထုတ်ပေးနိုင်သော{' '}
+                <span className="font-bold animate-golden-glow">'Agentic AI'</span>{' '}
+                စနစ်ကိုသာ အခြေခံထားပါသည်။
+              </p>
+            </motion.div>
+
             {/* Top-up Buttons */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="flex gap-2">
               <button id="topup-btn" onClick={() => navigate("/top-up")} className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-primary/10 border border-primary/30 hover:bg-primary/20 transition-all">
@@ -326,6 +344,9 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                     { key: "image" as ToolCategory, label: "📷 ပုံ Tools", icon: Image },
                     { key: "video" as ToolCategory, label: "🎬 ဗီဒီယို Tools", icon: Video },
                     { key: "audio" as ToolCategory, label: "🎤 အသံနှင့်စာ Tools", icon: Mic },
+                    { key: "health" as ToolCategory, label: "🏥 ကျန်းမာရေးဆိုင်ရာ AI များ", icon: Heart },
+                    { key: "legal" as ToolCategory, label: "⚖️ ဥပဒေနှင့် စီးပွားရေး", icon: Scale },
+                    { key: "lifestyle" as ToolCategory, label: "🌟 လူနေမှုပုံစံနှင့် ခရီးသွား", icon: Sparkles },
                   ].map((section) => {
                     const sectionTools = tools.filter(tool => {
                       // Primary category check - use first category as primary
