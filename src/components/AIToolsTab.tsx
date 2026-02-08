@@ -316,34 +316,89 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
               </div>
             </motion.div>
 
-            {/* Tools Grid */}
+            {/* Tools Grid - Grouped by Category with Section Headings */}
             <LayoutGroup>
-              <motion.div id="tools-grid" layout className="grid grid-cols-2 gap-2">
-                <AnimatePresence mode="popLayout">
-                  {filteredTools.map((tool, idx) => (
-                    <motion.div
-                      key={tool.id}
-                      layout
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      transition={{ delay: idx * 0.03, type: "spring", stiffness: 300, damping: 25 }}
-                    >
-                      <ToolCardCompact
-                        icon={tool.icon}
-                        title={(tool.titleKey ? t(tool.titleKey) : "") || tool.fallbackTitle}
-                        description={(tool.descKey ? t(tool.descKey) : "") || tool.fallbackDesc}
-                        gradient={tool.gradient}
-                        onClick={() => setActiveTool(tool.id)}
-                        credits={tool.credits}
-                        size={tool.size}
-                        badge={tool.badge}
-                        badgeTooltip={tool.badgeTooltip}
-                      />
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </motion.div>
+              {activeCategory === "all" && !searchQuery.trim() ? (
+                // Show grouped sections when viewing "all" without search
+                <div className="space-y-4">
+                  {[
+                    { key: "premium" as ToolCategory, label: "👑 Premium Tools", icon: Crown },
+                    { key: "image" as ToolCategory, label: "📷 ပုံ Tools", icon: Image },
+                    { key: "video" as ToolCategory, label: "🎬 ဗီဒီယို Tools", icon: Video },
+                    { key: "audio" as ToolCategory, label: "🎤 အသံနှင့်စာ Tools", icon: Mic },
+                  ].map((section) => {
+                    const sectionTools = tools.filter(tool => {
+                      // Primary category check - use first category as primary
+                      if (section.key === "premium") return tool.category.includes("premium");
+                      // For non-premium sections, only show tools whose FIRST category matches
+                      return tool.category[0] === section.key && !tool.category.includes("premium");
+                    });
+                    if (sectionTools.length === 0) return null;
+                    return (
+                      <div key={section.key}>
+                        <div className="flex items-center gap-2 mb-2 px-1">
+                          <span className="text-sm font-bold text-primary font-myanmar">{section.label}</span>
+                          <div className="flex-1 h-px bg-primary/20" />
+                        </div>
+                        <motion.div layout className="grid grid-cols-2 gap-2">
+                          <AnimatePresence mode="popLayout">
+                            {sectionTools.map((tool, idx) => (
+                              <motion.div
+                                key={tool.id}
+                                layout
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.8 }}
+                                transition={{ delay: idx * 0.03, type: "spring", stiffness: 300, damping: 25 }}
+                              >
+                                <ToolCardCompact
+                                  icon={tool.icon}
+                                  title={(tool.titleKey ? t(tool.titleKey) : "") || tool.fallbackTitle}
+                                  description={(tool.descKey ? t(tool.descKey) : "") || tool.fallbackDesc}
+                                  gradient={tool.gradient}
+                                  onClick={() => setActiveTool(tool.id)}
+                                  credits={tool.credits}
+                                  size={tool.size}
+                                  badge={tool.badge}
+                                  badgeTooltip={tool.badgeTooltip}
+                                />
+                              </motion.div>
+                            ))}
+                          </AnimatePresence>
+                        </motion.div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                // Show flat grid when filtering by category or searching
+                <motion.div id="tools-grid" layout className="grid grid-cols-2 gap-2">
+                  <AnimatePresence mode="popLayout">
+                    {filteredTools.map((tool, idx) => (
+                      <motion.div
+                        key={tool.id}
+                        layout
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        transition={{ delay: idx * 0.03, type: "spring", stiffness: 300, damping: 25 }}
+                      >
+                        <ToolCardCompact
+                          icon={tool.icon}
+                          title={(tool.titleKey ? t(tool.titleKey) : "") || tool.fallbackTitle}
+                          description={(tool.descKey ? t(tool.descKey) : "") || tool.fallbackDesc}
+                          gradient={tool.gradient}
+                          onClick={() => setActiveTool(tool.id)}
+                          credits={tool.credits}
+                          size={tool.size}
+                          badge={tool.badge}
+                          badgeTooltip={tool.badgeTooltip}
+                        />
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </motion.div>
+              )}
             </LayoutGroup>
 
             {filteredTools.length === 0 && (
