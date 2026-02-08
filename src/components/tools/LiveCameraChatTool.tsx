@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Camera, Send, Square, Loader2, Sparkles, MessageCircle, Timer, AlertCircle, SwitchCamera } from "lucide-react";
+import { 
+  Camera, Send, Square, Loader2, Sparkles, MessageCircle, 
+  AlertCircle, SwitchCamera, Mic, MicOff, Volume2, Eye, Radio
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -18,232 +21,264 @@ interface LiveCameraChatToolProps {
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
-  image?: string;
+  hasImage?: boolean;
 }
 
-const FREE_SECONDS = 10;
-const DEDUCT_INTERVAL_SECONDS = 12;
+type AIStatus = "idle" | "listening" | "thinking" | "speaking";
 
 export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) => {
   const { toast } = useToast();
   const { credits, refetch: refetchCredits } = useCredits(userId);
   const { costs } = useCreditCosts();
+
+  // Camera state
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [sessionActive, setSessionActive] = useState(false);
-  const [sessionTime, setSessionTime] = useState(0);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [creditsUsedSession, setCreditsUsedSession] = useState(0);
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const deductTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // AI state
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [aiStatus, setAiStatus] = useState<AIStatus>("idle");
+  const [creditsUsed, setCreditsUsed] = useState(0);
+
+  // Mic state
+  const [micActive, setMicActive] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  // TTS state
+  const synthRef = useRef<SpeechSynthesis | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const autoAnalyzeRef = useRef<NodeJS.Timeout | null>(null);
 
-  const creditPerTick = costs.live_camera_chat || 1;
+  const creditPerInteraction = costs.live_camera_chat || 2;
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
+  // Scroll to bottom on new messages
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Initialize TTS
+  useEffect(() => {
+    synthRef.current = window.speechSynthesis;
+    return () => {
+      synthRef.current?.cancel();
+    };
+  }, []);
 
   // Auto-start camera on mount
   useEffect(() => {
     startCamera();
     return () => {
-      stopSession();
       stopCamera();
+      stopMic();
+      synthRef.current?.cancel();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ========== CAMERA ==========
   const startCamera = async () => {
     setCameraError(null);
-    
-    // Check for secure context
+
     if (!window.isSecureContext) {
-      setCameraError("HTTPS connection လိုအပ်ပါသည်။ Secure context မဟုတ်ပါ။");
+      setCameraError("HTTPS connection လိုအပ်ပါသည်။");
       return;
     }
-
-    // Check for getUserMedia support
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setCameraError("ဤ browser တွင် ကင်မရာ မရနိုင်ပါ။ Chrome/Safari အသုံးပြုပါ။");
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError("ဤ browser တွင် ကင်မရာ မရနိုင်ပါ။ Chrome/Safari သုံးပါ။");
       return;
     }
 
     try {
-      // Stop existing stream first
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(t => t.stop());
         streamRef.current = null;
       }
 
-      let stream: MediaStream;
-      
-      // Progressive fallback for maximum mobile compatibility
       const constraints = [
         { video: { facingMode, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
         { video: { facingMode: { ideal: facingMode } }, audio: false },
         { video: true, audio: false },
       ];
 
-      for (let i = 0; i < constraints.length; i++) {
+      let stream: MediaStream | null = null;
+      for (const c of constraints) {
         try {
-          stream = await navigator.mediaDevices.getUserMedia(constraints[i]);
+          stream = await navigator.mediaDevices.getUserMedia(c);
           break;
-        } catch (err) {
-          if (i === constraints.length - 1) throw err;
-        }
+        } catch { /* try next */ }
       }
+      if (!stream) throw new Error("No camera available");
 
       if (videoRef.current) {
-        videoRef.current.srcObject = stream!;
-        videoRef.current.setAttribute('playsinline', 'true');
-        videoRef.current.setAttribute('webkit-playsinline', 'true');
-        videoRef.current.setAttribute('autoplay', 'true');
+        videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute("playsinline", "true");
+        videoRef.current.setAttribute("webkit-playsinline", "true");
         videoRef.current.muted = true;
-        
-        // Wait for metadata to load before playing
+
         await new Promise<void>((resolve, reject) => {
           const vid = videoRef.current!;
-          const onLoaded = () => { vid.removeEventListener('loadedmetadata', onLoaded); resolve(); };
-          const onError = () => { vid.removeEventListener('error', onError); reject(new Error('Video load failed')); };
           if (vid.readyState >= 1) { resolve(); return; }
-          vid.addEventListener('loadedmetadata', onLoaded);
-          vid.addEventListener('error', onError);
+          const onLoaded = () => { vid.removeEventListener("loadedmetadata", onLoaded); resolve(); };
+          const onErr = () => { vid.removeEventListener("error", onErr); reject(new Error("Video load failed")); };
+          vid.addEventListener("loadedmetadata", onLoaded);
+          vid.addEventListener("error", onErr);
         });
-        
+
         await videoRef.current.play();
       }
-      streamRef.current = stream!;
+      streamRef.current = stream;
       setCameraActive(true);
-      setCameraError(null);
     } catch (err: any) {
-      console.error("Camera access error:", err);
-      
+      console.error("Camera error:", err);
       if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError") {
-        setCameraError("ကင်မရာ ခွင့်ပြုချက် ပိတ်ထားပါသည်။\n\nSettings → Privacy → Camera → Allow ကို ဖွင့်ပေးပါ။");
-      } else if (err?.name === "NotFoundError" || err?.name === "DevicesNotFoundError") {
-        setCameraError("ကင်မရာ ရှာမတွေ့ပါ။ ကင်မရာ ချိတ်ဆက်ထားပါ သို့မဟုတ် အခြား device ဖြင့် စမ်းကြည့်ပါ။");
-      } else if (err?.name === "NotReadableError" || err?.name === "TrackStartError") {
-        setCameraError("ကင်မရာကို အခြား app မှ အသုံးပြုနေပါသည်။ အခြား app များ ပိတ်ပြီး ထပ်စမ်းပါ။");
+        setCameraError("ကင်မရာ ခွင့်ပြုချက် ပိတ်ထားပါသည်။\nSettings → Privacy → Camera → Allow ဖွင့်ပါ။");
+      } else if (err?.name === "NotFoundError") {
+        setCameraError("ကင်မရာ ရှာမတွေ့ပါ။ ကင်မရာ ချိတ်ဆက်ပြီး ထပ်စမ်းပါ။");
+      } else if (err?.name === "NotReadableError") {
+        setCameraError("ကင်မရာကို အခြား app မှ သုံးနေသည်။ ပိတ်ပြီး ထပ်စမ်းပါ။");
       } else {
-        setCameraError(`ကင်မရာ ဖွင့်၍မရပါ: ${err?.message || 'Unknown error'}`);
+        setCameraError(`ကင်မရာ ဖွင့်၍မရပါ: ${err?.message || "Unknown error"}`);
       }
     }
   };
 
   const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
     setCameraActive(false);
   };
 
-  const switchCamera = async () => {
-    const newMode = facingMode === "user" ? "environment" : "user";
-    setFacingMode(newMode);
+  const switchCamera = () => {
+    setFacingMode(prev => prev === "user" ? "environment" : "user");
     stopCamera();
-    // Small delay for cleanup
-    setTimeout(() => startCamera(), 200);
+    setTimeout(() => startCamera(), 250);
   };
 
+  // ========== CAPTURE FRAME ==========
   const captureFrame = useCallback((): string | null => {
     if (!videoRef.current || videoRef.current.readyState < 2) return null;
     const canvas = document.createElement("canvas");
     const vw = videoRef.current.videoWidth;
     const vh = videoRef.current.videoHeight;
     if (!vw || !vh) return null;
-    canvas.width = vw;
-    canvas.height = vh;
+    canvas.width = Math.min(vw, 640);
+    canvas.height = Math.min(vh, 480);
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
-    ctx.drawImage(videoRef.current, 0, 0);
-    return canvas.toDataURL("image/jpeg", 0.7);
+    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.6);
   }, []);
 
-  const startSession = () => {
-    if (!cameraActive) {
-      toast({ title: "ကင်မရာကို ဖွင့်ပါ", variant: "destructive" });
+  // ========== MICROPHONE (Web Speech API) ==========
+  const startMic = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast({ title: "Speech Recognition မရနိုင်ပါ", description: "Chrome browser အသုံးပြုပါ", variant: "destructive" });
       return;
     }
-    setSessionActive(true);
-    setSessionTime(0);
-    setCreditsUsedSession(0);
 
-    timerRef.current = setInterval(() => {
-      setSessionTime((prev) => prev + 1);
-    }, 1000);
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "my-MM"; // Myanmar, fallback to default
 
-    deductTimerRef.current = setTimeout(() => {
-      const deductInterval = setInterval(async () => {
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (!session) { stopSession(); return; }
+    let finalTranscript = "";
 
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("credit_balance")
-            .eq("user_id", userId!)
-            .single();
-
-          if (!profile || profile.credit_balance < creditPerTick) {
-            toast({ title: "ခရက်ဒစ် ကုန်သွားပါပြီ", description: "Session ကို ရပ်တန့်လိုက်ပါပြီ", variant: "destructive" });
-            stopSession();
-            return;
-          }
-
-          await supabase.rpc("deduct_user_credits", { _user_id: userId!, _amount: creditPerTick, _action: "Live Camera Chat" });
-          setCreditsUsedSession((prev) => prev + creditPerTick);
-          refetchCredits();
-        } catch (error) {
-          console.error("Credit deduction error:", error);
+    recognition.onresult = (event: any) => {
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript + " ";
+        } else {
+          interim += event.results[i][0].transcript;
         }
-      }, DEDUCT_INTERVAL_SECONDS * 1000);
+      }
+      setInput(finalTranscript + interim);
+    };
 
-      deductTimerRef.current = deductInterval as any;
-    }, FREE_SECONDS * 1000);
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error:", event.error);
+      if (event.error === "not-allowed") {
+        toast({ title: "Microphone ခွင့်ပြုချက် လိုအပ်သည်", variant: "destructive" });
+      }
+    };
 
-    autoAnalyzeRef.current = setInterval(() => { autoAnalyze(); }, 15000);
+    recognition.onend = () => {
+      // Auto-send if we have final transcript
+      if (finalTranscript.trim()) {
+        setInput(finalTranscript.trim());
+        // Auto-send after small delay
+        setTimeout(() => {
+          handleSendWithText(finalTranscript.trim());
+          finalTranscript = "";
+        }, 300);
+      }
+      setMicActive(false);
+      setAiStatus("idle");
+    };
 
-    toast({ title: "Session စတင်ပါပြီ", description: `ပထမ ${FREE_SECONDS} စက္ကန့် အခမဲ့` });
+    recognition.start();
+    recognitionRef.current = recognition;
+    setMicActive(true);
+    setAiStatus("listening");
   };
 
-  const stopSession = () => {
-    setSessionActive(false);
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (deductTimerRef.current) clearInterval(deductTimerRef.current);
-    if (autoAnalyzeRef.current) clearInterval(autoAnalyzeRef.current);
-    timerRef.current = null;
-    deductTimerRef.current = null;
-    autoAnalyzeRef.current = null;
+  const stopMic = () => {
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    setMicActive(false);
+    if (aiStatus === "listening") setAiStatus("idle");
   };
 
-  const autoAnalyze = async () => {
-    if (isProcessing) return;
-    const frame = captureFrame();
-    if (!frame) return;
-    await sendToAI("ဤပုံကို အတိုချုပ် ရှင်းပြပါ", frame);
+  const toggleMic = () => {
+    if (micActive) stopMic();
+    else startMic();
   };
 
+  // ========== TTS ==========
+  const speakText = (text: string) => {
+    if (!synthRef.current) return;
+    synthRef.current.cancel();
+    
+    // Clean markdown
+    const clean = text.replace(/[#*_`~>\[\]()!]/g, "").trim();
+    if (!clean) return;
+
+    // Split into chunks for long text
+    const chunks = clean.match(/.{1,200}[.!?။\n]|.{1,200}/g) || [clean];
+    
+    setAiStatus("speaking");
+    
+    chunks.forEach((chunk, i) => {
+      const utterance = new SpeechSynthesisUtterance(chunk);
+      utterance.rate = 0.95;
+      utterance.pitch = 1;
+      if (i === chunks.length - 1) {
+        utterance.onend = () => setAiStatus("idle");
+      }
+      synthRef.current!.speak(utterance);
+    });
+  };
+
+  // ========== SEND TO AI ==========
   const sendToAI = async (message: string, imageBase64?: string) => {
     if (!userId) return;
-    setIsProcessing(true);
 
-    const userMsg: ChatMessage = { role: "user", content: message, image: imageBase64 ? "📸 Camera Frame" : undefined };
-    setMessages((prev) => [...prev, userMsg]);
+    // Credit check - per interaction
+    if ((credits || 0) < creditPerInteraction) {
+      toast({ title: "ခရက်ဒစ် မလုံလောက်ပါ", description: `${creditPerInteraction} Credits လိုအပ်ပါသည်`, variant: "destructive" });
+      return;
+    }
+
+    setAiStatus("thinking");
+
+    const userMsg: ChatMessage = { role: "user", content: message, hasImage: !!imageBase64 };
+    setMessages(prev => [...prev, userMsg]);
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -252,16 +287,24 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ message, imageBase64: imageBase64?.split(",")[1], imageType: "image/jpeg" }),
+        body: JSON.stringify({
+          message,
+          imageBase64: imageBase64?.split(",")[1],
+          imageType: "image/jpeg",
+        }),
       });
 
       if (!response.ok) {
-        const errData = await response.json();
-        if (response.status === 402) { toast({ title: "ခရက်ဒစ် မလုံလောက်ပါ", variant: "destructive" }); stopSession(); return; }
+        const errData = await response.json().catch(() => ({}));
+        if (response.status === 402) {
+          toast({ title: "ခရက်ဒစ် မလုံလောက်ပါ", variant: "destructive" });
+          return;
+        }
         throw new Error(errData.error || "AI error");
       }
 
       if (!response.body) throw new Error("No response stream");
+
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let fullResponse = "";
@@ -271,6 +314,7 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
         const { done, value } = await reader.read();
         if (done) break;
         textBuffer += decoder.decode(value, { stream: true });
+
         let newlineIndex: number;
         while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
           let line = textBuffer.slice(0, newlineIndex);
@@ -285,52 +329,88 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
             const content = parsed.choices?.[0]?.delta?.content;
             if (content) {
               fullResponse += content;
-              setMessages((prev) => {
+              setMessages(prev => {
                 const last = prev[prev.length - 1];
                 if (last?.role === "assistant") {
-                  return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: fullResponse } : m));
+                  return prev.map((m, i) => i === prev.length - 1 ? { ...m, content: fullResponse } : m);
                 }
                 return [...prev, { role: "assistant", content: fullResponse }];
               });
             }
-          } catch { textBuffer = line + "\n" + textBuffer; break; }
+          } catch {
+            textBuffer = line + "\n" + textBuffer;
+            break;
+          }
         }
       }
+
+      // Deduct credits after success
+      await supabase.rpc("deduct_user_credits", {
+        _user_id: userId,
+        _amount: creditPerInteraction,
+        _action: "Live AI Vision & Voice",
+      });
+      setCreditsUsed(prev => prev + creditPerInteraction);
       refetchCredits();
+
+      // Auto-speak the response
+      if (fullResponse) {
+        speakText(fullResponse);
+      } else {
+        setAiStatus("idle");
+      }
     } catch (error: any) {
-      console.error("Live chat error:", error);
+      console.error("Live AI error:", error);
       toast({ title: "အမှားရှိပါသည်", description: error.message, variant: "destructive" });
-    } finally {
-      setIsProcessing(false);
+      setAiStatus("idle");
     }
   };
 
-  const handleSend = async () => {
-    const msg = input.trim();
-    if (!msg) return;
+  const handleSendWithText = async (text: string) => {
+    if (!text.trim()) return;
     setInput("");
     const frame = cameraActive ? captureFrame() : undefined;
-    await sendToAI(msg, frame || undefined);
+    await sendToAI(text, frame || undefined);
   };
+
+  const handleSend = () => handleSendWithText(input);
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${String(secs).padStart(2, "0")}`;
+  const handleAnalyzeNow = () => {
+    const frame = captureFrame();
+    if (!frame) {
+      toast({ title: "ကင်မရာ ပုံ မရပါ", variant: "destructive" });
+      return;
+    }
+    sendToAI("ဤပုံတွင် ဘာတွေ မြင်ရသနည်း။ အသေးစိတ် ရှင်းပြပါ", frame);
   };
 
-  const isFreeTime = sessionTime <= FREE_SECONDS;
+  const handleStopAll = () => {
+    stopMic();
+    synthRef.current?.cancel();
+    stopCamera();
+    setAiStatus("idle");
+    toast({ title: "Session ရပ်တန့်ပြီး", description: `စုစုပေါင်း ${creditsUsed} Credits သုံးခဲ့သည်` });
+  };
+
+  // Status label
+  const statusConfig = {
+    idle: { label: "Ready", color: "bg-muted text-muted-foreground" },
+    listening: { label: "နားထောင်နေသည်...", color: "bg-green-500/20 text-green-400" },
+    thinking: { label: "စဉ်းစားနေသည်...", color: "bg-amber-500/20 text-amber-400" },
+    speaking: { label: "ပြောနေသည်...", color: "bg-blue-500/20 text-blue-400" },
+  };
 
   return (
-    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-3 p-4 pb-24">
+    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+      className="space-y-3 p-4 pb-24">
       <ToolHeader
-        title="AI Live Camera Chat"
-        subtitle="ကင်မရာ + AI စကားပြောခြင်း"
-        onBack={() => { stopSession(); stopCamera(); onBack(); }}
+        title="Live AI Vision & Voice"
+        subtitle="ကင်မရာ + အသံ + AI = Real-time Analysis"
+        onBack={() => { handleStopAll(); onBack(); }}
       />
 
       {/* Camera Preview */}
@@ -341,24 +421,38 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
           playsInline
           autoPlay
           muted
-          style={{ minHeight: '200px' }}
+          style={{ minHeight: "200px" }}
         />
 
-        {/* Camera error state */}
+        {/* LIVE indicator */}
+        {cameraActive && (
+          <div className="absolute top-3 left-3 flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/90 text-white text-[10px] font-bold">
+              <Radio className="w-3 h-3 animate-pulse" />
+              LIVE
+            </div>
+            {creditsUsed > 0 && (
+              <div className="px-2 py-1 rounded-full bg-black/60 text-white/80 text-[10px]">
+                {creditsUsed} Cr used
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Camera error */}
         {cameraError && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/90 p-4">
             <div className="text-center max-w-xs">
               <AlertCircle className="w-10 h-10 text-destructive mx-auto mb-3" />
               <p className="text-sm text-white font-myanmar whitespace-pre-line mb-4">{cameraError}</p>
               <Button onClick={startCamera} className="bg-primary text-primary-foreground">
-                <Camera className="w-4 h-4 mr-2" />
-                ထပ်စမ်းမည်
+                <Camera className="w-4 h-4 mr-2" /> ထပ်စမ်းမည်
               </Button>
             </div>
           </div>
         )}
 
-        {/* Camera not active and no error */}
+        {/* Camera loading */}
         {!cameraActive && !cameraError && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="text-center">
@@ -368,64 +462,91 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
           </div>
         )}
 
-        {/* Camera switch button */}
+        {/* Camera switch */}
         {cameraActive && (
-          <button onClick={switchCamera} className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center border border-white/20 hover:bg-black/70 transition-colors">
+          <button onClick={switchCamera}
+            className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center border border-white/20 hover:bg-black/70 transition-colors">
             <SwitchCamera className="w-4 h-4 text-white" />
           </button>
         )}
 
-        {/* Session overlay */}
-        {sessionActive && (
-          <div className="absolute top-3 left-3 flex items-center gap-2">
-            <div className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 ${isFreeTime ? "bg-green-500/90 text-white" : "bg-destructive/90 text-white"}`}>
-              <div className={`w-2 h-2 rounded-full ${isFreeTime ? "bg-white" : "bg-white animate-pulse"}`} />
-              <Timer className="w-3 h-3" />
-              {formatTime(sessionTime)}
-              {isFreeTime ? " (အခမဲ့)" : ` • ${creditsUsedSession}cr`}
-            </div>
+        {/* AI Status overlay */}
+        {aiStatus !== "idle" && (
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm ${statusConfig[aiStatus].color}`}
+            >
+              {aiStatus === "listening" && <Mic className="w-3 h-3 animate-pulse" />}
+              {aiStatus === "thinking" && <Loader2 className="w-3 h-3 animate-spin" />}
+              {aiStatus === "speaking" && <Volume2 className="w-3 h-3 animate-pulse" />}
+              <span className="font-myanmar">{statusConfig[aiStatus].label}</span>
+            </motion.div>
           </div>
         )}
       </div>
 
-      {/* Session Controls */}
-      <div className="flex gap-2">
-        {!sessionActive ? (
-          <Button onClick={startSession} disabled={!cameraActive} className="flex-1 bg-primary text-primary-foreground rounded-2xl py-3">
-            <Sparkles className="w-4 h-4 mr-2" />
-            <span className="font-myanmar">Session စတင်မည် (ပထမ {FREE_SECONDS}s အခမဲ့)</span>
-          </Button>
-        ) : (
-          <Button onClick={stopSession} variant="destructive" className="flex-1 rounded-2xl py-3">
-            <Square className="w-4 h-4 mr-2" />
-            <span className="font-myanmar">Session ရပ်မည်</span>
-          </Button>
-        )}
-      </div>
+      {/* Control Bar */}
+      <div className="flex items-center gap-2">
+        {/* Mic Button */}
+        <Button
+          onClick={toggleMic}
+          variant={micActive ? "destructive" : "outline"}
+          size="icon"
+          className={`shrink-0 w-12 h-12 rounded-2xl transition-all ${micActive ? "ring-2 ring-green-500 animate-pulse" : ""}`}
+          disabled={aiStatus === "thinking"}
+        >
+          {micActive ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+        </Button>
 
-      {/* Credit Info */}
-      <div className="gradient-card rounded-2xl p-3 border border-primary/10">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground font-myanmar">
-          <Timer className="w-3.5 h-3.5 text-primary" />
-          <span>ပထမ {FREE_SECONDS}s အခမဲ့ • ပြီးရင် {DEDUCT_INTERVAL_SECONDS}s တိုင်း {creditPerTick} Credit</span>
+        {/* Analyze Camera Button */}
+        <Button
+          onClick={handleAnalyzeNow}
+          variant="outline"
+          className="shrink-0 h-12 rounded-2xl px-3 border-primary/30"
+          disabled={!cameraActive || aiStatus === "thinking"}
+        >
+          <Eye className="w-4 h-4 mr-1.5" />
+          <span className="text-xs font-myanmar">ကြည့်ခိုင်း</span>
+        </Button>
+
+        {/* Stop All */}
+        <Button
+          onClick={handleStopAll}
+          variant="destructive"
+          className="shrink-0 h-12 rounded-2xl px-3"
+        >
+          <Square className="w-4 h-4 mr-1.5" />
+          <span className="text-xs font-myanmar">ရပ်မည်</span>
+        </Button>
+
+        {/* Credit info */}
+        <div className="ml-auto text-right">
+          <p className="text-[10px] text-muted-foreground">{creditPerInteraction} Cr/interaction</p>
+          <p className="text-[10px] text-muted-foreground">Idle = Free</p>
         </div>
       </div>
 
-      {/* Chat Messages */}
+      {/* Chat */}
       <div className="gradient-card rounded-2xl border border-primary/20 overflow-hidden">
         <div className="h-48 overflow-y-auto p-3 space-y-3">
           {messages.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center text-center">
               <MessageCircle className="w-10 h-10 text-muted-foreground/30 mb-2" />
-              <p className="text-xs text-muted-foreground font-myanmar">Session စတင်ပြီး AI နှင့် စကားပြောပါ</p>
+              <p className="text-xs text-muted-foreground font-myanmar">🎤 Mic ဖွင့်ပြီး ပြောပါ သို့ 👁️ ကြည့်ခိုင်းပါ</p>
+              <p className="text-[10px] text-muted-foreground/60 font-myanmar mt-1">ကင်မရာ idle = Credit မကျ</p>
             </div>
           )}
 
           <AnimatePresence>
             {messages.map((msg, idx) => (
-              <motion.div key={idx} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[85%] rounded-2xl p-2.5 ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}>
-                  {msg.image && <span className="text-xs opacity-70">📸</span>}
+              <motion.div key={idx} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[85%] rounded-2xl p-2.5 ${
+                  msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"
+                }`}>
+                  {msg.hasImage && <span className="text-xs opacity-70">📸 </span>}
                   {msg.role === "assistant" ? (
                     <div className="prose prose-sm dark:prose-invert max-w-none font-myanmar text-xs leading-relaxed">
                       <ReactMarkdown>{msg.content}</ReactMarkdown>
@@ -438,17 +559,18 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
             ))}
           </AnimatePresence>
 
-          {isProcessing && messages[messages.length - 1]?.role === "user" && (
+          {aiStatus === "thinking" && messages[messages.length - 1]?.role === "user" && (
             <div className="flex justify-start">
-              <div className="bg-secondary rounded-2xl p-2.5">
+              <div className="bg-secondary rounded-2xl p-2.5 flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                <span className="text-xs text-muted-foreground font-myanmar">စဉ်းစားနေသည်...</span>
               </div>
             </div>
           )}
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input */}
+        {/* Text input */}
         <div className="p-2.5 border-t border-primary/20 bg-background/50">
           <div className="flex items-end gap-2">
             <div className="flex-1">
@@ -456,13 +578,14 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyPress}
-                placeholder="ကင်မရာနှင့် ပတ်သက်ပြီး မေးပါ..."
+                placeholder={micActive ? "🎤 နားထောင်နေသည်..." : "ကင်မရာ အကြောင်း မေးပါ..."}
                 className="min-h-[40px] max-h-[80px] resize-none rounded-xl bg-secondary border border-primary/30 text-xs font-myanmar px-3 py-2"
-                disabled={isProcessing}
+                disabled={aiStatus === "thinking"}
               />
             </div>
-            <Button onClick={handleSend} disabled={isProcessing || !input.trim()} className="shrink-0 h-9 w-9 rounded-xl bg-primary">
-              {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            <Button onClick={handleSend} disabled={aiStatus === "thinking" || !input.trim()}
+              className="shrink-0 h-9 w-9 rounded-xl bg-primary">
+              {aiStatus === "thinking" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </Button>
           </div>
         </div>
