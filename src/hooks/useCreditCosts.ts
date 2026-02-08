@@ -30,6 +30,17 @@ const BASE_API_COSTS = {
   auto_ad: 18,
   video_redesign: 21,
   logo_design: 3,
+  photo_restoration: 2,
+  myanmar_spellcheck: 1,
+  virtual_tryon: 3,
+  myanmar_astrology: 1,
+  interior_design: 3,
+  cv_builder: 2,
+  business_consultant: 2,
+  creative_writer: 1,
+  legal_advisor: 2,
+  message_polisher: 1,
+  nutrition_planner: 2,
 };
 
 export type CreditCostKey = keyof typeof BASE_API_COSTS;
@@ -62,6 +73,17 @@ export interface CreditCosts {
   auto_ad: number;
   video_redesign: number;
   logo_design: number;
+  photo_restoration: number;
+  myanmar_spellcheck: number;
+  virtual_tryon: number;
+  myanmar_astrology: number;
+  interior_design: number;
+  cv_builder: number;
+  business_consultant: number;
+  creative_writer: number;
+  legal_advisor: number;
+  message_polisher: number;
+  nutrition_planner: number;
 }
 
 function calculateDefaultCosts(margin: number = 40): CreditCosts {
