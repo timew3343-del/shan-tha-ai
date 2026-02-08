@@ -214,6 +214,30 @@
     background-size: 200% 100%;
   }
 
+  .animate-golden-glow {
+    animation: goldenGlow 2.5s ease-in-out infinite;
+    background: linear-gradient(90deg, hsl(45 93% 58%), hsl(38 90% 65%), hsl(50 100% 70%), hsl(38 90% 65%), hsl(45 93% 58%));
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  @keyframes goldenGlow {
+    0% {
+      background-position: 0% 50%;
+      filter: drop-shadow(0 0 6px hsl(45 93% 58% / 0.4));
+    }
+    50% {
+      background-position: 100% 50%;
+      filter: drop-shadow(0 0 12px hsl(45 93% 58% / 0.7));
+    }
+    100% {
+      background-position: 0% 50%;
+      filter: drop-shadow(0 0 6px hsl(45 93% 58% / 0.4));
+    }
+  }
+
   @keyframes fadeUp {
     from {
       opacity: 0;

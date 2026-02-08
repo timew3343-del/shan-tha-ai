@@ -254,9 +254,9 @@ export const HybridProfitTab = () => {
           <h4 className="font-semibold text-foreground text-sm">Global Auto Margin</h4>
           <span className="text-2xl font-bold text-primary">{margin}%</span>
         </div>
-        <Slider value={[margin]} onValueChange={handleMarginChange} min={10} max={150} step={5} disabled={isLocked} className="mb-2" />
+        <Slider value={[margin]} onValueChange={handleMarginChange} min={10} max={10000} step={5} disabled={isLocked} className="mb-2" />
         <div className="flex justify-between text-xs text-muted-foreground">
-          <span>10%</span><span>50%</span><span>100%</span><span>150%</span>
+          <span>10%</span><span>100%</span><span>1000%</span><span>10,000%</span>
         </div>
       </div>
 
@@ -270,8 +270,8 @@ export const HybridProfitTab = () => {
           </div>
           <span className="text-2xl font-bold text-orange-500 ml-auto">{autoAdMargin}%</span>
         </div>
-        <Slider value={[autoAdMargin]} onValueChange={(val) => !isLocked && setAutoAdMargin(val[0])} min={10} max={150} step={5} disabled={isLocked} className="mb-2" />
-        <div className="flex justify-between text-xs text-muted-foreground"><span>10%</span><span>50%</span><span>100%</span><span>150%</span></div>
+        <Slider value={[autoAdMargin]} onValueChange={(val) => !isLocked && setAutoAdMargin(val[0])} min={10} max={10000} step={5} disabled={isLocked} className="mb-2" />
+        <div className="flex justify-between text-xs text-muted-foreground"><span>10%</span><span>100%</span><span>1000%</span><span>10,000%</span></div>
         <div className="mt-2 p-2 rounded-lg bg-secondary/30">
           <div className="flex justify-between text-xs"><span className="text-muted-foreground">Base Cost:</span><span className="text-foreground font-medium">{BASE_API_COSTS.auto_ad} Credits</span></div>
           <div className="flex justify-between text-xs mt-1"><span className="text-muted-foreground">User Price:</span><span className="text-orange-500 font-bold">{Math.ceil(BASE_API_COSTS.auto_ad * (1 + autoAdMargin / 100))} Credits/platform</span></div>
