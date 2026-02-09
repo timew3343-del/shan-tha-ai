@@ -24,6 +24,7 @@ import { HybridProfitTab } from "@/components/admin/HybridProfitTab";
 import { PromoCodesTab } from "@/components/admin/PromoCodesTab";
 import { UserFeedbackTab } from "@/components/admin/UserFeedbackTab";
 import { ContentFactoryTab } from "@/components/admin/ContentFactoryTab";
+import { AdminUserTable } from "@/components/admin/AdminUserTable";
 
 interface PendingTransaction {
   id: string;
@@ -883,10 +884,14 @@ export const Admin = () => {
               System
             </TabsTrigger>
           </TabsList>
-          <TabsList className="grid w-full grid-cols-1 mb-6">
+          <TabsList className="grid w-full grid-cols-2 mb-6">
             <TabsTrigger value="content-factory" className="text-xs">
               <Film className="w-4 h-4 mr-1" />
               Content Factory
+            </TabsTrigger>
+            <TabsTrigger value="users-table" className="text-xs">
+              <Users className="w-4 h-4 mr-1" />
+              Users
             </TabsTrigger>
           </TabsList>
 
@@ -1670,6 +1675,11 @@ export const Admin = () => {
           {/* Content Factory Tab */}
           <TabsContent value="content-factory" className="space-y-4">
             <ContentFactoryTab />
+          </TabsContent>
+
+          {/* Users Table Tab */}
+          <TabsContent value="users-table" className="space-y-4">
+            <AdminUserTable />
           </TabsContent>
         </Tabs>
       </div>
