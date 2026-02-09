@@ -131,6 +131,36 @@ export type Database = {
         }
         Relationships: []
       }
+      credit_transfers: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          receiver_balance_after: number
+          receiver_id: string
+          sender_balance_after: number
+          sender_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          receiver_balance_after: number
+          receiver_id: string
+          sender_balance_after: number
+          sender_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          receiver_balance_after?: number
+          receiver_id?: string
+          sender_balance_after?: number
+          sender_id?: string
+        }
+        Relationships: []
+      }
       daily_content_videos: {
         Row: {
           api_cost_credits: number | null
@@ -556,6 +586,10 @@ export type Database = {
       is_admin_email: { Args: { _email: string }; Returns: boolean }
       redeem_promo_code: {
         Args: { _code: string; _user_id: string }
+        Returns: Json
+      }
+      transfer_credits: {
+        Args: { _amount: number; _receiver_id: string; _sender_id: string }
         Returns: Json
       }
     }

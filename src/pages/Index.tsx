@@ -11,7 +11,8 @@ import { DosDontsTab } from "@/components/DosDontsTab";
 import { CourseTab } from "@/components/CourseTab";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { MaintenanceBanner } from "@/components/MaintenanceBanner";
-import { LogOut, User as UserIcon, HelpCircle, Shield, Info } from "lucide-react";
+import { CreditTransferDialog } from "@/components/CreditTransferDialog";
+import { LogOut, User as UserIcon, HelpCircle, Shield, Info, ArrowRightLeft, Copy, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useCredits } from "@/hooks/useCredits";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -29,10 +30,11 @@ const Index = () => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [copiedUuid, setCopiedUuid] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { t } = useLanguage();
-  const { credits, isLoading: creditsLoading } = useCredits(user?.id);
+  const { credits, isLoading: creditsLoading, refetch: refetchCredits } = useCredits(user?.id);
   const { isAdmin } = useUserRole(user?.id);
 
   useEffect(() => {
@@ -78,6 +80,14 @@ const Index = () => {
     navigate("/auth");
   };
 
+  const handleCopyUuid = async () => {
+    if (!user) return;
+    await navigator.clipboard.writeText(user.id);
+    setCopiedUuid(true);
+    setTimeout(() => setCopiedUuid(false), 2000);
+    toast({ title: "UUID ကူးယူပြီး" });
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen gradient-navy flex items-center justify-center">
@@ -105,13 +115,47 @@ const Index = () => {
                 <UserIcon className="w-4 h-4 text-primary-foreground" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56 gradient-card border-border/50">
+            <DropdownMenuContent align="start" className="w-64 gradient-card border-border/50">
               <div className="px-3 py-2">
                 <p className="text-sm font-medium text-foreground truncate">{user.email}</p>
                 <p className="text-xs text-muted-foreground">
                   {isAdmin ? "Admin" : "Member"}
                 </p>
               </div>
+              {/* UUID Display */}
+              <div className="px-3 py-1.5">
+                <div className="flex items-center gap-1.5 bg-secondary/50 rounded-lg px-2 py-1.5">
+                  <code className="text-[9px] text-muted-foreground flex-1 truncate font-mono">
+                    {user.id}
+                  </code>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleCopyUuid(); }}
+                    className="p-1 rounded hover:bg-secondary transition-colors flex-shrink-0"
+                  >
+                    {copiedUuid ? (
+                      <Check className="w-3 h-3 text-primary" />
+                    ) : (
+                      <Copy className="w-3 h-3 text-muted-foreground" />
+                    )}
+                  </button>
+                </div>
+              </div>
+              <DropdownMenuSeparator className="bg-border/50" />
+              {/* Credit Transfer */}
+              <CreditTransferDialog
+                userId={user.id}
+                currentBalance={credits}
+                onTransferComplete={refetchCredits}
+                trigger={
+                  <DropdownMenuItem
+                    onSelect={(e) => e.preventDefault()}
+                    className="cursor-pointer"
+                  >
+                    <ArrowRightLeft className="w-4 h-4 mr-2" />
+                    Credit လွှဲပြောင်းခြင်း
+                  </DropdownMenuItem>
+                }
+              />
               <DropdownMenuSeparator className="bg-border/50" />
               <DropdownMenuItem onClick={() => navigate("/support")} className="cursor-pointer">
                 <HelpCircle className="w-4 h-4 mr-2" />
