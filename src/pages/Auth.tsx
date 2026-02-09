@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
+import { EmailVerificationScreen } from "@/components/EmailVerificationScreen";
 
 const authSchema = z.object({
   email: z.string().email("မှန်ကန်သော အီးမေးလ် ထည့်ပါ"),
@@ -33,6 +34,8 @@ const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [resetSent, setResetSent] = useState(false);
+  const [showVerification, setShowVerification] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState("");
   const [guideVideos, setGuideVideos] = useState<GuideVideo[]>([]);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -140,8 +143,20 @@ const Auth = () => {
 
     try {
       if (mode === "login") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) {
+          // Check if the error is about email not confirmed
+          if (error.message.includes("Email not confirmed")) {
+            toast({
+              title: "အီးမေးလ် အတည်မပြုရသေးပါ",
+              description: "ကျေးဇူးပြု၍ Gmail တွင် အရင်ဆုံး အတည်ပြုပေးပါ။",
+              variant: "destructive",
+            });
+            // Show the verification screen so they can resend
+            setVerificationEmail(email);
+            setShowVerification(true);
+            return;
+          }
           if (error.message.includes("Invalid login credentials")) {
             toast({
               title: "အကောင့်ဝင်ရောက်မှု မအောင်မြင်ပါ",
@@ -155,8 +170,9 @@ const Auth = () => {
         }
         toast({ title: "အောင်မြင်ပါသည်", description: "အကောင့်ဝင်ရောက်မှု အောင်မြင်ပါသည်" });
       } else {
+        // Sign up flow
         const redirectUrl = `${window.location.origin}/`;
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: { emailRedirectTo: redirectUrl },
@@ -173,6 +189,16 @@ const Auth = () => {
           }
           return;
         }
+
+        // Check if email confirmation is required
+        // When email confirmation is ON, user will exist but session will be null
+        if (data.user && !data.session) {
+          setVerificationEmail(email);
+          setShowVerification(true);
+          return;
+        }
+
+        // If auto-confirm is on, user is logged in immediately
         toast({ title: "အောင်မြင်ပါသည်", description: "အကောင့်ဖွင့်မှု အောင်မြင်ပါသည်" });
       }
     } catch (error) {
@@ -181,6 +207,20 @@ const Auth = () => {
       setIsLoading(false);
     }
   };
+
+  // Show verification screen
+  if (showVerification) {
+    return (
+      <EmailVerificationScreen
+        email={verificationEmail}
+        onBackToLogin={() => {
+          setShowVerification(false);
+          setMode("login");
+          setPassword("");
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen gradient-navy flex flex-col items-center justify-center p-4">
@@ -256,8 +296,8 @@ const Auth = () => {
 
           {/* Reset sent message */}
           {mode === "forgot" && resetSent && (
-            <div className="p-3 rounded-xl bg-success/20 border border-success/30">
-              <p className="text-sm text-success font-myanmar">
+            <div className="p-3 rounded-xl bg-primary/10 border border-primary/30">
+              <p className="text-sm text-primary font-medium">
                 ✅ စကားဝှက် ပြန်လည်သတ်မှတ်ရန် လင့်ခ်ကို သင့်အီးမေးလ်သို့ ပို့ပေးပြီးပါပြီ
               </p>
             </div>
@@ -311,7 +351,7 @@ const Auth = () => {
       {/* Guide Videos for New Users */}
       {guideVideos.length > 0 && (
         <div className="w-full max-w-md mt-6 space-y-3 animate-fade-up" style={{ animationDelay: "0.3s" }}>
-          <h3 className="text-sm font-semibold text-primary text-center font-myanmar">
+          <h3 className="text-sm font-semibold text-primary text-center">
             📖 အသုံးပြုနည်း လမ်းညွှန်
           </h3>
           {guideVideos.map((video) => (
@@ -330,9 +370,9 @@ const Auth = () => {
                 </div>
               )}
               <div className="p-3">
-                <p className="text-sm font-medium text-foreground font-myanmar">{video.title}</p>
+                <p className="text-sm font-medium text-foreground">{video.title}</p>
                 {video.description && (
-                  <p className="text-xs text-muted-foreground mt-1 font-myanmar">{video.description}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{video.description}</p>
                 )}
               </div>
             </div>
@@ -342,10 +382,10 @@ const Auth = () => {
 
       {/* Promo Info for New Users */}
       <div className="w-full max-w-md mt-4 gradient-card rounded-2xl p-4 border border-primary/20 text-center animate-fade-up" style={{ animationDelay: "0.4s" }}>
-        <p className="text-sm text-foreground font-myanmar font-semibold mb-1">
+        <p className="text-sm text-foreground font-semibold mb-1">
           🎁 ပထမဆုံးအကြိမ် ငွေဖြည့်သူများအတွက်
         </p>
-        <p className="text-xs text-muted-foreground font-myanmar">
+        <p className="text-xs text-muted-foreground">
           Bonus Credit ၂၀% ပိုပေးမည် • AI ပုံဆွဲခြင်း၊ Video နှင့် Speech ပြောင်းခြင်း အားလုံး တစ်နေရာတည်းမှာ
         </p>
       </div>
