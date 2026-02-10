@@ -5,7 +5,7 @@ import {
   BarChart3, Download, Settings, Activity, Sun, Moon,
   Bell, TrendingUp, DollarSign, Building,
   Save, Key, Plus, Trash2, Wallet, CreditCard as CardIcon, Image, X, Loader2,
-  Gift, ExternalLink, AlertTriangle, Power, Eye, EyeOff, Play, Settings2, Tag, MessageSquare, Film
+  Gift, ExternalLink, AlertTriangle, Power, Eye, EyeOff, Play, Settings2, Tag, MessageSquare, Film, Zap
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import { PromoCodesTab } from "@/components/admin/PromoCodesTab";
 import { UserFeedbackTab } from "@/components/admin/UserFeedbackTab";
 import { ContentFactoryTab } from "@/components/admin/ContentFactoryTab";
 import { AdminUserTable } from "@/components/admin/AdminUserTable";
+import { ApiSwitchingTab } from "@/components/admin/ApiSwitchingTab";
 
 interface PendingTransaction {
   id: string;
@@ -884,7 +885,7 @@ export const Admin = () => {
               System
             </TabsTrigger>
           </TabsList>
-          <TabsList className="grid w-full grid-cols-2 mb-6">
+          <TabsList className="grid w-full grid-cols-3 mb-6">
             <TabsTrigger value="content-factory" className="text-xs">
               <Film className="w-4 h-4 mr-1" />
               Content Factory
@@ -892,6 +893,10 @@ export const Admin = () => {
             <TabsTrigger value="users-table" className="text-xs">
               <Users className="w-4 h-4 mr-1" />
               Users
+            </TabsTrigger>
+            <TabsTrigger value="api-switching" className="text-xs">
+              <Zap className="w-4 h-4 mr-1" />
+              API Switch
             </TabsTrigger>
           </TabsList>
 
@@ -1680,6 +1685,11 @@ export const Admin = () => {
           {/* Users Table Tab */}
           <TabsContent value="users-table" className="space-y-4">
             <AdminUserTable />
+          </TabsContent>
+
+          {/* API Switching Tab */}
+          <TabsContent value="api-switching" className="space-y-4">
+            <ApiSwitchingTab />
           </TabsContent>
         </Tabs>
       </div>
