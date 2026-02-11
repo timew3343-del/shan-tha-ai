@@ -76,6 +76,11 @@ const STYLES: StyleOption[] = [
   { value: "library_cafe", label: "Library/Study Cafe", emoji: "📚", prompt: "library study cafe interior, floor-to-ceiling bookshelves, reading nook, warm lighting, wood ladder, cozy", category: "special" },
   { value: "spa_bathroom", label: "Spa Bathroom", emoji: "🛁", prompt: "luxury spa bathroom, freestanding tub, rain shower, natural stone, candles, zen garden view, serene", category: "special" },
   { value: "wine_cellar", label: "Wine Cellar", emoji: "🍷", prompt: "luxury wine cellar, wooden racks, stone walls, barrel-vaulted ceiling, tasting area, ambient lighting", category: "special" },
+  { value: "myanmar_buddhist_shrine", label: "မြန်မာဘုရားခန်း", emoji: "🙏", prompt: "traditional Myanmar Buddhist shrine room, golden Buddha statue, lacquerware offerings, teak altar, lotus flowers, warm candlelight, serene devotional space", category: "special" },
+  { value: "modern_buddha_room", label: "ခေတ်မီဘုရားခန်း", emoji: "☸️", prompt: "modern minimalist Buddhist meditation room, white marble Buddha, clean zen design, indirect lighting, peaceful, contemporary spiritual space", category: "special" },
+  { value: "yoga_studio", label: "Yoga Studio", emoji: "🧘", prompt: "home yoga studio, bamboo flooring, mirrors, natural light, plants, calming colors, meditation corner", category: "special" },
+  { value: "walk_in_closet", label: "Walk-in Closet", emoji: "👗", prompt: "luxury walk-in closet, custom shelving, island drawer, full-length mirrors, LED lighting, organized display", category: "special" },
+  { value: "rooftop_lounge", label: "Rooftop Lounge", emoji: "🌃", prompt: "rooftop lounge area, outdoor furniture, string lights, city skyline view, comfortable seating, ambient", category: "special" },
 ];
 
 const ROOMS = [
@@ -89,6 +94,16 @@ const ROOMS = [
   { value: "bathroom", label: "ရေချိုးခန်း", emoji: "🚿" },
   { value: "office", label: "ရုံးခန်း", emoji: "💼" },
   { value: "dining room", label: "ထမင်းစားခန်း", emoji: "🍽️" },
+  { value: "buddhist shrine room", label: "ဘုရားခန်း", emoji: "🙏" },
+  { value: "meditation room", label: "တရားထိုင်ခန်း", emoji: "🧘" },
+  { value: "laundry room", label: "အဝတ်လျှော်ခန်း", emoji: "🧺" },
+  { value: "walk-in closet", label: "အဝတ်အစားခန်း", emoji: "👗" },
+  { value: "balcony", label: "ဘယ်လ်ကနီ", emoji: "🌅" },
+  { value: "home gym", label: "အိမ်တွင်းအားကစားခန်း", emoji: "🏋️" },
+  { value: "nursery", label: "ကလေးငယ်ခန်း (၀-၅ နှစ်)", emoji: "🍼" },
+  { value: "study room", label: "စာကြည့်ခန်း", emoji: "📖" },
+  { value: "guest room", label: "ဧည့်ခံအိပ်ခန်း", emoji: "🏨" },
+  { value: "entertainment room", label: "ဖျော်ဖြေရေးခန်း", emoji: "🎭" },
 ];
 
 export const InteriorDesignTool = ({ userId, onBack }: Props) => {

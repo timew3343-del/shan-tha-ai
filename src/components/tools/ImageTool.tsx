@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { useCredits } from "@/hooks/useCredits";
 import { ToolHeader } from "@/components/ToolHeader";
-import { Watermark, addWatermarkToImage } from "@/components/Watermark";
+// Watermark removed per user request
 import { motion } from "framer-motion";
 import { useToolOutput } from "@/hooks/useToolOutput";
 import { FirstOutputGuide } from "@/components/FirstOutputGuide";
@@ -143,15 +143,7 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
       }
 
       if (data?.success && data?.image) {
-        // Add watermark to the generated image
-        let finalImage = data.image;
-        if (userId) {
-          try {
-            finalImage = await addWatermarkToImage(data.image, userId);
-          } catch (e) {
-            console.warn("Watermark failed, using original:", e);
-          }
-        }
+        const finalImage = data.image;
         setGeneratedImage(finalImage);
         refetchCredits();
         saveOutput("image", finalImage);
@@ -334,13 +326,11 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
               Download
             </Button>
           </div>
-          <Watermark userId={userId}>
-            <img
-              src={generatedImage}
-              alt="Generated"
-              className="w-full rounded-xl border border-border"
-            />
-          </Watermark>
+          <img
+            src={generatedImage}
+            alt="Generated"
+            className="w-full rounded-xl border border-border"
+          />
         </motion.div>
       )}
     </motion.div>

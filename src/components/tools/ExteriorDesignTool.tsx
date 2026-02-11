@@ -52,6 +52,19 @@ const STYLES: StyleOption[] = [
 
   // CULTURAL & REGIONAL
   { value: "myanmar_modern", label: "ခေတ်မီမြန်မာမှုပုံစံ", emoji: "🇲🇲", prompt: "modern Myanmar traditional house, teak wood, elevated design, multi-tiered pyatthat roof, tropical landscaping", category: "cultural" },
+  { value: "myanmar_royal", label: "မြန်မာရှေးဟောင်းနန်းတော်", emoji: "👑", prompt: "Myanmar ancient royal palace style, multi-tiered pyatthat spire, gold leaf, teak wood carvings, grand staircase, traditional Burmese architecture", category: "cultural" },
+  { value: "myanmar_monastery", label: "မြန်မာကျောင်းဆောင်", emoji: "🙏", prompt: "Myanmar monastery style house, elevated teak structure, ornate wood carvings, tiered roof, peaceful garden, Buddhist temple inspired", category: "cultural" },
+  { value: "myanmar_colonial", label: "မြန်မာကိုလိုနီ", emoji: "🏛️", prompt: "Myanmar colonial era house, Victorian-Burmese fusion, wrap-around verandah, shuttered windows, tropical garden, heritage style", category: "cultural" },
+  { value: "myanmar_shan", label: "ရှမ်းအိမ်ပုံစံ", emoji: "🏔️", prompt: "Shan traditional house, wooden stilts, thatched roof, mountain village setting, bamboo walls, rustic charm", category: "cultural" },
+  { value: "myanmar_rakhine", label: "ရခိုင်ရိုးရာအိမ်", emoji: "🌊", prompt: "Rakhine traditional coastal house, elevated bamboo structure, palm-leaf roof, seaside setting, tropical wood", category: "cultural" },
+  { value: "myanmar_chin", label: "ချင်းရိုးရာအိမ်", emoji: "⛰️", prompt: "Chin traditional highland house, steep roof, stone foundation, wooden walls, mountain backdrop, misty hills", category: "cultural" },
+  { value: "myanmar_kachin", label: "ကချင်ရိုးရာအိမ်", emoji: "🌲", prompt: "Kachin traditional longhouse, elevated bamboo structure, thatched roof, forest setting, community design", category: "cultural" },
+  { value: "myanmar_inle", label: "အင်းလေးကန်အိမ်", emoji: "🚣", prompt: "Inle Lake floating house, wooden stilts over water, teak construction, scenic lake views, Myanmar water village", category: "cultural" },
+  { value: "myanmar_bagan_temple", label: "ပုဂံဘုရားပုံစံ", emoji: "🛕", prompt: "Bagan temple-inspired residence, red brick, ornate stucco, pointed spires, ancient Myanmar architecture", category: "cultural" },
+  { value: "myanmar_mandalay", label: "မန္တလေးတိုက်ခန်း", emoji: "🏙️", prompt: "Mandalay urban house, modern Myanmar city architecture, teak accents, tropical garden, contemporary comfort", category: "cultural" },
+  { value: "myanmar_yangon_heritage", label: "ရန်ကုန်အမွေအနှစ်", emoji: "🏢", prompt: "Yangon heritage building, colonial-era architecture, grand facade, arched windows, tropical trees, renovated elegance", category: "cultural" },
+  { value: "myanmar_bamboo_eco", label: "ဝါးအိမ်", emoji: "🎋", prompt: "Myanmar eco bamboo house, sustainable design, woven bamboo walls, natural ventilation, tropical garden, green roof", category: "cultural" },
+  { value: "myanmar_lake_villa", label: "ကန်စပ်ခေတ်မီအိမ်", emoji: "🏝️", prompt: "modern Myanmar lakeside villa, infinity pool, teak and glass, panoramic lake views, luxury tropical design", category: "cultural" },
   { value: "japanese_zen", label: "ဂျပန် Zen", emoji: "⛩️", prompt: "Japanese Zen minimalist house, wooden facade, rock garden, bamboo fence, sliding shoji screens, natural materials", category: "cultural" },
   { value: "balinese_resort", label: "ဘာလီ Resort", emoji: "🌺", prompt: "Balinese resort style villa, thatched roof, open pavilion, tropical garden, stone carvings, infinity pool", category: "cultural" },
   { value: "mediterranean", label: "Mediterranean Villa", emoji: "🏖️", prompt: "Mediterranean villa, terracotta roof, white stucco walls, arched windows, courtyard, bougainvillea", category: "cultural" },
@@ -59,6 +72,8 @@ const STYLES: StyleOption[] = [
   { value: "spanish_hacienda", label: "Spanish Hacienda", emoji: "🇪🇸", prompt: "Spanish hacienda, clay tile roof, stucco walls, wrought iron details, courtyard with fountain, warm tones", category: "cultural" },
   { value: "moroccan", label: "Moroccan", emoji: "🇲🇦", prompt: "Moroccan riad style, intricate tile work, horseshoe arches, courtyard garden, vibrant colors", category: "cultural" },
   { value: "korean_hanok", label: "ကိုရီးယား Hanok", emoji: "🇰🇷", prompt: "Korean Hanok style, curved tiled roof, wooden structure, ondol heating, traditional courtyard, natural harmony", category: "cultural" },
+  { value: "thai_lanna", label: "ထိုင်း Lanna", emoji: "🇹🇭", prompt: "Thai Lanna style house, curved roof peaks, teak wood, elevated structure, ornate gable boards, temple-like elegance", category: "cultural" },
+  { value: "indian_haveli", label: "အိန္ဒိယ Haveli", emoji: "🇮🇳", prompt: "Indian Haveli mansion, ornate stone carvings, courtyards, jharokha balconies, colorful glass windows", category: "cultural" },
 
   // NATURE & COZY
   { value: "luxury_farmhouse", label: "Luxury Farmhouse", emoji: "🌾", prompt: "luxury modern farmhouse, board and batten siding, metal roof, large front porch, barn door details", category: "nature" },

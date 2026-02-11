@@ -26,13 +26,13 @@ serve(async (req) => {
     const userId = user.id;
 
     // Parse and validate request body
-    let parsedBody: { serviceOption?: string; topic?: string; genre?: string; mood?: string; audioBase64?: string };
+    let parsedBody: { serviceOption?: string; topic?: string; genre?: string; mood?: string; language?: string; mtvStyle?: string; showSubtitles?: boolean; audioBase64?: string };
     try {
       parsedBody = await req.json();
     } catch {
       return new Response(JSON.stringify({ error: "Invalid request body" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    const { serviceOption, topic, genre, mood, audioBase64 } = parsedBody;
+    const { serviceOption, topic, genre, mood, language, mtvStyle, showSubtitles, audioBase64 } = parsedBody;
 
     if (!serviceOption || !["song_only", "mtv_only", "full_auto"].includes(serviceOption)) {
       return new Response(JSON.stringify({ error: "Invalid service option" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -85,7 +85,14 @@ serve(async (req) => {
           messages: [
             {
               role: "system",
-              content: `You are a professional songwriter. Write creative, emotional song lyrics in Myanmar (Burmese) language.
+              content: `You are a professional songwriter. Write creative, emotional song lyrics in ${
+                language === "my" ? "Myanmar (Burmese)" :
+                language === "en" ? "English" :
+                language === "th" ? "Thai" :
+                language === "ko" ? "Korean" :
+                language === "ja" ? "Japanese" :
+                language === "zh" ? "Chinese" : "Myanmar (Burmese)"
+              } language.
               Genre: ${genre}. Mood: ${mood}.
               Format the lyrics with verses, chorus, and bridge clearly labeled.
               Keep it 2-3 minutes of singing length.
