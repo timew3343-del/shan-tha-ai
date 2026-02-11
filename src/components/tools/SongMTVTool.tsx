@@ -203,8 +203,14 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
       if (result.lyrics) setResultLyrics(result.lyrics);
       setProgress(100);
       refetchCredits();
-      if (result.video) saveOutput("video", result.video);
-      else if (result.audio) saveOutput("audio", result.audio);
+      // Save to Store based on what was generated
+      if (result.video) {
+        saveOutput("video", result.video);
+      } else if (result.audio) {
+        saveOutput("audio", result.audio);
+      } else if (result.lyrics) {
+        saveOutput("text", result.lyrics);
+      }
 
       toast({ title: "အောင်မြင်ပါသည် 🎵", description: `${result.creditsUsed} Credits အသုံးပြုပြီးပါပြီ` });
     } catch (error: any) {
