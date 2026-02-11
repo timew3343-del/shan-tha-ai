@@ -1,7 +1,7 @@
 {
   "name": "Myanmar AI Studio",
   "short_name": "Myanmar AI",
-  "description": "42+ AI Tools & 130+ Capabilities by Ko Ko Phyo",
+  "description": "50+ AI Tools & 130+ Capabilities — Professional AI Video SaaS Platform",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",
@@ -15,6 +15,22 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["productivity", "utilities"],
-  "lang": "my"
+  "categories": ["productivity", "utilities", "entertainment"],
+  "lang": "my",
+  "prefer_related_applications": false,
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "AI Tools",
+      "short_name": "Tools",
+      "url": "/",
+      "icons": [{ "src": "/favicon.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Top Up Credits",
+      "short_name": "Top Up",
+      "url": "/top-up",
+      "icons": [{ "src": "/favicon.png", "sizes": "192x192" }]
+    }
+  ]
 }

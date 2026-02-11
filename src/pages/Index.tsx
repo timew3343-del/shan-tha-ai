@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useNavigate } from "react-router-dom";
+import { ScrollToTop } from "@/components/ScrollToTop";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
 import { BottomNavigation } from "@/components/BottomNavigation";
@@ -152,6 +153,7 @@ const Index = () => {
         {activeTab === "course" && <CourseTab userId={user.id} />}
       </main>
       
+      <ScrollToTop />
       <BottomNavigation activeTab={activeTab} onTabChange={setActiveTab} />
     </div>
   );

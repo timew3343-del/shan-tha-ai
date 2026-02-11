@@ -136,6 +136,17 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
     }
   }, [credits, creditsLoading]);
 
+  // Escape key to go back to home
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && activeTool !== "home") {
+        setActiveTool("home");
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activeTool]);
+
   const handleBack = () => setActiveTool("home");
 
   const docSlideCost = Math.ceil((2 + 3 * 5) * 1.4);
@@ -282,6 +293,10 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                 <Crown className="w-5 h-5 text-primary animate-pulse" />
               </div>
               <p className="text-muted-foreground text-xs font-myanmar">{t('dashboard.subtitle')}</p>
+              <div className="inline-flex items-center gap-1.5 mt-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20">
+                <Sparkles className="w-3 h-3 text-primary" />
+                <span className="text-[10px] font-semibold text-primary">AI Tools {tools.length}+ | AI Chatbot</span>
+              </div>
             </div>
 
             {/* PRO Agentic AI Banner */}
