@@ -30,6 +30,7 @@ import { AdsterraConfigTab } from "@/components/admin/AdsterraConfigTab";
 import { KnowledgeBaseTab } from "@/components/admin/KnowledgeBaseTab";
 import { ApiBalanceTab } from "@/components/admin/ApiBalanceTab";
 import { CollaboratorManagementTab } from "@/components/admin/CollaboratorManagementTab";
+import { FinancialDashboardTab } from "@/components/admin/FinancialDashboardTab";
 
 interface PendingTransaction {
   id: string;
@@ -1094,31 +1095,25 @@ export const Admin = () => {
             <CreditAuditTab />
           </TabsContent>
 
-          {/* Analytics Tab */}
+          {/* Analytics / Financial Dashboard Tab */}
           <TabsContent value="analytics" className="space-y-4">
-            <div className="grid grid-cols-1 gap-4">
-              <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-                <div className="flex items-center gap-2 mb-2">
-                  <TrendingUp className="w-5 h-5 text-primary" />
-                  <span className="text-sm text-muted-foreground">ယနေ့ဝင်ငွေ</span>
+            <FinancialDashboardTab />
+            
+            <div className="border-t border-border/50 pt-4 mt-4">
+              <h3 className="text-sm font-semibold text-foreground mb-3 font-myanmar">📊 ယနေ့စာရင်း</h3>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="gradient-card rounded-xl p-3 border border-primary/20 text-center">
+                  <p className="text-[10px] text-muted-foreground">ယနေ့</p>
+                  <p className="text-sm font-bold text-foreground">{formatCurrency(analytics.dailyIncome)}</p>
                 </div>
-                <p className="text-2xl font-bold text-foreground">{formatCurrency(analytics.dailyIncome)}</p>
-              </div>
-              
-              <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-                <div className="flex items-center gap-2 mb-2">
-                  <BarChart3 className="w-5 h-5 text-primary" />
-                  <span className="text-sm text-muted-foreground">ဤအပတ်ဝင်ငွေ</span>
+                <div className="gradient-card rounded-xl p-3 border border-primary/20 text-center">
+                  <p className="text-[10px] text-muted-foreground">ဤအပတ်</p>
+                  <p className="text-sm font-bold text-foreground">{formatCurrency(analytics.weeklyIncome)}</p>
                 </div>
-                <p className="text-2xl font-bold text-foreground">{formatCurrency(analytics.weeklyIncome)}</p>
-              </div>
-              
-              <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-                <div className="flex items-center gap-2 mb-2">
-                  <DollarSign className="w-5 h-5 text-primary" />
-                  <span className="text-sm text-muted-foreground">ဤလဝင်ငွေ</span>
+                <div className="gradient-card rounded-xl p-3 border border-primary/20 text-center">
+                  <p className="text-[10px] text-muted-foreground">ဤလ</p>
+                  <p className="text-sm font-bold text-foreground">{formatCurrency(analytics.monthlyIncome)}</p>
                 </div>
-                <p className="text-2xl font-bold text-foreground">{formatCurrency(analytics.monthlyIncome)}</p>
               </div>
             </div>
 
@@ -1127,7 +1122,6 @@ export const Admin = () => {
               CSV Export
             </Button>
 
-            {/* Tool Performance Analytics */}
             <ToolAnalyticsTab />
           </TabsContent>
 

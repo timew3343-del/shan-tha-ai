@@ -12,6 +12,7 @@ import { CourseTab } from "@/components/CourseTab";
 import { StoreTab } from "@/components/StoreTab";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { MaintenanceBanner } from "@/components/MaintenanceBanner";
+import { WelcomeOnboarding } from "@/components/WelcomeOnboarding";
 import { CreditTransferDialog } from "@/components/CreditTransferDialog";
 import { LogOut, User as UserIcon, HelpCircle, Shield, Info, ArrowRightLeft, Copy, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -84,6 +85,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen gradient-navy">
+      <WelcomeOnboarding userId={user.id} />
       <PromoBanner />
       
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
