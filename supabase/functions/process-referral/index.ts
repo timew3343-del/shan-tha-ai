@@ -90,32 +90,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Award credits directly (service role bypasses RLS, including protect_credit_balance trigger)
-    const { data: newUserProfile } = await supabase
-      .from("profiles")
-      .select("credit_balance")
-      .eq("user_id", new_user_id)
-      .single();
-    
-    const { data: referrerProfile } = await supabase
-      .from("profiles")
-      .select("credit_balance")
-      .eq("user_id", refCode.user_id)
-      .single();
-
-    if (newUserProfile) {
-      await supabase
-        .from("profiles")
-        .update({ credit_balance: newUserProfile.credit_balance + REFERRAL_REWARD, updated_at: new Date().toISOString() })
-        .eq("user_id", new_user_id);
-    }
-
-    if (referrerProfile) {
-      await supabase
-        .from("profiles")
-        .update({ credit_balance: referrerProfile.credit_balance + REFERRAL_REWARD, updated_at: new Date().toISOString() })
-        .eq("user_id", refCode.user_id);
-    }
+    // Award credits using SECURITY DEFINER function (bypasses protect_credit_balance trigger)
+    await supabase.rpc("add_credits_via_service", { _user_id: new_user_id, _amount: REFERRAL_REWARD });
+    await supabase.rpc("add_credits_via_service", { _user_id: refCode.user_id, _amount: REFERRAL_REWARD });
 
     // Record the referral use
     await supabase.from("referral_uses").insert({
