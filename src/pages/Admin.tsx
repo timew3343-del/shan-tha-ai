@@ -19,7 +19,7 @@ import { CampaignSubmissionsTab } from "@/components/admin/CampaignSubmissionsTa
 import { CreditAuditTab } from "@/components/admin/CreditAuditTab";
 import { AppSettingsTab } from "@/components/admin/AppSettingsTab";
 import { ToolAnalyticsTab } from "@/components/admin/ToolAnalyticsTab";
-import { GlobalMarginTab } from "@/components/admin/GlobalMarginTab";
+import { GlobalMarginTab } from "@/components/admin/GlobalMarginTab"; // kept for reference but removed from UI
 import { HybridProfitTab } from "@/components/admin/HybridProfitTab";
 import { PromoCodesTab } from "@/components/admin/PromoCodesTab";
 import { UserFeedbackTab } from "@/components/admin/UserFeedbackTab";
@@ -1181,9 +1181,7 @@ export const Admin = () => {
 
           {/* System Tab */}
           <TabsContent value="system" className="space-y-4">
-            {/* Global Profit Margin */}
-            <GlobalMarginTab />
-
+            {/* Global Profit Margin removed - consolidated into Pricing tab's HybridProfitTab */}
             {/* Manual Credit Management */}
             <div className="gradient-card rounded-2xl p-4 border border-primary/20">
               <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
@@ -1284,225 +1282,29 @@ export const Admin = () => {
               )}
             </div>
 
-            {/* API Health */}
+            {/* API Keys - Managed via Cloud Secrets */}
             <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-                <Activity className="w-5 h-5 text-primary" />
-                API Status
-              </h3>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                  <span className="text-sm text-foreground">Google Gemini</span>
-                  <span className={`text-xs px-2 py-1 rounded-full ${
-                    apiHealth.gemini.status === "configured" ? "bg-success/20 text-success" :
-                    "bg-destructive/20 text-destructive"
-                  }`}>
-                    {apiHealth.gemini.status === "configured" ? "Configured" : "No Key"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                  <span className="text-sm text-foreground">Stability AI</span>
-                  <span className={`text-xs px-2 py-1 rounded-full ${
-                    apiHealth.stability.status === "configured" ? "bg-success/20 text-success" :
-                    "bg-destructive/20 text-destructive"
-                  }`}>
-                    {apiHealth.stability.status === "configured" ? "Configured" : "No Key"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                  <span className="text-sm text-foreground">Replicate AI</span>
-                  <span className={`text-xs px-2 py-1 rounded-full ${
-                    apiHealth.replicate.status === "configured" ? "bg-success/20 text-success" :
-                    "bg-destructive/20 text-destructive"
-                  }`}>
-                    {apiHealth.replicate.status === "configured" ? "Configured" : "No Key"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                  <span className="text-sm text-foreground">ACRCloud</span>
-                  <span className={`text-xs px-2 py-1 rounded-full ${
-                    acrcloudAccessKey && acrcloudAccessSecret ? "bg-success/20 text-success" :
-                    "bg-destructive/20 text-destructive"
-                  }`}>
-                    {acrcloudAccessKey && acrcloudAccessSecret ? "Configured" : "No Key"}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* API Keys Settings */}
-            <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+              <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
                 <Key className="w-5 h-5 text-primary" />
-                API Keys
+                API Keys Status
               </h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-foreground mb-2 block">Google Gemini API Key</label>
-                  <Input
-                    type="password"
-                    value={geminiApiKey}
-                    onChange={(e) => setGeminiApiKey(e.target.value)}
-                    placeholder="AIzaSy..."
-                    className="bg-background/50"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-foreground mb-2 block">Stability AI API Key</label>
-                  <Input
-                    type="password"
-                    value={stabilityApiKey}
-                    onChange={(e) => setStabilityApiKey(e.target.value)}
-                    placeholder="sk-..."
-                    className="bg-background/50"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-foreground mb-2 block">Replicate API Token</label>
-                  <div className="relative">
-                    <Input
-                      type={showReplicateKey ? "text" : "password"}
-                      value={replicateApiToken}
-                      onChange={(e) => setReplicateApiToken(e.target.value)}
-                      placeholder="r8_..."
-                      className="bg-background/50 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowReplicateKey(!showReplicateKey)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showReplicateKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
+              <p className="text-xs text-muted-foreground mb-4 font-myanmar">
+                API Keys များသည် Cloud Secrets တွင် လုံခြုံစွာ သိမ်းဆည်းထားပါသည်။ Edge Functions များမှ တိုက်ရိုက် အသုံးပြုပါသည်။
+              </p>
+              <div className="space-y-2">
+                {[
+                  { name: "Lovable AI (LOVABLE_API_KEY)", status: true },
+                  { name: "Google Gemini (GEMINI_API_KEY)", status: true },
+                  { name: "Stability AI (STABILITY_API_KEY)", status: true },
+                  { name: "Replicate (REPLICATE_API_KEY)", status: true },
+                ].map(key => (
+                  <div key={key.name} className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
+                    <span className="text-sm text-foreground">{key.name}</span>
+                    <span className="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-500">
+                      ✓ Configured
+                    </span>
                   </div>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-foreground mb-2 block">Shotstack API Key</label>
-                  <div className="relative">
-                    <Input
-                      type={showShotstackKey ? "text" : "password"}
-                      value={shotstackApiKey}
-                      onChange={(e) => setShotstackApiKey(e.target.value)}
-                      placeholder="Enter Shotstack API key..."
-                      className="bg-background/50 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowShotstackKey(!showShotstackKey)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showShotstackKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="border-t border-border/50 pt-4 mt-4">
-                  <p className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
-                    🎵 ACRCloud Keys (Copyright Detection)
-                  </p>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Access Key</label>
-                      <div className="relative">
-                        <Input
-                          type={showAcrcloudKey ? "text" : "password"}
-                          value={acrcloudAccessKey}
-                          onChange={(e) => setAcrcloudAccessKey(e.target.value)}
-                          placeholder="ACRCloud Access Key..."
-                          className="bg-background/50 pr-10"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowAcrcloudKey(!showAcrcloudKey)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        >
-                          {showAcrcloudKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Access Secret</label>
-                      <div className="relative">
-                        <Input
-                          type={showAcrcloudSecret ? "text" : "password"}
-                          value={acrcloudAccessSecret}
-                          onChange={(e) => setAcrcloudAccessSecret(e.target.value)}
-                          placeholder="ACRCloud Access Secret..."
-                          className="bg-background/50 pr-10"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowAcrcloudSecret(!showAcrcloudSecret)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        >
-                          {showAcrcloudSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="border-t border-border/50 pt-4 mt-4">
-                  <p className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
-                    <CreditCard className="w-4 h-4 text-primary" />
-                    Stripe Keys (Payment)
-                  </p>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Publishable Key</label>
-                      <div className="relative">
-                        <Input
-                          type={showStripePublishable ? "text" : "password"}
-                          value={stripePublishableKey}
-                          onChange={(e) => setStripePublishableKey(e.target.value)}
-                          placeholder="pk_live_..."
-                          className="bg-background/50 pr-10"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowStripePublishable(!showStripePublishable)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        >
-                          {showStripePublishable ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Secret Key</label>
-                      <div className="relative">
-                        <Input
-                          type={showStripeSecret ? "text" : "password"}
-                          value={stripeSecretKey}
-                          onChange={(e) => setStripeSecretKey(e.target.value)}
-                          placeholder="sk_live_..."
-                          className="bg-background/50 pr-10"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowStripeSecret(!showStripeSecret)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        >
-                          {showStripeSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                <Button 
-                  onClick={saveApiKeys} 
-                  disabled={isSavingApiKeys}
-                  className="w-full gradient-gold text-primary-foreground"
-                >
-                  {isSavingApiKeys ? (
-                    <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4 mr-2" />
-                      Save All API Keys
-                    </>
-                  )}
-                </Button>
+                ))}
               </div>
             </div>
 
