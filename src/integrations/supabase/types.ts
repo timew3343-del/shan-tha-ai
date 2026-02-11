@@ -626,7 +626,45 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      campaigns_user_view: {
+        Row: {
+          created_at: string | null
+          credits_awarded: number | null
+          fb_link: string | null
+          id: string | null
+          link: string | null
+          platform: string | null
+          status: string | null
+          tiktok_link: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          credits_awarded?: number | null
+          fb_link?: string | null
+          id?: string | null
+          link?: string | null
+          platform?: string | null
+          status?: string | null
+          tiktok_link?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          credits_awarded?: number | null
+          fb_link?: string | null
+          id?: string | null
+          link?: string | null
+          platform?: string | null
+          status?: string | null
+          tiktok_link?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       add_user_credits: {
@@ -650,6 +688,10 @@ export type Database = {
         Returns: boolean
       }
       is_admin_email: { Args: { _email: string }; Returns: boolean }
+      purchase_tutorial: {
+        Args: { _credits_cost: number; _user_id: string }
+        Returns: Json
+      }
       redeem_promo_code: {
         Args: { _code: string; _user_id: string }
         Returns: Json
