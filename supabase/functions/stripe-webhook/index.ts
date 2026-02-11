@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import Stripe from "https://esm.sh/stripe@14.21.0?target=deno";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,8 +17,49 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    const body = await req.json();
-    const event = body;
+    // Get webhook secret from app_settings
+    const { data: webhookSetting } = await supabaseAdmin
+      .from("app_settings")
+      .select("value")
+      .eq("key", "stripe_webhook_secret")
+      .maybeSingle();
+
+    const webhookSecret = webhookSetting?.value;
+
+    // Get raw body for signature verification
+    const body = await req.text();
+    let event: any;
+
+    if (webhookSecret && webhookSecret.length > 5) {
+      // Verify signature using Stripe library
+      const signature = req.headers.get("stripe-signature");
+      if (!signature) {
+        console.error("Missing stripe-signature header");
+        return new Response(JSON.stringify({ error: "Missing signature" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+        });
+      }
+
+      try {
+        const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
+          apiVersion: "2023-10-16",
+          httpClient: Stripe.createFetchHttpClient(),
+        });
+        event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
+        console.log("✅ Webhook signature verified successfully");
+      } catch (err: any) {
+        console.error("❌ Webhook signature verification failed:", err.message);
+        return new Response(JSON.stringify({ error: "Invalid signature" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400,
+        });
+      }
+    } else {
+      // Fallback: no webhook secret configured yet
+      console.warn("⚠️ No webhook secret configured - processing without signature verification");
+      event = JSON.parse(body);
+    }
 
     console.log("Stripe webhook event:", event.type);
 
@@ -36,35 +78,18 @@ serve(async (req) => {
 
       console.log(`Adding ${credits} credits to user ${userId}`);
 
-      // Add credits via RPC
-      const { data: result, error: rpcError } = await supabaseAdmin.rpc("add_user_credits", {
-        _user_id: userId,
-        _amount: credits,
-      });
+      // Direct credit addition using service role
+      const { data: profile } = await supabaseAdmin
+        .from("profiles")
+        .select("credit_balance")
+        .eq("user_id", userId)
+        .single();
 
-      // Note: add_user_credits requires admin role, but we're using service role key
-      // The RPC checks has_role(auth.uid(), 'admin') which won't work with service role
-      // So we do a direct update instead
-      if (rpcError) {
-        console.log("RPC failed (expected with service role), doing direct update");
-        const { error: updateError } = await supabaseAdmin
+      if (profile) {
+        await supabaseAdmin
           .from("profiles")
-          .update({ credit_balance: supabaseAdmin.rpc ? undefined : undefined })
+          .update({ credit_balance: profile.credit_balance + credits, updated_at: new Date().toISOString() })
           .eq("user_id", userId);
-        
-        // Direct SQL-safe credit addition
-        const { data: profile } = await supabaseAdmin
-          .from("profiles")
-          .select("credit_balance")
-          .eq("user_id", userId)
-          .single();
-
-        if (profile) {
-          await supabaseAdmin
-            .from("profiles")
-            .update({ credit_balance: profile.credit_balance + credits, updated_at: new Date().toISOString() })
-            .eq("user_id", userId);
-        }
       }
 
       // Update transaction status
@@ -91,7 +116,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({ received: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Webhook error:", error);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

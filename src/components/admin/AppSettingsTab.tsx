@@ -1,17 +1,22 @@
 import { useState, useEffect } from "react";
-import { Save, Gift, Play, Loader2, Settings2, Clock } from "lucide-react";
+import { Save, Gift, Play, Loader2, Settings2, Clock, CreditCard, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAppSettings } from "@/hooks/useAppSettings";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 export const AppSettingsTab = () => {
   const { settings, isLoading, isSaving, saveSettings } = useAppSettings();
+  const { toast } = useToast();
   
   const [adRewardAmount, setAdRewardAmount] = useState(5);
   const [dailyAdLimit, setDailyAdLimit] = useState(10);
   const [campaignReward, setCampaignReward] = useState(100);
   const [adTimerDuration, setAdTimerDuration] = useState(60);
-
+  const [webhookSecret, setWebhookSecret] = useState("");
+  const [showWebhookSecret, setShowWebhookSecret] = useState(false);
+  const [savingWebhook, setSavingWebhook] = useState(false);
   useEffect(() => {
     if (!isLoading) {
       setAdRewardAmount(settings.ad_reward_amount);
@@ -20,6 +25,34 @@ export const AppSettingsTab = () => {
       setAdTimerDuration(settings.ad_timer_duration);
     }
   }, [settings, isLoading]);
+
+  // Load webhook secret
+  useEffect(() => {
+    const loadWebhookSecret = async () => {
+      const { data } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "stripe_webhook_secret")
+        .maybeSingle();
+      if (data?.value) setWebhookSecret(data.value);
+    };
+    loadWebhookSecret();
+  }, []);
+
+  const handleSaveWebhookSecret = async () => {
+    setSavingWebhook(true);
+    try {
+      const { error } = await supabase
+        .from("app_settings")
+        .upsert({ key: "stripe_webhook_secret", value: webhookSecret }, { onConflict: "key" });
+      if (error) throw error;
+      toast({ title: "Webhook Secret သိမ်းဆည်းပြီးပါပြီ" });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setSavingWebhook(false);
+    }
+  };
 
   const handleSave = async () => {
     await saveSettings({
@@ -157,6 +190,48 @@ export const AppSettingsTab = () => {
             </div>
             <p className="text-xs text-muted-foreground">
               Campaign အတည်ပြုခံရသူများ ရရှိမည့် Credits
+            </p>
+          </div>
+        </div>
+
+        {/* Stripe Webhook Secret Section */}
+        <div className="gradient-card rounded-xl p-5 border border-primary/20">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+              <CreditCard className="w-4 h-4 text-primary" />
+            </div>
+            <div>
+              <h4 className="font-semibold text-foreground font-myanmar">Stripe Webhook Secret</h4>
+              <p className="text-xs text-muted-foreground">Webhook signature verification အတွက်</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium font-myanmar text-foreground">
+              Webhook Signing Secret (whsec_...)
+            </label>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Input
+                  type={showWebhookSecret ? "text" : "password"}
+                  value={webhookSecret}
+                  onChange={(e) => setWebhookSecret(e.target.value)}
+                  placeholder="whsec_..."
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowWebhookSecret(!showWebhookSecret)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                >
+                  {showWebhookSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              <Button onClick={handleSaveWebhookSecret} disabled={savingWebhook} size="sm">
+                {savingWebhook ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Stripe Dashboard → Webhooks → Signing secret ကို ဤနေရာတွင် ထည့်ပါ
             </p>
           </div>
         </div>
