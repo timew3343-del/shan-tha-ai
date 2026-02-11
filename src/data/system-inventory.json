@@ -1,0 +1,218 @@
+{
+  "platform": "Myanmar AI Studio",
+  "developer": "Ko Ko Phyo",
+  "description": "Professional AI Video SaaS platform offering 50+ AI tools across 53+ international languages",
+  "url": "https://shan-tha-ai.lovable.app",
+  "tools": [
+    {
+      "name": "AI Image Generator",
+      "category": "Multimedia",
+      "features": ["Text-to-Image", "Prompt-based Art", "Multi-style Generation", "Aspect Ratio Selection"]
+    },
+    {
+      "name": "AI Video Generator",
+      "category": "Multimedia",
+      "features": ["Image-to-Video", "Motion Animation", "Video Export"]
+    },
+    {
+      "name": "AI Face Swap",
+      "category": "Multimedia",
+      "features": ["Single Face Swap", "Multi-face Detection", "HD Face Blending"]
+    },
+    {
+      "name": "4K Upscale",
+      "category": "Multimedia",
+      "features": ["Image Upscaling", "Resolution Enhancement", "Detail Recovery"]
+    },
+    {
+      "name": "BG Remove",
+      "category": "Multimedia",
+      "features": ["Background Removal", "Transparent Export", "Edge Refinement"]
+    },
+    {
+      "name": "BG Studio",
+      "category": "Multimedia",
+      "features": ["Product Background Change", "Auto Scene Matching", "Multiple Templates"]
+    },
+    {
+      "name": "Logo & Graphic Design",
+      "category": "Design",
+      "features": ["Logo Creation", "FB Cover Design", "YouTube Banner", "TikTok Profile"]
+    },
+    {
+      "name": "AI Photo Restore",
+      "category": "Multimedia",
+      "features": ["Old Photo Repair", "Colorization", "Bulk 10-image Restoration", "Scratch Removal"]
+    },
+    {
+      "name": "Virtual Try-On",
+      "category": "Fashion",
+      "features": ["Clothing Try-On", "7+1 Outfit Variants", "Body Shape Matching"]
+    },
+    {
+      "name": "AI Art Style Transfer",
+      "category": "Design",
+      "features": ["30+ Art Styles", "Classic Arts (Van Gogh, Picasso, Monet)", "Asian & Traditional (Ukiyo-e, Myanmar Mural)", "Modern & Digital (Cyberpunk, 3D Render)", "Cartoon & Anime (Ghibli, Pixar)", "Unique Textures (Glass, Mosaic, Graffiti)", "Searchable Style Gallery"]
+    },
+    {
+      "name": "AI Exterior Designer",
+      "category": "Design",
+      "features": ["30+ Architectural Styles", "Modern Glass House", "Cultural Styles (Myanmar, Japanese)", "Luxury Mansion Design", "3D Photorealistic Render"]
+    },
+    {
+      "name": "AI Interior Designer",
+      "category": "Design",
+      "features": ["35+ Design Styles", "10 Room Types", "Kids/Teen/Elder Rooms", "Specialized (Gaming, Cinema, Library)", "Photorealistic Visualization"]
+    },
+    {
+      "name": "AI Fashion Designer PRO",
+      "category": "Fashion",
+      "features": ["6 Design Categories", "Wedding/Traditional/Suit", "Measurement System (Inches/CM)", "70+ Fabric Types", "Dual Output (Marketing + Technical Sketch)", "Accessories & Embroidery"]
+    },
+    {
+      "name": "Song & MTV Creator",
+      "category": "Audio & Music",
+      "features": ["AI Song Generation", "MTV Video Creation", "Lyrics Writing"]
+    },
+    {
+      "name": "Auto Ad Generator",
+      "category": "Marketing",
+      "features": ["Full Auto Ad Creation", "Script + Video + Audio", "Multi-platform Export"]
+    },
+    {
+      "name": "Live AI Vision & Voice",
+      "category": "Real-time AI",
+      "features": ["Real-time Camera AI", "Voice Interaction", "Live Scene Analysis"]
+    },
+    {
+      "name": "AI Video Redesign",
+      "category": "Video",
+      "features": ["Video Style Transfer", "Visual Effect Change"]
+    },
+    {
+      "name": "AI Caption",
+      "category": "Video",
+      "features": ["Auto Subtitling", "Multi-language Captions", "Timestamp Sync"]
+    },
+    {
+      "name": "AI Ad Generator",
+      "category": "Marketing",
+      "features": ["Ad Script Writing", "Ad Visual Creation"]
+    },
+    {
+      "name": "Video Copywriting PRO",
+      "category": "Marketing",
+      "features": ["Ad Video Creation", "Editable Subtitles", "Logo Overlay", "Multi-aspect Resize"]
+    },
+    {
+      "name": "Copyright Checker",
+      "category": "Utility",
+      "features": ["Music Copyright Check", "Content Originality Scan"]
+    },
+    {
+      "name": "Story → Video",
+      "category": "Video",
+      "features": ["50-scene Story Video", "Character Lock", "Scene Generation"]
+    },
+    {
+      "name": "Video Recap",
+      "category": "Video",
+      "features": ["Video Summarization", "Key Scene Extraction"]
+    },
+    {
+      "name": "Text-to-Speech / STT",
+      "category": "Audio & Music",
+      "features": ["Text to Speech", "Speech to Text", "Multi-language Voice"]
+    },
+    {
+      "name": "YouTube → Text",
+      "category": "Utility",
+      "features": ["Video Transcription", "Subtitle Extraction"]
+    },
+    {
+      "name": "AI Voice Translator",
+      "category": "Language",
+      "features": ["Myanmar → Foreign Translation", "Real-time Voice Translation"]
+    },
+    {
+      "name": "Myanmar Spellcheck",
+      "category": "Language",
+      "features": ["Spelling Check", "Grammar Correction"]
+    },
+    {
+      "name": "AI Creative Writer",
+      "category": "Content",
+      "features": ["Poetry Generation", "Short Story Writing", "Myanmar Literature"]
+    },
+    {
+      "name": "Message Polisher",
+      "category": "Content",
+      "features": ["Formal Tone Adjustment", "Professional Rewriting"]
+    },
+    {
+      "name": "AI Doc & Slide",
+      "category": "Productivity",
+      "features": ["PDF Creation", "PPTX Generation", "DOCX Export"]
+    },
+    {
+      "name": "AI CV Builder",
+      "category": "Productivity",
+      "features": ["Resume Creation", "Cover Letter", "PDF Export with Burmese Unicode"]
+    },
+    {
+      "name": "AI Legal Document",
+      "category": "Professional",
+      "features": ["Contract Generation", "Legal Template"]
+    },
+    {
+      "name": "Social Media Manager",
+      "category": "Marketing",
+      "features": ["Content Calendar", "Platform Strategy", "Post Planning"]
+    },
+    {
+      "name": "AI Business Consultant",
+      "category": "Professional",
+      "features": ["Investment Analysis", "Market Research", "Business Plan"]
+    },
+    {
+      "name": "AI Legal Advisor",
+      "category": "Professional",
+      "features": ["Legal Analysis", "Case Assessment"]
+    },
+    {
+      "name": "AI Health Checker",
+      "category": "Lifestyle",
+      "features": ["Symptom Analysis", "Health Advice"]
+    },
+    {
+      "name": "AI Nutrition Planner",
+      "category": "Lifestyle",
+      "features": ["Calorie Calculation", "Meal Planning", "Diet Analysis"]
+    },
+    {
+      "name": "AI Astrology",
+      "category": "Lifestyle",
+      "features": ["Horoscope Reading", "Fortune Prediction"]
+    },
+    {
+      "name": "AI Baby Namer",
+      "category": "Lifestyle",
+      "features": ["Name Suggestion", "Numerology Analysis"]
+    },
+    {
+      "name": "AI Car Dealer",
+      "category": "Professional",
+      "features": ["Car Valuation", "Market Price Analysis"]
+    },
+    {
+      "name": "AI Smart Chef",
+      "category": "Lifestyle",
+      "features": ["Recipe Generation", "Ingredient Cost Calculation"]
+    },
+    {
+      "name": "AI Travel Planner",
+      "category": "Lifestyle",
+      "features": ["Trip Planning", "Itinerary Creation", "Budget Estimation"]
+    }
+  ]
+}
