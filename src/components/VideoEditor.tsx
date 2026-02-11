@@ -13,6 +13,7 @@ import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { useCredits } from "@/hooks/useCredits";
 import { supabase } from "@/integrations/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import {
   Dialog,
   DialogContent,
@@ -52,6 +53,7 @@ export const VideoEditor = ({ userId }: VideoEditorProps) => {
   const { toast } = useToast();
   const { costs } = useCreditCosts();
   const { credits, refetch: refetchCredits } = useCredits(userId);
+  const { saveOutput } = useToolOutput("video-editor", "Video Editor");
   
   const [isOpen, setIsOpen] = useState(false);
   const [clips, setClips] = useState<VideoClip[]>([]);
@@ -270,6 +272,8 @@ export const VideoEditor = ({ userId }: VideoEditorProps) => {
         link.href = clips[0].url;
         link.download = `edited-video-${Date.now()}.mp4`;
         link.click();
+        // Save output to Store
+        saveOutput("video", clips[0].url);
       }
 
       refetchCredits();
