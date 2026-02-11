@@ -77,3 +77,6 @@ verify_jwt = false
 
 [functions.interior-design]
 verify_jwt = false
+
+[functions.knowledge-query]
+verify_jwt = false

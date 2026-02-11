@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { 
   ArrowLeft, Users, CreditCard, CheckCircle, XCircle, Clock, 
   BarChart3, Download, Settings, Activity, Sun, Moon,
-  Bell, TrendingUp, DollarSign, Building,
+  Bell, TrendingUp, DollarSign, Building, Brain,
   Save, Key, Plus, Trash2, Wallet, CreditCard as CardIcon, Image, X, Loader2,
   Gift, ExternalLink, AlertTriangle, Power, Eye, EyeOff, Play, Settings2, Tag, MessageSquare, Film, Zap
 } from "lucide-react";
@@ -27,6 +27,8 @@ import { ContentFactoryTab } from "@/components/admin/ContentFactoryTab";
 import { AdminUserTable } from "@/components/admin/AdminUserTable";
 import { ApiSwitchingTab } from "@/components/admin/ApiSwitchingTab";
 import { AdsterraConfigTab } from "@/components/admin/AdsterraConfigTab";
+import { KnowledgeBaseTab } from "@/components/admin/KnowledgeBaseTab";
+import { ApiBalanceTab } from "@/components/admin/ApiBalanceTab";
 
 interface PendingTransaction {
   id: string;
@@ -886,7 +888,7 @@ export const Admin = () => {
               System
             </TabsTrigger>
           </TabsList>
-          <TabsList className="grid w-full grid-cols-4 mb-6">
+          <TabsList className="grid w-full grid-cols-3 mb-2">
             <TabsTrigger value="content-factory" className="text-xs">
               <Film className="w-4 h-4 mr-1" />
               Content
@@ -899,9 +901,19 @@ export const Admin = () => {
               <Zap className="w-4 h-4 mr-1" />
               API Switch
             </TabsTrigger>
+          </TabsList>
+          <TabsList className="grid w-full grid-cols-3 mb-6">
             <TabsTrigger value="adsterra" className="text-xs">
               <DollarSign className="w-4 h-4 mr-1" />
-              Ads/Balance
+              Ads
+            </TabsTrigger>
+            <TabsTrigger value="knowledge" className="text-xs">
+              <Brain className="w-4 h-4 mr-1" />
+              AI Brain
+            </TabsTrigger>
+            <TabsTrigger value="api-balance" className="text-xs">
+              <Wallet className="w-4 h-4 mr-1" />
+              API $
             </TabsTrigger>
           </TabsList>
 
@@ -1502,6 +1514,16 @@ export const Admin = () => {
           {/* Adsterra & API Balance Tab */}
           <TabsContent value="adsterra" className="space-y-4">
             <AdsterraConfigTab />
+          </TabsContent>
+
+          {/* Knowledge Base Tab */}
+          <TabsContent value="knowledge" className="space-y-4">
+            <KnowledgeBaseTab />
+          </TabsContent>
+
+          {/* API Balance Tab */}
+          <TabsContent value="api-balance" className="space-y-4">
+            <ApiBalanceTab />
           </TabsContent>
         </Tabs>
       </div>
