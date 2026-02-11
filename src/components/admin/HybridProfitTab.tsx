@@ -59,6 +59,7 @@ const TOOL_LABELS: Record<CreditCostKey, string> = {
   smart_chef: "Smart Chef & Grocery",
   travel_planner: "Travel Planner",
   fashion_designer: "Fashion Designer PRO",
+  video_multi: "Video Multi-Tool",
 };
 
 interface ToolPricing {
