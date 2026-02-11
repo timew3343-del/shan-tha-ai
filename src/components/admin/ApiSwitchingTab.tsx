@@ -56,6 +56,14 @@ const API_KEYS: ApiKeyConfig[] = [
     toggleKey: "api_enabled_acrcloud",
     tasks: ["Copyright Check", "Music Detection"],
   },
+  {
+    key: "goapi_suno",
+    label: "Goapi / Suno",
+    description: "AI Song Generation with Human Vocals, MTV Music",
+    settingKey: "goapi_suno_api_key",
+    toggleKey: "api_enabled_goapi_suno",
+    tasks: ["Song Generation", "Vocals", "MTV Audio"],
+  },
 ];
 
 export const ApiSwitchingTab = () => {
