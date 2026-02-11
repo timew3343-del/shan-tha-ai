@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Save, Loader2, Power, Zap, AlertTriangle, Gift } from "lucide-react";
+import { Save, Loader2, Power, Zap, AlertTriangle, Gift, Eye, EyeOff, Key } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -73,6 +73,11 @@ export const ApiSwitchingTab = () => {
   const [dailyFreeUses, setDailyFreeUses] = useState(3);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // SunoAPI key input
+  const [sunoKeyInput, setSunoKeyInput] = useState("");
+  const [showSunoKey, setShowSunoKey] = useState(false);
+  const [isSavingSunoKey, setIsSavingSunoKey] = useState(false);
 
   useEffect(() => {
     loadConfig();
@@ -110,6 +115,12 @@ export const ApiSwitchingTab = () => {
           const configApi = API_KEYS.find(a => a.settingKey === setting.key);
           if (configApi && setting.value && !setting.value.startsWith("••••")) {
             configured[configApi.key] = true;
+          }
+
+          // Load SunoAPI key (masked)
+          if (setting.key === "sunoapi_org_key" && setting.value) {
+            const masked = setting.value.length > 8 ? "••••••••" + setting.value.slice(-4) : "••••••••";
+            setSunoKeyInput(masked);
           }
 
           if (setting.key === "daily_free_uses") {
@@ -170,6 +181,25 @@ export const ApiSwitchingTab = () => {
       });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const saveSunoKey = async () => {
+    if (!sunoKeyInput || sunoKeyInput.startsWith("••••")) {
+      toast({ title: "API Key ထည့်ပါ", description: "SunoAPI.org key အသစ်ထည့်ပေးပါ", variant: "destructive" });
+      return;
+    }
+    setIsSavingSunoKey(true);
+    try {
+      await supabase.from("app_settings").upsert({ key: "sunoapi_org_key", value: sunoKeyInput }, { onConflict: "key" });
+      toast({ title: "သိမ်းဆည်းပြီးပါပြီ", description: "SunoAPI.org key ကို အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ" });
+      setSunoKeyInput("••••••••" + sunoKeyInput.slice(-4));
+      setKeyConfigured(prev => ({ ...prev, sunoapi: true }));
+    } catch (error) {
+      console.error("Error saving SunoAPI key:", error);
+      toast({ title: "အမှား", description: "SunoAPI key သိမ်းဆည်းရာတွင် ပြဿနာရှိပါသည်", variant: "destructive" });
+    } finally {
+      setIsSavingSunoKey(false);
     }
   };
 
@@ -286,6 +316,50 @@ export const ApiSwitchingTab = () => {
             </div>
           );
         })}
+      </div>
+
+      {/* SunoAPI.org Key Input */}
+      <div className="gradient-card rounded-xl p-5 border border-primary/20">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+            <Key className="w-4 h-4 text-primary" />
+          </div>
+          <div>
+            <h4 className="font-semibold text-foreground">SunoAPI.org API Key</h4>
+            <p className="text-xs text-muted-foreground">
+              Song Generation, Human Vocals, MTV Audio အတွက် API Key ထည့်ပါ
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Input
+              type={showSunoKey ? "text" : "password"}
+              value={sunoKeyInput}
+              onChange={e => setSunoKeyInput(e.target.value)}
+              placeholder="SunoAPI.org API Key ထည့်ပါ..."
+              className="pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowSunoKey(!showSunoKey)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              {showSunoKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+          <Button
+            onClick={saveSunoKey}
+            disabled={isSavingSunoKey}
+            size="sm"
+            className="gradient-gold text-primary-foreground"
+          >
+            {isSavingSunoKey ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          </Button>
+        </div>
+        <p className="text-[10px] text-muted-foreground mt-2">
+          🔗 <a href="https://sunoapi.org" target="_blank" rel="noopener noreferrer" className="underline text-primary">sunoapi.org</a> မှ API Key ရယူပြီး ဤနေရာတွင် ထည့်ပါ။ Edge Functions များမှ auto-fetch လုပ်ပါမည်။
+        </p>
       </div>
 
       {/* Daily Free Uses */}
