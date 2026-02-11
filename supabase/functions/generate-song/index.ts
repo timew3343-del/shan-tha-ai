@@ -9,20 +9,23 @@ const corsHeaders = {
 const respond = (body: Record<string, unknown>, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-async function pollGoapi(taskId: string, apiKey: string, maxPolls = 120, interval = 5000) {
+// Poll SunoAPI.org for task completion
+async function pollSunoApi(taskId: string, apiKey: string, maxPolls = 60, interval = 5000) {
   for (let i = 0; i < maxPolls; i++) {
     await new Promise(r => setTimeout(r, interval));
-    const res = await fetch(`https://api.goapi.ai/api/suno/v1/music/${taskId}`, {
-      headers: { "X-API-Key": apiKey },
+    const res = await fetch(`https://api.sunoapi.org/api/v1/generate/record-info?taskId=${taskId}`, {
+      headers: { "Authorization": `Bearer ${apiKey}` },
     });
     const data = await res.json();
-    console.log(`Suno poll ${i}: status=${data.data?.status}`);
-    if (data.data?.status === "complete" || data.data?.status === "completed") return data.data;
-    if (data.data?.status === "error" || data.data?.status === "failed") {
-      throw new Error(data.data?.error_message || "Suno generation failed");
+    const status = data.data?.status;
+    console.log(`SunoAPI poll ${i}: status=${status}`);
+    
+    if (status === "SUCCESS") return data.data;
+    if (status === "CREATE_TASK_FAILED" || status === "GENERATE_AUDIO_FAILED" || status === "CALLBACK_EXCEPTION") {
+      throw new Error(data.data?.errorMessage || `Suno generation failed: ${status}`);
     }
   }
-  throw new Error("Suno polling timeout");
+  throw new Error("SunoAPI polling timeout");
 }
 
 async function uploadToStorage(supabaseAdmin: any, url: string, userId: string, ext: string, contentType: string) {
@@ -76,16 +79,16 @@ serve(async (req) => {
 
     // Get API keys from app_settings
     const { data: apiKeys } = await supabaseAdmin.from("app_settings").select("key, value").in("key", [
-      "replicate_api_token", "stability_api_key", "goapi_suno_api_key"
+      "replicate_api_token", "stability_api_key", "sunoapi_org_key"
     ]);
     const keyMap: Record<string, string> = {};
     apiKeys?.forEach((k: any) => { keyMap[k.key] = k.value || ""; });
 
-    const GOAPI_KEY = keyMap.goapi_suno_api_key || "";
+    const SUNO_API_KEY = keyMap.sunoapi_org_key || "";
     const STABILITY_API_KEY = keyMap.stability_api_key || Deno.env.get("STABILITY_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
-    if (!GOAPI_KEY) return respond({ error: "Goapi/Suno API key not configured in Admin Settings" }, 500);
+    if (!SUNO_API_KEY) return respond({ error: "SunoAPI.org key not configured in Admin Settings" }, 500);
     if (!LOVABLE_API_KEY) return respond({ error: "AI API key not configured" }, 500);
 
     let lyrics: string | null = null;
@@ -128,79 +131,81 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
       }
     }
 
-    // ===== STEP 2: Generate Music with Suno via Goapi (REAL VOCALS) =====
+    // ===== STEP 2: Generate Music with SunoAPI.org (REAL VOCALS) =====
     if (serviceOption === "song_only" || serviceOption === "full_auto") {
-      console.log("Step 2: Generating song with Suno (vocals)...");
+      console.log("Step 2: Generating song with SunoAPI.org (vocals)...");
 
-      const sunoPrompt = `${genre || "pop"} song, ${mood || "happy"} mood, professional quality`;
+      const songTitle = (topic || "AI Song").substring(0, 80);
+      const songTags = `${genre || "pop"}, ${mood || "happy"}`;
+      const songLyrics = lyrics || topic || "A beautiful song about life";
 
-      // Use Suno v2 music generation via Goapi
-      const sunoResponse = await fetch("https://api.goapi.ai/api/suno/v1/music", {
+      // SunoAPI.org POST /api/v1/generate - customMode with lyrics
+      const sunoResponse = await fetch("https://api.sunoapi.org/api/v1/generate", {
         method: "POST",
         headers: {
-          "X-API-Key": GOAPI_KEY,
+          "Authorization": `Bearer ${SUNO_API_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          custom_mode: true,
-          input: {
-            gpt_description_prompt: sunoPrompt,
-            lyrics: lyrics || topic || "A beautiful song",
-            tags: `${genre || "pop"}, ${mood || "happy"}`,
-            title: (topic || "AI Song").substring(0, 80),
-            make_instrumental: false,
-          },
+          customMode: true,
+          instrumental: false,
+          title: songTitle,
+          tags: songTags,
+          prompt: songLyrics,
+          model: "V4",
         }),
       });
 
       if (!sunoResponse.ok) {
         const errText = await sunoResponse.text();
-        console.error("Suno API error:", sunoResponse.status, errText);
-        throw new Error("Suno music generation failed: " + errText);
+        console.error("SunoAPI error:", sunoResponse.status, errText);
+        throw new Error("SunoAPI music generation failed: " + errText);
       }
 
       const sunoData = await sunoResponse.json();
-      const taskId = sunoData.data?.task_id;
+      console.log("SunoAPI response:", JSON.stringify(sunoData).substring(0, 500));
+      
+      const taskId = sunoData.data?.taskId || sunoData.data?.task_id;
       if (!taskId) {
-        console.error("No task_id from Suno:", JSON.stringify(sunoData));
-        throw new Error("Suno did not return a task ID");
+        console.error("No taskId from SunoAPI:", JSON.stringify(sunoData));
+        throw new Error("SunoAPI did not return a task ID");
       }
 
-      console.log("Suno task started:", taskId);
+      console.log("SunoAPI task started:", taskId);
 
       // Poll for completion (songs can take 1-3 minutes)
-      const sunoResult = await pollGoapi(taskId, GOAPI_KEY, 60, 5000);
+      const sunoResult = await pollSunoApi(taskId, SUNO_API_KEY, 60, 5000);
 
-      // Get the audio URL from Suno result
-      const clips = sunoResult?.clips || sunoResult?.output || [];
+      // Get the audio URL from SunoAPI result - response has data[] array with songs
+      const songs = sunoResult?.data || [];
       let rawAudioUrl: string | null = null;
+      let rawVideoUrl: string | null = null;
 
-      if (Array.isArray(clips) && clips.length > 0) {
-        rawAudioUrl = clips[0]?.audio_url || clips[0]?.url || null;
-      } else if (typeof sunoResult?.audio_url === "string") {
-        rawAudioUrl = sunoResult.audio_url;
-      } else if (typeof sunoResult?.song_url === "string") {
-        rawAudioUrl = sunoResult.song_url;
+      if (Array.isArray(songs) && songs.length > 0) {
+        rawAudioUrl = songs[0]?.audio_url || songs[0]?.audioUrl || null;
+        rawVideoUrl = songs[0]?.video_url || songs[0]?.videoUrl || null;
+        // Also try stream URLs as fallback
+        if (!rawAudioUrl) rawAudioUrl = songs[0]?.stream_audio_url || songs[0]?.streamAudioUrl || null;
+        if (!rawVideoUrl) rawVideoUrl = songs[0]?.stream_video_url || songs[0]?.streamVideoUrl || null;
       }
 
       if (!rawAudioUrl) {
-        console.error("No audio URL in Suno result:", JSON.stringify(sunoResult));
-        throw new Error("No audio URL returned from Suno");
+        console.error("No audio URL in SunoAPI result:", JSON.stringify(sunoResult).substring(0, 1000));
+        throw new Error("No audio URL returned from SunoAPI");
       }
 
-      console.log("Suno song generated with vocals, uploading...");
+      console.log("SunoAPI song generated with vocals, uploading...");
       audioUrl = await uploadToStorage(supabaseAdmin, rawAudioUrl, userId, ".mp3", "audio/mpeg");
       console.log("Audio uploaded successfully");
 
-      // Try to get video URL from Suno (some clips include video)
-      if (clips.length > 0 && clips[0]?.video_url) {
-        const rawVideoUrl = clips[0].video_url;
-        console.log("Suno also provided a video, uploading...");
+      // Upload video if Suno provided one
+      if (rawVideoUrl) {
+        console.log("SunoAPI also provided a video, uploading...");
         try {
           videoUrl = await uploadToStorage(supabaseAdmin, rawVideoUrl, userId, ".mp4", "video/mp4");
-          console.log("Suno video uploaded");
+          console.log("SunoAPI video uploaded");
         } catch (e) {
-          console.warn("Failed to upload Suno video:", e);
+          console.warn("Failed to upload SunoAPI video:", e);
         }
       }
     }
