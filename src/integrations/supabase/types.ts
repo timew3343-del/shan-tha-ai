@@ -627,6 +627,45 @@ export type Database = {
         }
         Relationships: []
       }
+      user_outputs: {
+        Row: {
+          content: string | null
+          created_at: string
+          expires_at: string
+          file_url: string | null
+          id: string
+          output_type: string
+          thumbnail_url: string | null
+          tool_id: string
+          tool_name: string
+          user_id: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          expires_at?: string
+          file_url?: string | null
+          id?: string
+          output_type?: string
+          thumbnail_url?: string | null
+          tool_id: string
+          tool_name: string
+          user_id: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          expires_at?: string
+          file_url?: string | null
+          id?: string
+          output_type?: string
+          thumbnail_url?: string | null
+          tool_id?: string
+          tool_name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -695,6 +734,7 @@ export type Database = {
         Args: { _amount: number; _user_id: string }
         Returns: Json
       }
+      cleanup_expired_outputs: { Args: never; Returns: number }
       deduct_user_credits: {
         Args: { _action: string; _amount: number; _user_id: string }
         Returns: Json
