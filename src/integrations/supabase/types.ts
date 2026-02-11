@@ -730,6 +730,10 @@ export type Database = {
       }
     }
     Functions: {
+      add_credits_via_service: {
+        Args: { _amount: number; _user_id: string }
+        Returns: Json
+      }
       add_user_credits: {
         Args: { _amount: number; _user_id: string }
         Returns: Json

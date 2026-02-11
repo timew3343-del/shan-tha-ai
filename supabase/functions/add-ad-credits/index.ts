@@ -93,8 +93,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Add credits using secure RPC
-    const { data: creditResult, error: creditError } = await supabase.rpc("add_user_credits", {
+    // Add credits using SECURITY DEFINER function (bypasses admin check)
+    const { data: creditResult, error: creditError } = await supabase.rpc("add_credits_via_service", {
       _user_id: user.id,
       _amount: adRewardAmount,
     });
