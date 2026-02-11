@@ -56,6 +56,7 @@ const SmartChefTool = lazy(() => import("./tools/SmartChefTool").then(m => ({ de
 const TravelPlannerTool = lazy(() => import("./tools/TravelPlannerTool").then(m => ({ default: m.TravelPlannerTool })));
 const FashionDesignerTool = lazy(() => import("./tools/FashionDesignerTool").then(m => ({ default: m.FashionDesignerTool })));
 const VideoMultiTool = lazy(() => import("./tools/VideoMultiTool").then(m => ({ default: m.VideoMultiTool })));
+const CharacterAnimateTool = lazy(() => import("./tools/CharacterAnimateTool").then(m => ({ default: m.CharacterAnimateTool })));
 
 import { ToolCardCompact } from "./ToolCardCompact";
 import { FeatureRegistry } from "./FeatureRegistry";
@@ -76,7 +77,7 @@ interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv" | "videoredesign" | "logodesign" | "livecamera" | "photorestore" | "spellcheck" | "virtualtryon" | "astrology" | "interiordesign" | "cvbuilder" | "bizconsultant" | "creativewriter" | "legaladvisor" | "messagepolisher" | "nutritionplanner" | "cardealer" | "exteriordesign" | "voicetranslator" | "healthchecker" | "babynamer" | "legaldoc" | "styletransfer" | "smartchef" | "travelplanner" | "fashiondesigner" | "videomulti";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv" | "videoredesign" | "logodesign" | "livecamera" | "photorestore" | "spellcheck" | "virtualtryon" | "astrology" | "interiordesign" | "cvbuilder" | "bizconsultant" | "creativewriter" | "legaladvisor" | "messagepolisher" | "nutritionplanner" | "cardealer" | "exteriordesign" | "voicetranslator" | "healthchecker" | "babynamer" | "legaldoc" | "styletransfer" | "smartchef" | "travelplanner" | "fashiondesigner" | "videomulti" | "characteranimate";
 
 type ToolCategory = "all" | "image" | "video" | "audio" | "premium" | "health" | "legal" | "lifestyle";
 
@@ -188,6 +189,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
     { id: "travelplanner", icon: Plane, titleKey: "", fallbackTitle: "AI ခရီးသွား လမ်းညွှန်", descKey: "", fallbackDesc: "ကမ္ဘာပတ် ခရီးစဉ် ပလန်", gradient: "bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-600", credits: (costs as any).travel_planner || 3, category: ["lifestyle"], badge: "NEW" },
     { id: "fashiondesigner", icon: Shirt, titleKey: "", fallbackTitle: "AI Fashion Designer PRO", descKey: "", fallbackDesc: "ဖက်ရှင်ဒီဇိုင်း + Technical Sketch", gradient: "bg-gradient-to-br from-pink-500 via-rose-600 to-fuchsia-700", credits: (costs as any).fashion_designer || 8, category: ["image", "premium"], badge: "PRO" },
     { id: "videomulti", icon: Film, titleKey: "", fallbackTitle: "AI Video Multi-Tool", descKey: "", fallbackDesc: "ဗီဒီယို ဘက်စုံတည်းဖြတ် (FFmpeg+AI)", gradient: "bg-gradient-to-br from-purple-600 via-violet-600 to-fuchsia-700", credits: (costs as any).video_multi || 10, category: ["video", "premium"], badge: "PRO" },
+    { id: "characteranimate", icon: Sparkles, titleKey: "", fallbackTitle: "ရုပ်ပုံ လှုပ်ရှားသက်ဝင်စေ", descKey: "", fallbackDesc: "ရုပ်ပုံ + ကကွက်ဗီဒီယို → Animation", gradient: "bg-gradient-to-br from-amber-500 via-orange-600 to-red-700", credits: (costs as any).character_animate || 21, category: ["video", "premium"], badge: "NEW" },
   ], [costs, docSlideCost]);
 
   const filteredTools = useMemo(() => {
@@ -252,6 +254,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
       case "travelplanner": return <TravelPlannerTool key="travelplanner" userId={userId} onBack={handleBack} />;
       case "fashiondesigner": return <FashionDesignerTool key="fashiondesigner" userId={userId} onBack={handleBack} />;
       case "videomulti": return <VideoMultiTool key="videomulti" userId={userId} onBack={handleBack} />;
+      case "characteranimate": return <CharacterAnimateTool key="characteranimate" userId={userId} onBack={handleBack} />;
       default: return null;
     }
   };
