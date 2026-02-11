@@ -10,6 +10,8 @@ import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
 import { motion } from "framer-motion";
+import { useToolOutput } from "@/hooks/useToolOutput";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
 
 interface Props { userId?: string; onBack: () => void; }
 
@@ -33,6 +35,7 @@ export const AstrologyTool = ({ userId, onBack }: Props) => {
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const cost = costs.myanmar_astrology || 5;
+  const { showGuide, markAsLearned, saveOutput } = useToolOutput("astrology", "AI ဟောစာတမ်း");
 
   const handleGenerate = async () => {
     if (!birthDate || !birthDay || !userId) return;
@@ -45,6 +48,7 @@ export const AstrologyTool = ({ userId, onBack }: Props) => {
       if (error) throw error;
       if (data?.error) { toast({ title: "Error", description: data.error, variant: "destructive" }); return; }
       setResult(data?.result || ""); refetch();
+      saveOutput("text", data?.result || "");
       toast({ title: "ဟောစာတမ်း ရရှိပါပြီ!" });
     } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
     finally { setIsLoading(false); }
@@ -55,6 +59,7 @@ export const AstrologyTool = ({ userId, onBack }: Props) => {
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4 p-4 pb-24">
       <ToolHeader title="AI ဟောစာတမ်း" subtitle="မွေးနေ့အလိုက် ကံကြမ္မာ ဟောကြားချက်" onBack={onBack} />
+      <FirstOutputGuide toolName="AI ဟောစာတမ်း" steps={["မွေးသက္ကရာဇ် ထည့်ပါ", "မွေးနေ့ ရွေးပါ", "ဟောစာတမ်း ကြည့်မည် နှိပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
       <div id="input-area" className="gradient-card rounded-2xl p-4 border border-primary/20 space-y-4">
         <div className="space-y-2">
           <Label className="text-sm font-myanmar">မွေးသက္ကရာဇ်</Label>

@@ -10,6 +10,8 @@ import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
 import { motion } from "framer-motion";
+import { useToolOutput } from "@/hooks/useToolOutput";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
 
 interface Props { userId?: string; onBack: () => void; }
 
@@ -24,6 +26,7 @@ export const BusinessConsultantTool = ({ userId, onBack }: Props) => {
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const cost = costs.business_consultant || 5;
+  const { showGuide, markAsLearned, saveOutput } = useToolOutput("business-consultant", "စီးပွားရေး အကြံပေး");
 
   const handleGenerate = async () => {
     if (!businessIdea.trim() || !userId) return;
@@ -35,6 +38,7 @@ export const BusinessConsultantTool = ({ userId, onBack }: Props) => {
       if (error) throw error;
       if (data?.error) { toast({ title: "Error", description: data.error, variant: "destructive" }); return; }
       setResult(data?.result || ""); refetch();
+      saveOutput("text", data?.result || "");
       toast({ title: "စီးပွားရေး အကြံပြုချက် ရရှိပါပြီ!" });
     } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
     finally { setIsLoading(false); }
@@ -45,6 +49,7 @@ export const BusinessConsultantTool = ({ userId, onBack }: Props) => {
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4 p-4 pb-24">
       <ToolHeader title="AI စီးပွားရေးနှင့် ရင်းနှီးမြှုပ်နှံမှု အကြံပေး" subtitle="စီးပွားရေး ခွဲခြမ်းစိတ်ဖြာပြီး အကြံပေးခြင်း" onBack={onBack} />
+      <FirstOutputGuide toolName="စီးပွားရေး အကြံပေး" steps={["စီးပွားရေး အိုင်ဒီယာ ထည့်ပါ", "ရင်းနှီးငွေနှင့် တည်နေရာ ဖြည့်ပါ", "အကြံဉာဏ် ခလုတ် နှိပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
       <div id="input-area" className="gradient-card rounded-2xl p-4 border border-primary/20 space-y-3">
         <div className="space-y-1"><Label className="text-sm font-myanmar">စီးပွားရေး အိုင်ဒီယာ</Label><Textarea value={businessIdea} onChange={e => setBusinessIdea(e.target.value)} placeholder="စီးပွားရေး အိုင်ဒီယာကို ဖော်ပြပါ..." className="min-h-[80px] text-sm font-myanmar" /></div>
         <div className="grid grid-cols-2 gap-3">

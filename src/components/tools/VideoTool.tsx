@@ -17,6 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useToolOutput } from "@/hooks/useToolOutput";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
 
 interface VideoToolProps {
   userId?: string;
@@ -36,6 +38,7 @@ export const VideoTool = ({ userId, onBack }: VideoToolProps) => {
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { showGuide, markAsLearned, saveOutput } = useToolOutput("video-gen", "ဗီဒီယိုထုတ်ရန်");
 
   // Optimized progress with faster polling simulation
   useEffect(() => {
@@ -163,6 +166,7 @@ export const VideoTool = ({ userId, onBack }: VideoToolProps) => {
 
       setGeneratedVideo(result.video);
       refetchCredits();
+      saveOutput("video", result.video);
       
       toast({
         title: "အောင်မြင်ပါသည်",
@@ -192,6 +196,8 @@ export const VideoTool = ({ userId, onBack }: VideoToolProps) => {
         subtitle="ပုံမှ ဗီဒီယိုသို့ ပြောင်းလဲခြင်း"
         onBack={onBack} 
       />
+
+      <FirstOutputGuide toolName="ဗီဒီယိုထုတ်ရန်" steps={["ပုံထည့်ပါ", "ဗီဒီယိုအရှည် ရွေးပါ", "Generate နှိပ်ပါ", "ဗီဒီယို Download လုပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
 
       {/* Image Upload */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">

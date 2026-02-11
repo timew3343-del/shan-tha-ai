@@ -17,6 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useToolOutput } from "@/hooks/useToolOutput";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
 
 interface AdGeneratorToolProps {
   userId?: string;
@@ -113,6 +115,7 @@ export const AdGeneratorTool = ({ userId, onBack }: AdGeneratorToolProps) => {
   const [result, setResult] = useState<AdResult | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { showGuide, markAsLearned, saveOutput } = useToolOutput("ad-generator", "AI Ad Generator");
 
   // Dynamic credit cost based on duration
   const baseCost = costs.ad_generator || 9;
@@ -238,6 +241,7 @@ export const AdGeneratorTool = ({ userId, onBack }: AdGeneratorToolProps) => {
         creditsUsed: data.creditsUsed,
       });
       refetchCredits();
+      saveOutput("image", data.enhancedImage);
 
       toast({
         title: "အောင်မြင်ပါသည်! ✨",
@@ -286,6 +290,8 @@ export const AdGeneratorTool = ({ userId, onBack }: AdGeneratorToolProps) => {
         subtitle="Professional ကြော်ငြာ Video & Image ဖန်တီးခြင်း"
         onBack={onBack}
       />
+
+      <FirstOutputGuide toolName="AI Ad Generator" steps={["ကုန်ပစ္စည်း ပုံထည့်ပါ", "ဖော်ပြချက် ရေးပါ", "Style ရွေးပါ", "Generate နှိပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
 
       {/* Product Image Upload */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">

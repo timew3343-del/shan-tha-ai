@@ -18,6 +18,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { useCredits } from "@/hooks/useCredits";
 import { motion, AnimatePresence } from "framer-motion";
+import { useToolOutput } from "@/hooks/useToolOutput";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
 
 interface SpeechToolProps {
   userId?: string;
@@ -92,6 +94,7 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
     resetRecording,
     audioLevel 
   } = useLiveRecording();
+  const { showGuide, markAsLearned, saveOutput } = useToolOutput("speech", "အသံနှင့် စာ");
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -176,6 +179,7 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
         speakText(ttsText);
         setGeneratedAudio("web-speech");
         refetchCredits();
+        saveOutput("audio", ttsText);
         toast({ title: "အောင်မြင်ပါသည်", description: `အသံထုတ်ပြီးပါပြီ (${data.creditsUsed} Credits)` });
       }
     } catch (error: any) {
@@ -254,6 +258,7 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
         if (data?.text) {
           setTranscribedText(data.text);
           refetchCredits();
+          saveOutput("text", data.text);
           toast({ title: "အောင်မြင်ပါသည်", description: `စာသားပြောင်းပြီးပါပြီ (${data.creditsUsed} Credits)` });
         }
         setIsTranscribing(false);
@@ -308,6 +313,8 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
         subtitle="Text ↔ Speech ပြောင်းလဲခြင်း"
         onBack={onBack} 
       />
+
+      <FirstOutputGuide toolName="အသံနှင့် စာ" steps={["Tab ရွေးပါ (စာ→အသံ / အသံ→စာ)", "Input ထည့်ပါ", "Generate နှိပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
 
       {/* 3-Tab Mode Toggle */}
       <div className="grid grid-cols-3 gap-1.5">

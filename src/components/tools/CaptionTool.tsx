@@ -9,6 +9,8 @@ import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
 import { motion } from "framer-motion";
+import { useToolOutput } from "@/hooks/useToolOutput";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
 import {
   Select,
   SelectContent,
@@ -39,6 +41,7 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
   const [creditsUsed, setCreditsUsed] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const { showGuide, markAsLearned, saveOutput } = useToolOutput("caption", "AI Caption Tool");
 
   // Credit calculation with 40% profit margin
   const creditPerMinute = costs.caption_per_minute || 9;
@@ -184,6 +187,7 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
       setDetectedLang(result.detectedLanguage);
       setCreditsUsed(result.creditsUsed);
       refetchCredits();
+      saveOutput("text", result.srt);
 
       toast({
         title: "အောင်မြင်ပါသည်! ✨",
@@ -229,6 +233,8 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
         subtitle="ဗီဒီယိုမှ စာတန်းထိုး ထုတ်ယူခြင်း"
         onBack={onBack}
       />
+
+      <FirstOutputGuide toolName="AI Caption Tool" steps={["ဗီဒီယိုထည့်ပါ", "ဘာသာစကား ရွေးပါ", "Caption ထုတ်ရန် နှိပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
 
       {/* Warning Notice */}
       <div className="gradient-card rounded-2xl p-3 border border-amber-500/30 bg-amber-500/5">

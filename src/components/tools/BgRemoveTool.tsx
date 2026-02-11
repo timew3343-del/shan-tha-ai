@@ -9,6 +9,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
 import { Watermark, addWatermarkToImage } from "@/components/Watermark";
 import { motion } from "framer-motion";
+import { useToolOutput } from "@/hooks/useToolOutput";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
 
 interface BgRemoveToolProps {
   userId?: string;
@@ -24,6 +26,7 @@ export const BgRemoveTool = ({ userId, onBack }: BgRemoveToolProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const { showGuide, markAsLearned, saveOutput } = useToolOutput("bg-remove", "Background Remover");
 
   const creditCost = costs.bg_remove || 1;
 
@@ -116,6 +119,7 @@ export const BgRemoveTool = ({ userId, onBack }: BgRemoveToolProps) => {
       setResultImage(result.image);
       setProgress(100);
       refetchCredits();
+      saveOutput("image", result.image);
 
       toast({
         title: "အောင်မြင်ပါသည်",
@@ -146,6 +150,8 @@ export const BgRemoveTool = ({ userId, onBack }: BgRemoveToolProps) => {
         subtitle="ပုံမှ Background ကို ချက်ခြင်းဖယ်ရှားရန်"
         onBack={onBack} 
       />
+
+      <FirstOutputGuide toolName="Background Remover" steps={["ပုံထည့်ပါ", "Background ဖယ်မည် နှိပ်ပါ", "ရလဒ် Download လုပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
 
       {/* Source Image Upload */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">

@@ -10,6 +10,8 @@ import { useCredits } from "@/hooks/useCredits";
 import { ToolHeader } from "@/components/ToolHeader";
 import { Watermark, addWatermarkToImage } from "@/components/Watermark";
 import { motion } from "framer-motion";
+import { useToolOutput } from "@/hooks/useToolOutput";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
 
 interface ImageToolProps {
   userId?: string;
@@ -27,6 +29,7 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { showGuide, markAsLearned, saveOutput } = useToolOutput("image-gen", "ပုံထုတ်ရန်");
 
   // Progress simulation with status updates
   useEffect(() => {
@@ -151,6 +154,7 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
         }
         setGeneratedImage(finalImage);
         refetchCredits();
+        saveOutput("image", finalImage);
         toast({
           title: "အောင်မြင်ပါသည်",
           description: `ပုံထုတ်ပြီးပါပြီ (${data.creditsUsed} Credits)`,
@@ -188,6 +192,8 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
         subtitle="AI ဖြင့် ပုံဆွဲခြင်း"
         onBack={onBack} 
       />
+
+      <FirstOutputGuide toolName="ပုံထုတ်ရန်" steps={["Prompt စာသား ထည့်ပါ", "Generate ခလုတ်ကို နှိပ်ပါ", "ရလဒ်ပုံကို Download လုပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
 
       {/* Reference Image Upload */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">

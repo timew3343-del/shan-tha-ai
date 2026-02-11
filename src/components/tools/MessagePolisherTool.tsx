@@ -10,6 +10,8 @@ import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
 import { motion } from "framer-motion";
+import { useToolOutput } from "@/hooks/useToolOutput";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
 
 interface Props { userId?: string; onBack: () => void; }
 
@@ -32,6 +34,7 @@ export const MessagePolisherTool = ({ userId, onBack }: Props) => {
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const cost = costs.message_polisher || 5;
+  const { showGuide, markAsLearned, saveOutput } = useToolOutput("message-polisher", "စာတို ပြေပြစ်အောင်ပြင်သူ");
 
   const handleGenerate = async () => {
     if (!rawText.trim() || !userId) return;
@@ -44,6 +47,7 @@ export const MessagePolisherTool = ({ userId, onBack }: Props) => {
       if (error) throw error;
       if (data?.error) { toast({ title: "Error", description: data.error, variant: "destructive" }); return; }
       setResult(data?.result || ""); refetch();
+      saveOutput("text", data?.result || "");
       toast({ title: "ပြင်ဆင်ပြီးပါပြီ!" });
     } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
     finally { setIsLoading(false); }
@@ -54,6 +58,7 @@ export const MessagePolisherTool = ({ userId, onBack }: Props) => {
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4 p-4 pb-24">
       <ToolHeader title="AI စာတို ပြေပြစ်အောင်ပြင်သူ" subtitle="သာမန်စာကို ယဉ်ကျေးပြတ်သားသော စာအဖြစ် ပြောင်းပေးခြင်း" onBack={onBack} />
+      <FirstOutputGuide toolName="စာတို ပြင်ဆင်သူ" steps={["ပြင်ဆင်လိုသော စာ ထည့်ပါ", "လက်ခံသူ အမျိုးအစား ရွေးပါ", "စာ ပြင်ဆင်မည် နှိပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
       <div id="input-area" className="gradient-card rounded-2xl p-4 border border-primary/20 space-y-3">
         <div className="space-y-1">
           <Label className="text-sm font-myanmar">ပြင်ဆင်လိုသော စာ</Label>
