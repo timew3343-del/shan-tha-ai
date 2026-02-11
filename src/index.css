@@ -2,6 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Skip Navigation - Accessibility */
+.skip-nav {
+  position: absolute;
+  top: -100%;
+  left: 0;
+  z-index: 9999;
+  padding: 0.5rem 1rem;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 0 0 0.5rem 0;
+  transition: top 0.2s;
+}
+.skip-nav:focus {
+  top: 0;
+}
+
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;500;600;700&display=swap');
 
 @layer base {
