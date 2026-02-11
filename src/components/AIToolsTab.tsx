@@ -8,7 +8,7 @@ import {
   Mic, PenTool, Camera, ImagePlus, Type, Shirt, Star,
   GraduationCap, LineChart, Pen, Scale, MessageCircle, Heart,
   Car, Building2, Languages, Stethoscope, Baby, FileCheck,
-  Paintbrush, ChefHat, Plane
+  Paintbrush, ChefHat, Plane, Crop, Clapperboard
 } from "lucide-react";
 
 // Lazy load all tool components
@@ -57,8 +57,11 @@ const TravelPlannerTool = lazy(() => import("./tools/TravelPlannerTool").then(m 
 const FashionDesignerTool = lazy(() => import("./tools/FashionDesignerTool").then(m => ({ default: m.FashionDesignerTool })));
 const VideoMultiTool = lazy(() => import("./tools/VideoMultiTool").then(m => ({ default: m.VideoMultiTool })));
 const CharacterAnimateTool = lazy(() => import("./tools/CharacterAnimateTool").then(m => ({ default: m.CharacterAnimateTool })));
+const AutoResizerTool = lazy(() => import("./tools/AutoResizerTool").then(m => ({ default: m.AutoResizerTool })));
+const VideoEditor = lazy(() => import("./VideoEditor").then(m => ({ default: m.VideoEditor })));
 
 import { ToolCardCompact } from "./ToolCardCompact";
+import { ToolHeader } from "./ToolHeader";
 import { FeatureRegistry } from "./FeatureRegistry";
 import { AIChatbot } from "./AIChatbot";
 import { ReferralSection } from "./ReferralSection";
@@ -77,7 +80,7 @@ interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv" | "videoredesign" | "logodesign" | "livecamera" | "photorestore" | "spellcheck" | "virtualtryon" | "astrology" | "interiordesign" | "cvbuilder" | "bizconsultant" | "creativewriter" | "legaladvisor" | "messagepolisher" | "nutritionplanner" | "cardealer" | "exteriordesign" | "voicetranslator" | "healthchecker" | "babynamer" | "legaldoc" | "styletransfer" | "smartchef" | "travelplanner" | "fashiondesigner" | "videomulti" | "characteranimate";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv" | "videoredesign" | "logodesign" | "livecamera" | "photorestore" | "spellcheck" | "virtualtryon" | "astrology" | "interiordesign" | "cvbuilder" | "bizconsultant" | "creativewriter" | "legaladvisor" | "messagepolisher" | "nutritionplanner" | "cardealer" | "exteriordesign" | "voicetranslator" | "healthchecker" | "babynamer" | "legaldoc" | "styletransfer" | "smartchef" | "travelplanner" | "fashiondesigner" | "videomulti" | "characteranimate" | "autoresizer" | "videoeditor";
 
 type ToolCategory = "all" | "image" | "video" | "audio" | "premium" | "health" | "legal" | "lifestyle";
 
@@ -190,6 +193,8 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
     { id: "fashiondesigner", icon: Shirt, titleKey: "", fallbackTitle: "AI Fashion Designer PRO", descKey: "", fallbackDesc: "ဖက်ရှင်ဒီဇိုင်း + Technical Sketch", gradient: "bg-gradient-to-br from-pink-500 via-rose-600 to-fuchsia-700", credits: (costs as any).fashion_designer || 8, category: ["image", "premium"], badge: "PRO" },
     { id: "videomulti", icon: Film, titleKey: "", fallbackTitle: "AI Video Multi-Tool", descKey: "", fallbackDesc: "ဗီဒီယို ဘက်စုံတည်းဖြတ် (FFmpeg+AI)", gradient: "bg-gradient-to-br from-purple-600 via-violet-600 to-fuchsia-700", credits: (costs as any).video_multi || 10, category: ["video", "premium"], badge: "PRO" },
     { id: "characteranimate", icon: Sparkles, titleKey: "", fallbackTitle: "ရုပ်ပုံ လှုပ်ရှားသက်ဝင်စေ", descKey: "", fallbackDesc: "ရုပ်ပုံ + ကကွက်ဗီဒီယို → Animation", gradient: "bg-gradient-to-br from-amber-500 via-orange-600 to-red-700", credits: (costs as any).character_animate || 21, category: ["video", "premium"], badge: "NEW" },
+    { id: "autoresizer", icon: Crop, titleKey: "", fallbackTitle: "Auto Resizer", descKey: "", fallbackDesc: "TikTok/YouTube/FB အရွယ်အစား ပြောင်း", gradient: "bg-gradient-to-br from-lime-500 via-green-600 to-emerald-700", credits: 0, category: ["image"], badge: "FREE" },
+    { id: "videoeditor", icon: Clapperboard, titleKey: "", fallbackTitle: "Video Editor", descKey: "", fallbackDesc: "Trim, Speed, Zoom, Filter, Text", gradient: "bg-gradient-to-br from-indigo-500 via-blue-600 to-violet-700", credits: (costs as any).video_editor || 2, category: ["video"], badge: "NEW" },
   ], [costs, docSlideCost]);
 
   const filteredTools = useMemo(() => {
@@ -255,6 +260,8 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
       case "fashiondesigner": return <FashionDesignerTool key="fashiondesigner" userId={userId} onBack={handleBack} />;
       case "videomulti": return <VideoMultiTool key="videomulti" userId={userId} onBack={handleBack} />;
       case "characteranimate": return <CharacterAnimateTool key="characteranimate" userId={userId} onBack={handleBack} />;
+      case "autoresizer": return <AutoResizerTool key="autoresizer" userId={userId} onBack={handleBack} />;
+      case "videoeditor": return <div key="videoeditor"><ToolHeader title="Video Editor" subtitle="Trim, Speed, Zoom, Filter, Text" onBack={handleBack} /><VideoEditor userId={userId} /></div>;
       default: return null;
     }
   };
@@ -462,7 +469,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
               <div className="border-t border-border/30 pt-4 mt-2">
                 <div className="text-center space-y-2">
-                  <p className="text-xs text-muted-foreground font-myanmar">© 2025 Myanmar AI Studio</p>
+                  <p className="text-xs text-muted-foreground font-myanmar">© 2026 Myanmar AI Studio</p>
                   <div className="flex items-center justify-center gap-4 text-[10px] text-muted-foreground">
                     <a href="/about" className="hover:text-primary transition-colors">Terms of Service</a>
                     <span>•</span>
