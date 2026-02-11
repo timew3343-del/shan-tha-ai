@@ -31,7 +31,7 @@ const thbPackages: PricingPackage[] = [
   { id: "enterprise-thb", name: "Enterprise", credits: 2000, price: 1200, priceDisplay: "฿1,200 THB", currency: "THB" },
 ];
 
-type PaymentMethod = "kbzpay" | "wavepay" | "thai_bank";
+type PaymentMethod = "kbzpay" | "wavepay" | "thai_bank" | "stripe";
 
 export const TopUp = () => {
   const navigate = useNavigate();
@@ -44,14 +44,31 @@ export const TopUp = () => {
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [isFirstPurchase, setIsFirstPurchase] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("kbzpay");
+  const [stripeAvailable, setStripeAvailable] = useState(false);
+  const [isStripeLoading, setIsStripeLoading] = useState(false);
 
   // SCB Bank details from settings
   const [scbAccount, setScbAccount] = useState("399-459002-6");
   const [scbNameTh, setScbNameTh] = useState("เงินฝากออมทรัพย์ (ไม่มีสมุดคู่ฝาก)");
   const [scbNameEn, setScbNameEn] = useState("ATASIT KANTHA");
 
-  // Show Thai packages only when Thai Bank is selected
+  // Show Thai packages for Thai Bank, USD-like for Stripe
   const packages = paymentMethod === "thai_bank" ? thbPackages : mmkPackages;
+
+  // Check if Stripe is configured
+  useEffect(() => {
+    const checkStripe = async () => {
+      try {
+        const { data } = await supabase
+          .from("app_settings")
+          .select("value")
+          .eq("key", "stripe_secret_key")
+          .maybeSingle();
+        setStripeAvailable(!!(data?.value && data.value.length > 10 && !data.value.startsWith("••••")));
+      } catch { setStripeAvailable(false); }
+    };
+    checkStripe();
+  }, []);
 
   useEffect(() => {
     // Load SCB bank settings
@@ -102,6 +119,19 @@ export const TopUp = () => {
     };
 
     checkFirstPurchase();
+  }, []);
+
+  // Handle Stripe redirect result
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("stripe") === "success") {
+      setShowSuccess(true);
+      toast({ title: "ငွေပေးချေမှု အောင်မြင်ပါပြီ!", description: "Credits ကို ထည့်သွင်းပေးပြီးပါပြီ" });
+      window.history.replaceState({}, "", "/top-up");
+    } else if (params.get("stripe") === "cancel") {
+      toast({ title: "ငွေပေးချေမှု ပယ်ဖျက်ပြီး", variant: "destructive" });
+      window.history.replaceState({}, "", "/top-up");
+    }
   }, []);
 
   // Reset selected package when payment method changes
@@ -253,7 +283,25 @@ export const TopUp = () => {
         <div className="space-y-3 animate-fade-up" style={{ animationDelay: "0.1s" }}>
           <h3 className="font-semibold text-foreground text-sm">ငွေပေးချေနည်း ရွေးချယ်ပါ</h3>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className={`grid ${stripeAvailable ? 'grid-cols-4' : 'grid-cols-3'} gap-2`}>
+            {/* Stripe Visa/Mastercard */}
+            {stripeAvailable && (
+              <button
+                onClick={() => setPaymentMethod("stripe")}
+                className={`gradient-card rounded-xl p-3 border transition-all ${
+                  paymentMethod === "stripe"
+                    ? "border-primary shadow-gold"
+                    : "border-border/30 hover:border-primary/30"
+                }`}
+              >
+                <div className="text-lg mb-1">💳</div>
+                <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center mx-auto mb-1">
+                  <CreditCard className="w-4 h-4 text-white" />
+                </div>
+                <p className="text-xs text-foreground text-center">Visa/MC</p>
+              </button>
+            )}
+
             {/* KBZPay */}
             <button
               onClick={() => setPaymentMethod("kbzpay")}
@@ -383,6 +431,24 @@ export const TopUp = () => {
               </div>
             </div>
           )}
+
+          {paymentMethod === "stripe" && (
+            <div className="gradient-card rounded-2xl p-4 border border-indigo-500/30">
+              <div className="flex items-start gap-4">
+                <div className="w-16 h-16 bg-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <CreditCard className="w-8 h-8 text-white" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-semibold text-foreground text-sm">Visa / Mastercard</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Package ရွေးချယ်ပြီး "Stripe ဖြင့် ငွေပေးချေမည်" ကို နှိပ်ပါ။ Stripe Secure Checkout သို့ ရောက်ပါမည်။
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Pricing Packages */}
@@ -433,60 +499,114 @@ export const TopUp = () => {
           </div>
         )}
 
-        {/* Upload Section */}
-        <div className="gradient-card rounded-2xl p-4 border border-primary/20 space-y-4 animate-fade-up" style={{ animationDelay: "0.15s" }}>
-          <h3 className="font-semibold text-foreground text-sm">ငွေလွှဲပြေစာ Screenshot</h3>
-          
-          {previewUrl ? (
-            <div className="relative">
-              <img 
-                src={previewUrl} 
-                alt="Preview" 
-                className="w-full h-40 object-cover rounded-xl"
-              />
-              <button
-                onClick={() => {
-                  setSelectedFile(null);
-                  setPreviewUrl(null);
-                }}
-                className="absolute top-2 right-2 p-1.5 bg-destructive rounded-full"
-              >
-                <X className="w-4 h-4 text-white" />
-              </button>
-            </div>
-          ) : (
-            <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-primary/30 rounded-xl cursor-pointer hover:bg-primary/5 transition-colors">
-              <Upload className="w-6 h-6 text-primary mb-2" />
-              <span className="text-sm text-muted-foreground">Screenshot ထည့်ရန် နှိပ်ပါ</span>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                className="hidden"
-              />
-            </label>
-          )}
-        </div>
+        {/* Stripe Payment Button */}
+        {paymentMethod === "stripe" && (
+          <Button
+            onClick={async () => {
+              if (!selectedPackage) {
+                toast({ title: "Package ရွေးချယ်ပါ", variant: "destructive" });
+                return;
+              }
+              setIsStripeLoading(true);
+              try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) throw new Error("Not authenticated");
+                const { data, error } = await supabase.functions.invoke("stripe-checkout", {
+                  body: {
+                    packageName: selectedPackage.name,
+                    credits: selectedPackage.credits,
+                    amountInCents: selectedPackage.price * 100,
+                    currency: "usd",
+                    successUrl: `${window.location.origin}/top-up?stripe=success`,
+                    cancelUrl: `${window.location.origin}/top-up?stripe=cancel`,
+                  },
+                });
+                if (error || !data?.success) {
+                  throw new Error(data?.error || "Stripe checkout failed");
+                }
+                window.location.href = data.url;
+              } catch (error: any) {
+                toast({ title: "ငွေပေးချေမှု မအောင်မြင်ပါ", description: error.message, variant: "destructive" });
+              } finally {
+                setIsStripeLoading(false);
+              }
+            }}
+            disabled={isStripeLoading || !selectedPackage}
+            className="w-full gradient-gold text-primary-foreground font-semibold py-6 rounded-2xl text-base shadow-gold hover:shadow-gold-lg transition-all animate-fade-up"
+            style={{ animationDelay: "0.2s" }}
+          >
+            {isStripeLoading ? (
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                <span>Stripe သို့ ချိတ်ဆက်နေသည်...</span>
+              </div>
+            ) : (
+              <>
+                <CreditCard className="w-5 h-5 mr-2" />
+                Stripe ဖြင့် ငွေပေးချေမည်
+              </>
+            )}
+          </Button>
+        )}
 
-        {/* Confirm Button */}
-        <Button
-          onClick={handleSubmit}
-          disabled={isSubmitting || !selectedFile || !selectedPackage}
-          className="w-full gradient-gold text-primary-foreground font-semibold py-6 rounded-2xl text-base shadow-gold hover:shadow-gold-lg transition-all animate-fade-up"
-          style={{ animationDelay: "0.2s" }}
-        >
-          {isSubmitting ? (
-            <div className="flex items-center gap-2">
-              <div className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-              <span>စစ်ဆေးနေသည်...</span>
+        {/* Manual Upload Section (for non-Stripe methods) */}
+        {paymentMethod !== "stripe" && (
+          <>
+            <div className="gradient-card rounded-2xl p-4 border border-primary/20 space-y-4 animate-fade-up" style={{ animationDelay: "0.15s" }}>
+              <h3 className="font-semibold text-foreground text-sm">ငွေလွှဲပြေစာ Screenshot</h3>
+              
+              {previewUrl ? (
+                <div className="relative">
+                  <img 
+                    src={previewUrl} 
+                    alt="Preview" 
+                    className="w-full h-40 object-cover rounded-xl"
+                  />
+                  <button
+                    onClick={() => {
+                      setSelectedFile(null);
+                      setPreviewUrl(null);
+                    }}
+                    className="absolute top-2 right-2 p-1.5 bg-destructive rounded-full"
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-primary/30 rounded-xl cursor-pointer hover:bg-primary/5 transition-colors">
+                  <Upload className="w-6 h-6 text-primary mb-2" />
+                  <span className="text-sm text-muted-foreground">Screenshot ထည့်ရန် နှိပ်ပါ</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </label>
+              )}
             </div>
-          ) : (
-            <>
-              <CheckCircle className="w-5 h-5 mr-2" />
-              အတည်ပြုမည်
-            </>
-          )}
-        </Button>
+
+            {/* Confirm Button */}
+            <Button
+              onClick={handleSubmit}
+              disabled={isSubmitting || !selectedFile || !selectedPackage}
+              className="w-full gradient-gold text-primary-foreground font-semibold py-6 rounded-2xl text-base shadow-gold hover:shadow-gold-lg transition-all animate-fade-up"
+              style={{ animationDelay: "0.2s" }}
+            >
+              {isSubmitting ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                  <span>စစ်ဆေးနေသည်...</span>
+                </div>
+              ) : (
+                <>
+                  <CheckCircle className="w-5 h-5 mr-2" />
+                  အတည်ပြုမည်
+                </>
+              )}
+            </Button>
+          </>
+        )}
 
         {/* Support Chatbot Section */}
         {currentUserId && <TopUpSupportChat userId={currentUserId} />}

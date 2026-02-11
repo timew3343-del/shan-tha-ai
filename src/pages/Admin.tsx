@@ -65,7 +65,7 @@ export const Admin = () => {
   const { toast } = useToast();
   const { theme, setTheme } = useTheme();
   const [userId, setUserId] = useState<string | undefined>(undefined);
-  const { isAdmin, isLoading: roleLoading } = useUserRole(userId);
+  const { isAdmin, isTrainer, isLoading: roleLoading } = useUserRole(userId);
   const [isLoading, setIsLoading] = useState(true);
   const [transactions, setTransactions] = useState<PendingTransaction[]>([]);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -170,27 +170,29 @@ export const Admin = () => {
     checkAdminAccess();
   }, [navigate]);
 
-  // Check admin access once role is loaded
+  // Check admin/trainer access once role is loaded
   useEffect(() => {
     if (!roleLoading && userId) {
-      if (!isAdmin) {
+      if (!isAdmin && !isTrainer) {
         toast({
           title: "ခွင့်ပြုချက်မရှိပါ",
-          description: "Admin အကောင့်သာ ဝင်ရောက်ခွင့်ရှိပါသည်။",
+          description: "Admin သို့မဟုတ် Trainer အကောင့်သာ ဝင်ရောက်ခွင့်ရှိပါသည်။",
           variant: "destructive",
         });
         navigate("/");
         return;
       }
 
-      fetchTransactions();
-      calculateAnalytics();
-      loadSettings(); // API health is derived reactively below
-      loadUsers();
-      loadCampaigns();
+      if (isAdmin) {
+        fetchTransactions();
+        calculateAnalytics();
+        loadSettings();
+        loadUsers();
+        loadCampaigns();
+      }
       setIsLoading(false);
     }
-  }, [roleLoading, isAdmin, userId, navigate, toast]);
+  }, [roleLoading, isAdmin, isTrainer, userId, navigate, toast]);
 
   // Reactively update API health whenever key state changes
   useEffect(() => {
@@ -811,7 +813,7 @@ export const Admin = () => {
     return new Intl.NumberFormat("my-MM").format(amount) + " MMK";
   };
 
-  if (!isAdmin || isLoading) {
+  if ((!isAdmin && !isTrainer) || isLoading) {
     return (
       <div className="min-h-screen gradient-navy flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
@@ -835,7 +837,9 @@ export const Admin = () => {
           >
             <ArrowLeft className="w-5 h-5 text-foreground" />
           </button>
-          <h1 className="text-lg font-semibold text-foreground">Admin Dashboard</h1>
+          <h1 className="text-lg font-semibold text-foreground">
+            {isTrainer ? "AI Brain Editor" : "Admin Dashboard"}
+          </h1>
         </div>
         <Button
           variant="ghost"
@@ -847,6 +851,10 @@ export const Admin = () => {
       </div>
 
       <div className="max-w-2xl mx-auto p-4">
+        {/* Trainer-only view: just Knowledge Base */}
+        {isTrainer && !isAdmin ? (
+          <KnowledgeBaseTab />
+        ) : (
         <Tabs defaultValue="transactions" className="w-full">
           <TabsList className="grid w-full grid-cols-4 mb-2">
             <TabsTrigger value="transactions" className="text-xs">
@@ -1526,6 +1534,7 @@ export const Admin = () => {
             <ApiBalanceTab />
           </TabsContent>
         </Tabs>
+        )}
       </div>
     </div>
   );
