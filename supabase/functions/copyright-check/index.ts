@@ -26,16 +26,16 @@ serve(async (req) => {
     );
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: claims, error: claimsError } = await supabaseAdmin.auth.getClaims(token);
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
 
-    if (claimsError || !claims?.claims?.sub) {
+    if (userError || !user) {
       return new Response(
         JSON.stringify({ error: "Invalid or expired token" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const userId = claims.claims.sub;
+    const userId = user.id;
     console.log(`User ${userId} requesting copyright check`);
 
     const { content, contentType, frames } = await req.json();

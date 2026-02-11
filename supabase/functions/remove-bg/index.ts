@@ -52,16 +52,16 @@ serve(async (req) => {
 
     // Verify user
     const token = authHeader.replace("Bearer ", "");
-    const { data: claims, error: claimsError } = await supabaseAdmin.auth.getClaims(token);
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     
-    if (claimsError || !claims?.claims?.sub) {
+    if (userError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const userId = claims.claims.sub;
+    const userId = user.id;
     console.log(`User ${userId} requesting background removal`);
 
     // Parse and validate request body
