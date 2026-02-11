@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Mail, Lock, Eye, EyeOff, Loader2, Crown, ArrowRight, ArrowLeft, Play } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,8 @@ interface GuideVideo {
   description: string | null;
 }
 
+const REFERRAL_REWARD = 5;
+
 const Auth = () => {
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
@@ -40,14 +42,31 @@ const Auth = () => {
   const [verificationEmail, setVerificationEmail] = useState("");
   const [guideVideos, setGuideVideos] = useState<GuideVideo[]>([]);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
+  const referralCode = searchParams.get("ref");
+
+  // Auto-switch to signup if referral link
+  useEffect(() => {
+    if (referralCode) setMode("signup");
+  }, [referralCode]);
 
   useEffect(() => {
     let isMounted = true;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return;
-      if (session?.user && event !== 'INITIAL_SESSION') {
+      if (session?.user && event === 'SIGNED_IN') {
+        // Process referral code if present
+        if (referralCode) {
+          try {
+            await supabase.functions.invoke("process-referral", {
+              body: { referral_code: referralCode, new_user_id: session.user.id },
+            });
+          } catch (e) {
+            console.error("Referral processing error:", e);
+          }
+        }
         navigate("/", { replace: true });
       }
     });
@@ -380,6 +399,18 @@ const Auth = () => {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Referral Banner */}
+      {referralCode && (
+        <div className="w-full max-w-md mt-4 gradient-card rounded-2xl p-4 border border-green-500/30 text-center animate-fade-up" style={{ animationDelay: "0.35s" }}>
+          <p className="text-sm text-green-500 font-semibold mb-1">
+            🎉 Referral Link ဖြင့် အကောင့်ဖွင့်ပါ
+          </p>
+          <p className="text-xs text-muted-foreground">
+            အကောင့်ဖွင့်လိုက်ရင် {REFERRAL_REWARD} Credits အခမဲ့ ရရှိပါမယ်!
+          </p>
         </div>
       )}
 
