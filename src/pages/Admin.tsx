@@ -29,6 +29,7 @@ import { ApiSwitchingTab } from "@/components/admin/ApiSwitchingTab";
 import { AdsterraConfigTab } from "@/components/admin/AdsterraConfigTab";
 import { KnowledgeBaseTab } from "@/components/admin/KnowledgeBaseTab";
 import { ApiBalanceTab } from "@/components/admin/ApiBalanceTab";
+import { CollaboratorManagementTab } from "@/components/admin/CollaboratorManagementTab";
 
 interface PendingTransaction {
   id: string;
@@ -910,7 +911,7 @@ export const Admin = () => {
               API Switch
             </TabsTrigger>
           </TabsList>
-          <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsList className="grid w-full grid-cols-4 mb-6">
             <TabsTrigger value="adsterra" className="text-xs">
               <DollarSign className="w-4 h-4 mr-1" />
               Ads
@@ -922,6 +923,10 @@ export const Admin = () => {
             <TabsTrigger value="api-balance" className="text-xs">
               <Wallet className="w-4 h-4 mr-1" />
               API $
+            </TabsTrigger>
+            <TabsTrigger value="collaborators" className="text-xs">
+              <Users className="w-4 h-4 mr-1" />
+              Team
             </TabsTrigger>
           </TabsList>
 
@@ -1532,6 +1537,11 @@ export const Admin = () => {
           {/* API Balance Tab */}
           <TabsContent value="api-balance" className="space-y-4">
             <ApiBalanceTab />
+          </TabsContent>
+
+          {/* Collaborator Management Tab */}
+          <TabsContent value="collaborators" className="space-y-4">
+            <CollaboratorManagementTab />
           </TabsContent>
         </Tabs>
         )}
