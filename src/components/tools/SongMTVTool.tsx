@@ -187,6 +187,9 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
             topic: topic.trim(),
             genre,
             mood,
+            language,
+            mtvStyle,
+            showSubtitles,
             audioBase64: serviceOption === "mtv_only" ? audioFile?.split(",")[1] : undefined,
           }),
         }
@@ -265,36 +268,51 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
               <div className="gradient-card rounded-2xl p-4 border border-primary/20">
                 <label className="block text-sm font-medium text-primary mb-2 font-myanmar">🎸 Genre</label>
                 <Select value={genre} onValueChange={setGenre}>
-                  <SelectTrigger className="bg-background/50 border-primary/30 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {GENRE_OPTIONS.map((g) => (
-                      <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
-                    ))}
-                  </SelectContent>
+                  <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>{GENRE_OPTIONS.map((g) => (<SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>))}</SelectContent>
                 </Select>
               </div>
-
               <div className="gradient-card rounded-2xl p-4 border border-primary/20">
                 <label className="block text-sm font-medium text-primary mb-2 font-myanmar">🎭 Mood</label>
                 <Select value={mood} onValueChange={setMood}>
-                  <SelectTrigger className="bg-background/50 border-primary/30 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MOOD_OPTIONS.map((m) => (
-                      <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                    ))}
-                  </SelectContent>
+                  <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>{MOOD_OPTIONS.map((m) => (<SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>))}</SelectContent>
                 </Select>
               </div>
             </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+                <label className="block text-sm font-medium text-primary mb-2 font-myanmar">🌐 ဘာသာစကား</label>
+                <Select value={language} onValueChange={setLanguage}>
+                  <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>{LANGUAGE_OPTIONS.map((l) => (<SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>))}</SelectContent>
+                </Select>
+              </div>
+              {(serviceOption === "full_auto") && (
+                <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+                  <label className="block text-sm font-medium text-primary mb-2 font-myanmar">🎨 MTV Style</label>
+                  <Select value={mtvStyle} onValueChange={setMtvStyle}>
+                    <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>{MTV_STYLE_OPTIONS.map((s) => (<SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>))}</SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            {serviceOption === "full_auto" && (
+              <div className="gradient-card rounded-2xl p-3 border border-primary/20 flex items-center justify-between">
+                <label className="text-sm font-medium text-primary font-myanmar">📝 စာတန်းထိုးမည်</label>
+                <button onClick={() => setShowSubtitles(!showSubtitles)} className={`w-12 h-6 rounded-full transition-colors ${showSubtitles ? "bg-primary" : "bg-muted"}`}>
+                  <div className={`w-5 h-5 bg-white rounded-full transition-transform shadow ${showSubtitles ? "translate-x-6" : "translate-x-0.5"}`} />
+                </button>
+              </div>
+            )}
           </motion.div>
         )}
 
         {serviceOption === "mtv_only" && (
-          <motion.div key="audio-input" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+          <motion.div key="audio-input" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-3">
             <div className="gradient-card rounded-2xl p-4 border border-primary/20">
               <label className="block text-sm font-medium text-primary mb-3 font-myanmar">
                 <Mic2 className="w-4 h-4 inline mr-1" />
@@ -317,6 +335,31 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
                 </button>
               )}
               <input ref={audioInputRef} type="file" accept="audio/*" onChange={handleAudioUpload} className="hidden" />
+            </div>
+
+            {/* MTV Style for mtv_only */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+                <label className="block text-sm font-medium text-primary mb-2 font-myanmar">🎨 MTV Style</label>
+                <Select value={mtvStyle} onValueChange={setMtvStyle}>
+                  <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>{MTV_STYLE_OPTIONS.map((s) => (<SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>))}</SelectContent>
+                </Select>
+              </div>
+              <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+                <label className="block text-sm font-medium text-primary mb-2 font-myanmar">🌐 ဘာသာစကား</label>
+                <Select value={language} onValueChange={setLanguage}>
+                  <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>{LANGUAGE_OPTIONS.map((l) => (<SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>))}</SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="gradient-card rounded-2xl p-3 border border-primary/20 flex items-center justify-between">
+              <label className="text-sm font-medium text-primary font-myanmar">📝 စာတန်းထိုးမည်</label>
+              <button onClick={() => setShowSubtitles(!showSubtitles)} className={`w-12 h-6 rounded-full transition-colors ${showSubtitles ? "bg-primary" : "bg-muted"}`}>
+                <div className={`w-5 h-5 bg-white rounded-full transition-transform shadow ${showSubtitles ? "translate-x-6" : "translate-x-0.5"}`} />
+              </button>
             </div>
           </motion.div>
         )}

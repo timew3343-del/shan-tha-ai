@@ -16,6 +16,15 @@ interface UpscaleToolProps {
   onBack: () => void;
 }
 
+const PLATFORM_PRESETS = [
+  { id: "original", label: "Original 4K", icon: "🖼️", desc: "Original size" },
+  { id: "tiktok", label: "TikTok", icon: "🎵", desc: "1080×1920" },
+  { id: "youtube", label: "YouTube", icon: "▶️", desc: "1920×1080" },
+  { id: "instagram", label: "Instagram", icon: "📸", desc: "1080×1080" },
+  { id: "fb_cover", label: "FB Cover", icon: "📘", desc: "820×312" },
+  { id: "twitter", label: "Twitter/X", icon: "🐦", desc: "1500×500" },
+];
+
 export const UpscaleTool = ({ userId, onBack }: UpscaleToolProps) => {
   const { toast } = useToast();
   const { credits, refetch: refetchCredits } = useCredits(userId);
@@ -24,6 +33,7 @@ export const UpscaleTool = ({ userId, onBack }: UpscaleToolProps) => {
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [selectedPreset, setSelectedPreset] = useState("original");
   const imageInputRef = useRef<HTMLInputElement>(null);
   const { showGuide, markAsLearned, saveOutput } = useToolOutput("upscale", "4K Upscaler");
 
@@ -158,38 +168,40 @@ export const UpscaleTool = ({ userId, onBack }: UpscaleToolProps) => {
           <ZoomIn className="w-4 h-4 inline mr-1" />
           ပုံထည့်ပါ
         </label>
-        
         {sourceImage ? (
           <div className="relative">
-            <img
-              src={sourceImage}
-              alt="Source"
-              className="w-full max-h-48 object-contain rounded-xl border border-primary/30"
-            />
-            <button
-              onClick={removeImage}
-              className="absolute -top-2 -right-2 p-1 bg-destructive rounded-full text-white"
-            >
-              <X className="w-3 h-3" />
-            </button>
+            <img src={sourceImage} alt="Source" className="w-full max-h-48 object-contain rounded-xl border border-primary/30" />
+            <button onClick={removeImage} className="absolute -top-2 -right-2 p-1 bg-destructive rounded-full text-white"><X className="w-3 h-3" /></button>
           </div>
         ) : (
-          <button
-            onClick={() => imageInputRef.current?.click()}
-            className="w-full h-32 border-2 border-dashed border-primary/30 rounded-xl flex flex-col items-center justify-center gap-2 hover:bg-primary/5 transition-colors"
-          >
+          <button onClick={() => imageInputRef.current?.click()} className="w-full h-32 border-2 border-dashed border-primary/30 rounded-xl flex flex-col items-center justify-center gap-2 hover:bg-primary/5 transition-colors">
             <Upload className="w-8 h-8 text-primary" />
             <span className="text-sm text-muted-foreground font-myanmar">ပုံထည့်ရန် နှိပ်ပါ</span>
           </button>
         )}
-        
-        <input
-          ref={imageInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleImageUpload}
-          className="hidden"
-        />
+        <input ref={imageInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+      </div>
+
+      {/* Platform Size Presets */}
+      <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+        <label className="block text-sm font-medium text-primary mb-3 font-myanmar">📐 Platform Size ရွေးချယ်ပါ</label>
+        <div className="grid grid-cols-3 gap-2">
+          {PLATFORM_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              onClick={() => setSelectedPreset(preset.id)}
+              className={`flex flex-col items-center gap-0.5 p-2.5 rounded-xl border transition-all ${
+                selectedPreset === preset.id
+                  ? "border-primary bg-primary/10 ring-1 ring-primary/30"
+                  : "border-border/50 hover:border-primary/30"
+              }`}
+            >
+              <span className="text-lg">{preset.icon}</span>
+              <span className="text-[10px] font-medium">{preset.label}</span>
+              <span className="text-[8px] text-muted-foreground">{preset.desc}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Progress */}
