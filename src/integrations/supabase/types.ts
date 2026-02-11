@@ -134,6 +134,30 @@ export type Database = {
         }
         Relationships: []
       }
+      collaborator_invites: {
+        Row: {
+          added_by: string
+          created_at: string
+          email: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+        }
+        Insert: {
+          added_by: string
+          created_at?: string
+          email: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+        }
+        Update: {
+          added_by?: string
+          created_at?: string
+          email?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+        }
+        Relationships: []
+      }
       credit_audit_log: {
         Row: {
           amount: number
