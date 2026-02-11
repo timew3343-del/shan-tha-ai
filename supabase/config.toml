@@ -79,4 +79,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.knowledge-query]
+  verify_jwt = false
+
+[functions.daily-content-generate]
 verify_jwt = false
