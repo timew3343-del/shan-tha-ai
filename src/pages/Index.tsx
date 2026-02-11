@@ -9,6 +9,7 @@ import { CreditDisplay } from "@/components/CreditDisplay";
 import { AIToolsTab } from "@/components/AIToolsTab";
 import { DosDontsTab } from "@/components/DosDontsTab";
 import { CourseTab } from "@/components/CourseTab";
+import { StoreTab } from "@/components/StoreTab";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { MaintenanceBanner } from "@/components/MaintenanceBanner";
 import { CreditTransferDialog } from "@/components/CreditTransferDialog";
@@ -194,6 +195,7 @@ const Index = () => {
         <MaintenanceBanner className="mx-4 mt-4" />
         
         {activeTab === "ai-tools" && <AIToolsTab userId={user.id} />}
+        {activeTab === "store" && <StoreTab />}
         {activeTab === "dos-donts" && <DosDontsTab />}
         {activeTab === "course" && <CourseTab userId={user.id} />}
       </div>

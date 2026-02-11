@@ -26,6 +26,7 @@ import { UserFeedbackTab } from "@/components/admin/UserFeedbackTab";
 import { ContentFactoryTab } from "@/components/admin/ContentFactoryTab";
 import { AdminUserTable } from "@/components/admin/AdminUserTable";
 import { ApiSwitchingTab } from "@/components/admin/ApiSwitchingTab";
+import { AdsterraConfigTab } from "@/components/admin/AdsterraConfigTab";
 
 interface PendingTransaction {
   id: string;
@@ -885,10 +886,10 @@ export const Admin = () => {
               System
             </TabsTrigger>
           </TabsList>
-          <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsList className="grid w-full grid-cols-4 mb-6">
             <TabsTrigger value="content-factory" className="text-xs">
               <Film className="w-4 h-4 mr-1" />
-              Content Factory
+              Content
             </TabsTrigger>
             <TabsTrigger value="users-table" className="text-xs">
               <Users className="w-4 h-4 mr-1" />
@@ -897,6 +898,10 @@ export const Admin = () => {
             <TabsTrigger value="api-switching" className="text-xs">
               <Zap className="w-4 h-4 mr-1" />
               API Switch
+            </TabsTrigger>
+            <TabsTrigger value="adsterra" className="text-xs">
+              <DollarSign className="w-4 h-4 mr-1" />
+              Ads/Balance
             </TabsTrigger>
           </TabsList>
 
@@ -1690,6 +1695,11 @@ export const Admin = () => {
           {/* API Switching Tab */}
           <TabsContent value="api-switching" className="space-y-4">
             <ApiSwitchingTab />
+          </TabsContent>
+
+          {/* Adsterra & API Balance Tab */}
+          <TabsContent value="adsterra" className="space-y-4">
+            <AdsterraConfigTab />
           </TabsContent>
         </Tabs>
       </div>
