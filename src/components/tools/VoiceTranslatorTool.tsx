@@ -9,6 +9,8 @@ import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { useLiveRecording } from "@/hooks/useLiveRecording";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion } from "framer-motion";
 
 interface Props { userId?: string; onBack: () => void; }
@@ -25,6 +27,7 @@ export const VoiceTranslatorTool = ({ userId, onBack }: Props) => {
   const { toast } = useToast();
   const { credits, refetch } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { showGuide, saveOutput } = useToolOutput("voice_translator", "Voice Translator");
   const { isRecording, recordingTime, audioBlob, startRecording, stopRecording, resetRecording, audioLevel } = useLiveRecording();
   const [targetLang, setTargetLang] = useState("English");
   const [manualText, setManualText] = useState("");
@@ -79,6 +82,7 @@ Text: ${textToTranslate}`;
       if (data?.error) throw new Error(data.error);
       setTranslatedText(data?.result);
       refetch();
+      if (data?.result) saveOutput("text", data.result);
       toast({ title: "ဘာသာပြန်ပြီးပါပြီ!", description: `${data.creditsUsed} Cr သုံးခဲ့သည်` });
     } catch (e: any) {
       toast({ title: "အမှားရှိပါသည်", description: e.message, variant: "destructive" });

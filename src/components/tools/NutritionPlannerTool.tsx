@@ -9,6 +9,8 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion } from "framer-motion";
 
 interface Props { userId?: string; onBack: () => void; }
@@ -17,6 +19,7 @@ export const NutritionPlannerTool = ({ userId, onBack }: Props) => {
   const { toast } = useToast();
   const { credits, refetch } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { showGuide, saveOutput } = useToolOutput("nutrition_planner", "Nutrition Planner");
   const [foodImage, setFoodImage] = useState<string | null>(null);
   const [foodText, setFoodText] = useState("");
   const [weight, setWeight] = useState("");
@@ -51,6 +54,7 @@ export const NutritionPlannerTool = ({ userId, onBack }: Props) => {
       if (error) throw error;
       if (data?.error) { toast({ title: "Error", description: data.error, variant: "destructive" }); return; }
       setResult(data?.result || ""); refetch();
+      if (data?.result) saveOutput("text", data.result);
       toast({ title: "ခွဲခြမ်းစိတ်ဖြာပြီးပါပြီ!" });
     } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
     finally { setIsLoading(false); }

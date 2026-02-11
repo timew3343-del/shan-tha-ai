@@ -1,5 +1,7 @@
 import { useState, useRef } from "react";
-import { ToolHeader } from "../ToolHeader";
+import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
@@ -51,6 +53,7 @@ export const CopyrightCheckerTool = ({ userId, onBack }: CopyrightCheckerToolPro
   const { toast } = useToast();
   const { costs } = useCreditCosts();
   const { credits, refetch: refetchCredits } = useCredits(userId);
+  const { showGuide, saveOutput } = useToolOutput("copyright_checker", "Copyright Checker");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [contentType, setContentType] = useState<"text" | "video">("text");
@@ -200,6 +203,7 @@ export const CopyrightCheckerTool = ({ userId, onBack }: CopyrightCheckerToolPro
         setResult(data.analysis);
         setProgress(100);
         refetchCredits();
+        saveOutput("text", data.analysis.summary);
         toast({ title: "✅ Copyright စစ်ဆေးမှု ပြီးပါပြီ!" });
       } else {
         throw new Error(data?.error || "Analysis failed");
@@ -241,6 +245,7 @@ export const CopyrightCheckerTool = ({ userId, onBack }: CopyrightCheckerToolPro
         subtitle="AI ဖြင့် Copyright အန္တရာယ် စစ်ဆေးမည်"
         onBack={onBack}
       />
+      <FirstOutputGuide toolName="Copyright Checker" show={showGuide} steps={["Content ထည့်ပါ", "စစ်ဆေးမည် နှိပ်ပါ"]} />
 
       {/* Content Type Toggle */}
       <div className="flex gap-2">

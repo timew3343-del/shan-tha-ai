@@ -8,6 +8,8 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 
@@ -17,6 +19,7 @@ export const CarDealerTool = ({ userId, onBack }: Props) => {
   const { toast } = useToast();
   const { credits, refetch } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { showGuide, saveOutput } = useToolOutput("car_dealer", "Car Dealer");
   const [image, setImage] = useState<string | null>(null);
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
@@ -68,6 +71,7 @@ Format with clear sections and Myanmar currency.`;
       if (data?.error) throw new Error(data.error);
       setResult(data?.result);
       refetch();
+      if (data?.result) saveOutput("text", data.result);
       toast({ title: "အောင်မြင်ပါသည်!", description: `ကားဈေးနှုန်း ခန့်မှန်းပြီးပါပြီ (${data.creditsUsed} Cr)` });
     } catch (e: any) {
       toast({ title: "အမှားရှိပါသည်", description: e.message, variant: "destructive" });

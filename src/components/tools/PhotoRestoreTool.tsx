@@ -6,6 +6,8 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface Props { userId?: string; onBack: () => void; }
@@ -16,6 +18,7 @@ export const PhotoRestoreTool = ({ userId, onBack }: Props) => {
   const { toast } = useToast();
   const { credits, refetch } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { showGuide, saveOutput } = useToolOutput("photo_restore", "Photo Restore");
   const [images, setImages] = useState<string[]>([]);
   const [results, setResults] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -74,6 +77,7 @@ export const PhotoRestoreTool = ({ userId, onBack }: Props) => {
       setResults(data?.results || []);
       setProgress({ done: data?.results?.length || 0, total: images.length });
       refetch();
+      if (data?.results?.length) saveOutput("image", data.results[0]);
       toast({ 
         title: "အောင်မြင်ပါသည်!", 
         description: `ဓာတ်ပုံ ${data?.results?.length || 0} ပုံ ပြုပြင်ပြီးပါပြီ (${data.creditsUsed} Cr)` 
@@ -99,6 +103,7 @@ export const PhotoRestoreTool = ({ userId, onBack }: Props) => {
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4 p-4 pb-24">
       <ToolHeader title="AI ဓာတ်ပုံဟောင်း ပြုပြင်သူ" subtitle={`ပုံဟောင်းများကို အများဆုံး ${MAX_IMAGES} ပုံ တစ်ပြိုင်နက် ပြုပြင်ပေးခြင်း`} onBack={onBack} />
+      <FirstOutputGuide toolName="Photo Restore" show={showGuide} steps={["ပုံဟောင်းများ တင်ပါ", "ပြုပြင်မည် နှိပ်ပါ"]} />
 
       {/* Upload Area */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">

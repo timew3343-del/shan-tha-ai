@@ -8,6 +8,8 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 
@@ -26,6 +28,7 @@ export const TravelPlannerTool = ({ userId, onBack }: Props) => {
   const { toast } = useToast();
   const { credits, refetch } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { showGuide, saveOutput } = useToolOutput("travel_planner", "Travel Planner");
   const [destination, setDestination] = useState("");
   const [duration, setDuration] = useState("5");
   const [budget, setBudget] = useState("");
@@ -67,6 +70,7 @@ Make it practical and detailed for Myanmar travelers.`;
       if (data?.error) throw new Error(data.error);
       setResult(data?.result);
       refetch();
+      if (data?.result) saveOutput("text", data.result);
       toast({ title: "အောင်မြင်ပါသည်!", description: `ခရီးစဉ် ပလန် ဖန်တီးပြီး (${data.creditsUsed} Cr)` });
     } catch (e: any) {
       toast({ title: "အမှားရှိပါသည်", description: e.message, variant: "destructive" });

@@ -8,6 +8,8 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 
@@ -17,6 +19,7 @@ export const SmartChefTool = ({ userId, onBack }: Props) => {
   const { toast } = useToast();
   const { credits, refetch } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { showGuide, saveOutput } = useToolOutput("smart_chef", "Smart Chef");
   const [ingredients, setIngredients] = useState("");
   const [servings, setServings] = useState("2");
   const [result, setResult] = useState<string | null>(null);
@@ -52,6 +55,7 @@ Use Myanmar Kyat for all prices. Be practical and helpful.`;
       if (data?.error) throw new Error(data.error);
       setResult(data?.result);
       refetch();
+      if (data?.result) saveOutput("text", data.result);
       toast({ title: "အောင်မြင်ပါသည်!", description: `ဟင်းချက်နည်း ဖန်တီးပြီး (${data.creditsUsed} Cr)` });
     } catch (e: any) {
       toast({ title: "အမှားရှိပါသည်", description: e.message, variant: "destructive" });

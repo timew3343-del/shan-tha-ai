@@ -8,6 +8,8 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion } from "framer-motion";
 
 interface VideoRedesignToolProps {
@@ -28,6 +30,7 @@ export const VideoRedesignTool = ({ userId, onBack }: VideoRedesignToolProps) =>
   const { toast } = useToast();
   const { credits, refetch: refetchCredits } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { showGuide, saveOutput } = useToolOutput("video_redesign", "Video Redesign");
 
   const [inputVideo, setInputVideo] = useState<string | null>(null);
   const [inputVideoName, setInputVideoName] = useState<string>("");
@@ -147,6 +150,7 @@ export const VideoRedesignTool = ({ userId, onBack }: VideoRedesignToolProps) =>
       setResultVideo(result.video);
       setProgress(100);
       refetchCredits();
+      saveOutput("video", result.video);
 
       toast({
         title: "အောင်မြင်ပါသည်! 🎬",
@@ -179,6 +183,7 @@ export const VideoRedesignTool = ({ userId, onBack }: VideoRedesignToolProps) =>
         subtitle="Style Transfer Technology"
         onBack={onBack}
       />
+      <FirstOutputGuide toolName="Video Redesign" show={showGuide} steps={["Video တင်ပါ", "Style ရွေးပါ", "Transform နှိပ်ပါ"]} />
 
       {/* Hero Section - Luma-style */}
       <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-violet-500/10 via-fuchsia-500/5 to-cyan-500/10 p-5">

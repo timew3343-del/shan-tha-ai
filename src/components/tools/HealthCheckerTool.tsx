@@ -9,6 +9,8 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 
@@ -18,6 +20,7 @@ export const HealthCheckerTool = ({ userId, onBack }: Props) => {
   const { toast } = useToast();
   const { credits, refetch } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { showGuide, saveOutput } = useToolOutput("health_checker", "Health Checker");
   const [symptoms, setSymptoms] = useState("");
   const [age, setAge] = useState("");
   const [gender, setGender] = useState("male");
@@ -53,6 +56,7 @@ Provide in Burmese:
       if (data?.error) throw new Error(data.error);
       setResult(data?.result);
       refetch();
+      if (data?.result) saveOutput("text", data.result);
       toast({ title: "စစ်ဆေးပြီးပါပြီ!", description: `${data.creditsUsed} Cr` });
     } catch (e: any) {
       toast({ title: "အမှားရှိပါသည်", description: e.message, variant: "destructive" });
@@ -62,6 +66,7 @@ Provide in Burmese:
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4 p-4 pb-24">
       <ToolHeader title="AI ကျန်းမာရေးနှင့် ရောဂါလက္ခဏာစစ်" subtitle="ရောဂါလက္ခဏာများ ခွဲခြမ်းစိတ်ဖြာခြင်း" onBack={onBack} />
+      <FirstOutputGuide toolName="Health Checker" show={showGuide} steps={["ရောဂါလက္ခဏာများ ရေးပါ", "အသက်/ကျား-မ ဖြည့်ပါ", "စစ်ဆေးမည် နှိပ်ပါ"]} />
 
       {/* Medical Disclaimer */}
       <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">

@@ -10,6 +10,8 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 
@@ -30,6 +32,7 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
   const { toast } = useToast();
   const { credits, refetch: refetchCredits } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { showGuide, saveOutput } = useToolOutput("live_camera_chat", "Live Camera Chat");
 
   // Camera state
   const [cameraActive, setCameraActive] = useState(false);
@@ -352,6 +355,7 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
       });
       setCreditsUsed(prev => prev + creditPerInteraction);
       refetchCredits();
+      saveOutput("text", fullResponse);
 
       // Auto-speak the response
       if (fullResponse) {
@@ -412,6 +416,7 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
         subtitle="ကင်မရာ + အသံ + AI = Real-time Analysis"
         onBack={() => { handleStopAll(); onBack(); }}
       />
+      <FirstOutputGuide toolName="Live Camera Chat" show={showGuide} steps={["ကင်မရာဖွင့်ပါ", "မေးခွန်းမေးပါ (အသံ/စာ)", "AI က ဖြေပါလိမ့်မည်"]} />
 
       {/* Camera Preview */}
       <div className="relative aspect-video bg-black rounded-2xl overflow-hidden border border-primary/20">

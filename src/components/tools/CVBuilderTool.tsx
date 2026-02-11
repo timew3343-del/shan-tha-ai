@@ -9,6 +9,8 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion } from "framer-motion";
 
 interface Props { userId?: string; onBack: () => void; }
@@ -17,6 +19,7 @@ export const CVBuilderTool = ({ userId, onBack }: Props) => {
   const { toast } = useToast();
   const { credits, refetch } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { showGuide, saveOutput } = useToolOutput("cv_builder", "CV Builder");
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
   const [education, setEducation] = useState("");
@@ -38,6 +41,7 @@ export const CVBuilderTool = ({ userId, onBack }: Props) => {
       if (error) throw error;
       if (data?.error) { toast({ title: "Error", description: data.error, variant: "destructive" }); return; }
       setResult(data?.result || ""); refetch();
+      if (data?.result) saveOutput("text", data.result);
       toast({ title: "CV ဖန်တီးပြီးပါပြီ!" });
     } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
     finally { setIsLoading(false); }
@@ -54,6 +58,7 @@ export const CVBuilderTool = ({ userId, onBack }: Props) => {
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4 p-4 pb-24">
       <ToolHeader title="AI ကိုယ်ရေးရာဇဝင်နှင့် အလုပ်လျှောက်လွှာ" subtitle="Professional CV နှင့် Cover Letter ဖန်တီးပေးခြင်း" onBack={onBack} />
+      <FirstOutputGuide toolName="CV Builder" show={showGuide} steps={["အမည်နှင့် အချက်အလက်များ ဖြည့်ပါ", "CV ဖန်တီးမည် နှိပ်ပါ"]} />
       <div id="input-area" className="gradient-card rounded-2xl p-4 border border-primary/20 space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1"><Label className="text-xs font-myanmar">အမည်</Label><Input value={name} onChange={e => setName(e.target.value)} placeholder="အမည်" className="text-sm" /></div>
