@@ -1484,8 +1484,93 @@ export const Admin = () => {
                         onChange={(e) => setNewPayment(p => ({ ...p, country: e.target.value }))}
                         className="mt-1 w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
                       >
-                        <option value="🇲🇲 Myanmar">🇲🇲 Myanmar</option>
-                        <option value="🇹🇭 Thailand">🇹🇭 Thailand</option>
+                        {/* ASEAN Countries */}
+                        <optgroup label="ASEAN">
+                          <option value="🇲🇲 Myanmar">🇲🇲 Myanmar</option>
+                          <option value="🇹🇭 Thailand">🇹🇭 Thailand</option>
+                          <option value="🇸🇬 Singapore">🇸🇬 Singapore</option>
+                          <option value="🇲🇾 Malaysia">🇲🇾 Malaysia</option>
+                          <option value="🇮🇩 Indonesia">🇮🇩 Indonesia</option>
+                          <option value="🇵🇭 Philippines">🇵🇭 Philippines</option>
+                          <option value="🇻🇳 Vietnam">🇻🇳 Vietnam</option>
+                          <option value="🇰🇭 Cambodia">🇰🇭 Cambodia</option>
+                          <option value="🇱🇦 Laos">🇱🇦 Laos</option>
+                          <option value="🇧🇳 Brunei">🇧🇳 Brunei</option>
+                        </optgroup>
+                        {/* East Asia */}
+                        <optgroup label="East Asia">
+                          <option value="🇨🇳 China">🇨🇳 China</option>
+                          <option value="🇯🇵 Japan">🇯🇵 Japan</option>
+                          <option value="🇰🇷 South Korea">🇰🇷 South Korea</option>
+                          <option value="🇹🇼 Taiwan">🇹🇼 Taiwan</option>
+                          <option value="🇭🇰 Hong Kong">🇭🇰 Hong Kong</option>
+                          <option value="🇲🇴 Macau">🇲🇴 Macau</option>
+                          <option value="🇲🇳 Mongolia">🇲🇳 Mongolia</option>
+                        </optgroup>
+                        {/* South Asia */}
+                        <optgroup label="South Asia">
+                          <option value="🇮🇳 India">🇮🇳 India</option>
+                          <option value="🇧🇩 Bangladesh">🇧🇩 Bangladesh</option>
+                          <option value="🇱🇰 Sri Lanka">🇱🇰 Sri Lanka</option>
+                          <option value="🇳🇵 Nepal">🇳🇵 Nepal</option>
+                          <option value="🇵🇰 Pakistan">🇵🇰 Pakistan</option>
+                        </optgroup>
+                        {/* Middle East */}
+                        <optgroup label="Middle East">
+                          <option value="🇦🇪 UAE">🇦🇪 UAE</option>
+                          <option value="🇸🇦 Saudi Arabia">🇸🇦 Saudi Arabia</option>
+                          <option value="🇶🇦 Qatar">🇶🇦 Qatar</option>
+                          <option value="🇰🇼 Kuwait">🇰🇼 Kuwait</option>
+                          <option value="🇧🇭 Bahrain">🇧🇭 Bahrain</option>
+                          <option value="🇴🇲 Oman">🇴🇲 Oman</option>
+                          <option value="🇮🇱 Israel">🇮🇱 Israel</option>
+                          <option value="🇹🇷 Turkey">🇹🇷 Turkey</option>
+                        </optgroup>
+                        {/* Americas */}
+                        <optgroup label="Americas">
+                          <option value="🇺🇸 United States">🇺🇸 United States</option>
+                          <option value="🇨🇦 Canada">🇨🇦 Canada</option>
+                          <option value="🇲🇽 Mexico">🇲🇽 Mexico</option>
+                          <option value="🇧🇷 Brazil">🇧🇷 Brazil</option>
+                          <option value="🇦🇷 Argentina">🇦🇷 Argentina</option>
+                          <option value="🇨🇱 Chile">🇨🇱 Chile</option>
+                          <option value="🇨🇴 Colombia">🇨🇴 Colombia</option>
+                        </optgroup>
+                        {/* Europe */}
+                        <optgroup label="Europe">
+                          <option value="🇬🇧 United Kingdom">🇬🇧 United Kingdom</option>
+                          <option value="🇩🇪 Germany">🇩🇪 Germany</option>
+                          <option value="🇫🇷 France">🇫🇷 France</option>
+                          <option value="🇮🇹 Italy">🇮🇹 Italy</option>
+                          <option value="🇪🇸 Spain">🇪🇸 Spain</option>
+                          <option value="🇳🇱 Netherlands">🇳🇱 Netherlands</option>
+                          <option value="🇧🇪 Belgium">🇧🇪 Belgium</option>
+                          <option value="🇨🇭 Switzerland">🇨🇭 Switzerland</option>
+                          <option value="🇦🇹 Austria">🇦🇹 Austria</option>
+                          <option value="🇸🇪 Sweden">🇸🇪 Sweden</option>
+                          <option value="🇳🇴 Norway">🇳🇴 Norway</option>
+                          <option value="🇩🇰 Denmark">🇩🇰 Denmark</option>
+                          <option value="🇫🇮 Finland">🇫🇮 Finland</option>
+                          <option value="🇵🇱 Poland">🇵🇱 Poland</option>
+                          <option value="🇵🇹 Portugal">🇵🇹 Portugal</option>
+                          <option value="🇮🇪 Ireland">🇮🇪 Ireland</option>
+                          <option value="🇬🇷 Greece">🇬🇷 Greece</option>
+                          <option value="🇷🇺 Russia">🇷🇺 Russia</option>
+                          <option value="🇺🇦 Ukraine">🇺🇦 Ukraine</option>
+                        </optgroup>
+                        {/* Africa */}
+                        <optgroup label="Africa">
+                          <option value="🇿🇦 South Africa">🇿🇦 South Africa</option>
+                          <option value="🇳🇬 Nigeria">🇳🇬 Nigeria</option>
+                          <option value="🇰🇪 Kenya">🇰🇪 Kenya</option>
+                          <option value="🇪🇬 Egypt">🇪🇬 Egypt</option>
+                          <option value="🇬🇭 Ghana">🇬🇭 Ghana</option>
+                        </optgroup>
+                        {/* Oceania */}
+                        <optgroup label="Oceania">
+                          <option value="🇦🇺 Australia">🇦🇺 Australia</option>
+                          <option value="🇳🇿 New Zealand">🇳🇿 New Zealand</option>
+                        </optgroup>
                       </select>
                     </div>
                     <div className="flex gap-2">
