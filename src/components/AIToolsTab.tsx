@@ -57,6 +57,7 @@ const TravelPlannerTool = lazy(() => import("./tools/TravelPlannerTool").then(m 
 const FashionDesignerTool = lazy(() => import("./tools/FashionDesignerTool").then(m => ({ default: m.FashionDesignerTool })));
 
 import { ToolCardCompact } from "./ToolCardCompact";
+import { FeatureRegistry } from "./FeatureRegistry";
 import { AIChatbot } from "./AIChatbot";
 import { ReferralSection } from "./ReferralSection";
 import { LowCreditAlert } from "./LowCreditAlert";
@@ -431,6 +432,9 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                 <p className="text-sm text-muted-foreground font-myanmar">"{searchQuery}" နှင့် ကိုက်ညီသော tool မရှိပါ</p>
               </div>
             )}
+
+            {/* Feature Registry */}
+            <FeatureRegistry />
 
             {/* Referral */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
