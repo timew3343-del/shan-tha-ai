@@ -152,13 +152,13 @@ serve(async (req) => {
     );
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: claims, error: claimsError } = await supabaseAdmin.auth.getClaims(token);
-    if (claimsError || !claims?.claims?.sub) {
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+    if (userError || !user) {
       return new Response(JSON.stringify({ error: "Invalid token" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const userId = claims.claims.sub;
+    const userId = user.id;
 
     let body: any;
     try { body = await req.json(); } catch {

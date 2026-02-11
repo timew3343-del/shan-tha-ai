@@ -17,13 +17,13 @@ serve(async (req) => {
 
     const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const token = authHeader.replace("Bearer ", "");
-    const { data: claims, error: claimsError } = await supabaseAdmin.auth.getClaims(token);
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
 
-    if (claimsError || !claims?.claims?.sub) {
+    if (userError || !user) {
       return new Response(JSON.stringify({ error: "Invalid token" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const userId = claims.claims.sub as string;
+    const userId = user.id;
     const { imageBase64, backgroundPrompt, backgroundId } = await req.json();
 
     if (!imageBase64) {

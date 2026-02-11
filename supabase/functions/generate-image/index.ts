@@ -52,17 +52,17 @@ serve(async (req) => {
 
     // Verify JWT and get user
     const token = authHeader.replace("Bearer ", "");
-    const { data: claims, error: claimsError } = await supabaseAdmin.auth.getClaims(token);
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     
-    if (claimsError || !claims?.claims?.sub) {
-      console.error("Auth error:", claimsError);
+    if (userError || !user) {
+      console.error("Auth error:", userError);
       return new Response(
         JSON.stringify({ error: "Invalid or expired token" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const userId = claims.claims.sub;
+    const userId = user.id;
     console.log(`User ${userId} requesting image generation`);
 
     // Parse and validate request body

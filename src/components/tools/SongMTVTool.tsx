@@ -48,6 +48,24 @@ const MOOD_OPTIONS = [
   { value: "epic", label: "🏔️ ကြီးကျယ်" },
 ];
 
+const LANGUAGE_OPTIONS = [
+  { value: "my", label: "🇲🇲 မြန်မာ" },
+  { value: "en", label: "🇺🇸 English" },
+  { value: "th", label: "🇹🇭 Thai" },
+  { value: "ko", label: "🇰🇷 Korean" },
+  { value: "ja", label: "🇯🇵 Japanese" },
+  { value: "zh", label: "🇨🇳 Chinese" },
+];
+
+const MTV_STYLE_OPTIONS = [
+  { value: "cartoon", label: "🎨 ကာတွန်း" },
+  { value: "3d", label: "🧊 3D Animation" },
+  { value: "realistic", label: "👤 လူပုံစံ" },
+  { value: "anime", label: "🌸 Anime" },
+  { value: "abstract", label: "🎭 Abstract Art" },
+  { value: "cinematic", label: "🎬 Cinematic" },
+];
+
 export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
   const { toast } = useToast();
   const { credits, refetch: refetchCredits } = useCredits(userId);
@@ -58,6 +76,9 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
   const [topic, setTopic] = useState("");
   const [genre, setGenre] = useState("pop");
   const [mood, setMood] = useState("happy");
+  const [language, setLanguage] = useState("my");
+  const [mtvStyle, setMtvStyle] = useState("cartoon");
+  const [showSubtitles, setShowSubtitles] = useState(true);
   const [audioFile, setAudioFile] = useState<string | null>(null);
   const [audioFileName, setAudioFileName] = useState("");
 
