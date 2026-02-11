@@ -60,7 +60,6 @@ export const AdWatchModal = ({
     }
 
     if (!adScriptCode) {
-      // Fallback: show placeholder if no script configured
       const placeholder = document.createElement('div');
       placeholder.className = 'text-center text-xs text-muted-foreground p-4';
       placeholder.textContent = 'ကြော်ငြာ ကုတ် မထည့်ရသေးပါ (Admin > Adsterra)';
@@ -68,33 +67,40 @@ export const AdWatchModal = ({
       return;
     }
 
-    // Parse and inject the script code from admin settings
-    const wrapper = document.createElement('div');
-    wrapper.innerHTML = adScriptCode;
+    // Add visual ad-active indicator (works for all ad types including popunder/social bar)
+    const adActiveDiv = document.createElement('div');
+    adActiveDiv.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:200px;gap:12px;';
+    adActiveDiv.innerHTML = `
+      <div style="width:60px;height:60px;border:3px solid rgba(255,193,7,0.3);border-top-color:#ffc107;border-radius:50%;animation:spin 1s linear infinite;"></div>
+      <p style="font-size:13px;color:#ffc107;font-weight:600;">📺 ကြော်ငြာ ဖွင့်နေသည်...</p>
+      <p style="font-size:11px;color:rgba(255,255,255,0.5);">ကြော်ငြာကြည့်နေစဉ် Timer ဆက်သွားပါမည်</p>
+      <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+    `;
+    adContainerRef.current.appendChild(adActiveDiv);
 
-    // Extract and re-create script tags so they actually execute
-    const scripts = wrapper.querySelectorAll('script');
-    const nonScriptContent = adScriptCode.replace(/<script[\s\S]*?<\/script>/gi, '');
-    
-    // Add non-script HTML content first
-    if (nonScriptContent.trim()) {
+    // Parse and inject the ad script code
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = adScriptCode;
+
+    // Extract non-script HTML content
+    const nonScriptContent = adScriptCode.replace(/<script[\s\S]*?<\/script>/gi, '').trim();
+    if (nonScriptContent) {
       const htmlDiv = document.createElement('div');
       htmlDiv.innerHTML = nonScriptContent;
       adContainerRef.current.appendChild(htmlDiv);
     }
 
-    // Then inject scripts one by one
+    // Inject scripts so they execute
+    const scripts = tempDiv.querySelectorAll('script');
     scripts.forEach(originalScript => {
       const newScript = document.createElement('script');
-      // Copy attributes
       Array.from(originalScript.attributes).forEach(attr => {
         newScript.setAttribute(attr.name, attr.value);
       });
-      // Copy inline content
       if (originalScript.textContent) {
         newScript.textContent = originalScript.textContent;
       }
-      adContainerRef.current?.appendChild(newScript);
+      document.body.appendChild(newScript); // Append to body for better execution context
     });
   }, [adScriptCode]);
 
