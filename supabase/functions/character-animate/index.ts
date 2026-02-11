@@ -31,17 +31,17 @@ serve(async (req) => {
 
     // Verify JWT and get user ID
     const token = authHeader.replace("Bearer ", "");
-    const { data: claims, error: claimsError } = await supabaseAdmin.auth.getClaims(token);
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
 
-    if (claimsError || !claims?.claims?.sub) {
-      console.error("JWT verification failed:", claimsError);
+    if (userError || !user) {
+      console.error("JWT verification failed:", userError);
       return new Response(
         JSON.stringify({ success: false, error: "Invalid or expired token" }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
       );
     }
 
-    const userId = claims.claims.sub as string;
+    const userId = user.id;
     console.log(`Authenticated user: ${userId}`);
 
     // Check maintenance mode
