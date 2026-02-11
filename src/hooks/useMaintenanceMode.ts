@@ -1,22 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-export interface SystemSettings {
-  is_maintenance_mode: boolean;
-  replicate_api_token: string;
-  stripe_publishable_key: string;
-  stripe_secret_key: string;
-}
-
-const DEFAULT_SETTINGS: SystemSettings = {
-  is_maintenance_mode: false,
-  replicate_api_token: "",
-  stripe_publishable_key: "",
-  stripe_secret_key: "",
-};
-
 export const useMaintenanceMode = () => {
-  const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
+  const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchSettings = useCallback(async () => {
@@ -24,38 +10,15 @@ export const useMaintenanceMode = () => {
       const { data, error } = await supabase
         .from("app_settings")
         .select("key, value")
-        .in("key", [
-          "is_maintenance_mode",
-          "replicate_api_token",
-          "stripe_publishable_key",
-          "stripe_secret_key",
-        ]);
+        .eq("key", "is_maintenance_mode")
+        .maybeSingle();
 
       if (error) {
         console.error("Error fetching maintenance settings:", error);
         return;
       }
 
-      if (data && data.length > 0) {
-        const loadedSettings: Partial<SystemSettings> = {};
-        data.forEach((setting) => {
-          switch (setting.key) {
-            case "is_maintenance_mode":
-              loadedSettings.is_maintenance_mode = setting.value === "true";
-              break;
-            case "replicate_api_token":
-              loadedSettings.replicate_api_token = setting.value || "";
-              break;
-            case "stripe_publishable_key":
-              loadedSettings.stripe_publishable_key = setting.value || "";
-              break;
-            case "stripe_secret_key":
-              loadedSettings.stripe_secret_key = setting.value || "";
-              break;
-          }
-        });
-        setSettings((prev) => ({ ...prev, ...loadedSettings }));
-      }
+      setIsMaintenanceMode(data?.value === "true");
     } catch (error) {
       console.error("Error fetching maintenance settings:", error);
     } finally {
@@ -66,7 +29,6 @@ export const useMaintenanceMode = () => {
   useEffect(() => {
     fetchSettings();
 
-    // Subscribe to realtime changes on app_settings
     const channel = supabase
       .channel("maintenance-settings")
       .on(
@@ -75,11 +37,9 @@ export const useMaintenanceMode = () => {
           event: "*",
           schema: "public",
           table: "app_settings",
-          filter: `key=in.(is_maintenance_mode,replicate_api_token,stripe_publishable_key,stripe_secret_key)`,
+          filter: `key=eq.is_maintenance_mode`,
         },
-        (payload) => {
-          console.log("Settings changed:", payload);
-          // Refetch settings when any relevant setting changes
+        () => {
           fetchSettings();
         }
       )
@@ -90,7 +50,7 @@ export const useMaintenanceMode = () => {
     };
   }, [fetchSettings]);
 
-  const updateSetting = async (key: keyof SystemSettings, value: string | boolean) => {
+  const updateSetting = async (key: string, value: string | boolean) => {
     try {
       const stringValue = typeof value === "boolean" ? value.toString() : value;
       
@@ -100,7 +60,9 @@ export const useMaintenanceMode = () => {
 
       if (error) throw error;
 
-      setSettings((prev) => ({ ...prev, [key]: value }));
+      if (key === "is_maintenance_mode") {
+        setIsMaintenanceMode(value === true || value === "true");
+      }
       return true;
     } catch (error) {
       console.error(`Error updating ${key}:`, error);
@@ -109,8 +71,8 @@ export const useMaintenanceMode = () => {
   };
 
   return {
-    isMaintenanceMode: settings.is_maintenance_mode,
-    settings,
+    isMaintenanceMode,
+    settings: { is_maintenance_mode: isMaintenanceMode },
     isLoading,
     updateSetting,
     refetch: fetchSettings,

@@ -56,15 +56,15 @@ export const TopUp = () => {
   const packages = paymentMethod === "thai_bank" ? thbPackages : mmkPackages;
 
   // Check if Stripe is configured
-  useEffect(() => {
+   useEffect(() => {
     const checkStripe = async () => {
       try {
         const { data } = await supabase
           .from("app_settings")
           .select("value")
-          .eq("key", "stripe_secret_key")
+          .eq("key", "stripe_enabled")
           .maybeSingle();
-        setStripeAvailable(!!(data?.value && data.value.length > 10 && !data.value.startsWith("••••")));
+        setStripeAvailable(data?.value === "true");
       } catch { setStripeAvailable(false); }
     };
     checkStripe();
