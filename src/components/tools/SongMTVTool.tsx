@@ -8,6 +8,8 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Select,
@@ -50,6 +52,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
   const { toast } = useToast();
   const { credits, refetch: refetchCredits } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { showGuide, saveOutput } = useToolOutput("song_mtv", "Song & MTV");
 
   const [serviceOption, setServiceOption] = useState<ServiceOption>("song_only");
   const [topic, setTopic] = useState("");
@@ -176,6 +179,8 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
       if (result.lyrics) setResultLyrics(result.lyrics);
       setProgress(100);
       refetchCredits();
+      if (result.video) saveOutput("video", result.video);
+      else if (result.audio) saveOutput("audio", result.audio);
 
       toast({ title: "အောင်မြင်ပါသည် 🎵", description: `${result.creditsUsed} Credits အသုံးပြုပြီးပါပြီ` });
     } catch (error: any) {
@@ -196,6 +201,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4 p-4 pb-24">
       <ToolHeader title="AI သီချင်းနှင့် MTV" subtitle="AI ဖြင့် သီချင်းနှင့် MTV ဗီဒီယို ဖန်တီးရန်" onBack={onBack} />
+      <FirstOutputGuide toolName="Song & MTV" show={showGuide} steps={["အမျိုးအစား ရွေးပါ (Song/MTV)", "အကြောင်းအရာ ရေးပါ", "ဖန်တီးမည် နှိပ်ပါ"]} />
 
       {/* Service Options */}
       <div className="grid grid-cols-3 gap-2">

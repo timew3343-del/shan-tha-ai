@@ -8,6 +8,8 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion, AnimatePresence } from "framer-motion";
 import { THEME_CATEGORIES, type Theme } from "./PhotoshootThemes";
 
@@ -33,6 +35,7 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
   const { toast } = useToast();
   const { credits, refetch: refetchCredits } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { showGuide, saveOutput } = useToolOutput("social_media_manager", "Social Media Manager");
   const [viewMode, setViewMode] = useState<ViewMode>("upload");
   const [images, setImages] = useState<string[]>([]);
   const [businessDesc, setBusinessDesc] = useState("");
@@ -121,6 +124,7 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
       setEnhancedImages(result.enhancedImages || []);
       setViewMode("calendar");
       refetchCredits();
+      saveOutput("text", `Content Calendar for ${businessDesc.substring(0, 30)}...`);
 
       toast({ title: "အောင်မြင်ပါသည်", description: `${numDays} ရက်စာ Content Calendar ဖန်တီးပြီးပါပြီ` });
     } catch (error: any) {
@@ -168,6 +172,7 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
       setPhotoshootResult(result.resultImageUrl);
       setViewMode("photoshoot-result");
       refetchCredits();
+      if (result.resultImageUrl) saveOutput("image", result.resultImageUrl);
 
       toast({ title: "အောင်မြင်ပါသည်", description: "Professional Photoshoot ပြီးပါပြီ" });
     } catch (error: any) {
@@ -202,6 +207,7 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
     return (
       <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4 p-4 pb-24">
         <ToolHeader title="AI Social Media Manager" subtitle="Content Calendar + Professional Photoshoot" onBack={onBack} />
+        <FirstOutputGuide toolName="Social Media Manager" show={showGuide} steps={["ပစ္စည်းပုံများ တင်ပါ", "လုပ်ငန်းအကြောင်း ရေးပါ", "Calendar သို့မဟုတ် Photoshoot ရွေးပါ"]} />
 
         {/* Image Upload */}
         <div className="gradient-card rounded-2xl p-4 border border-primary/20">

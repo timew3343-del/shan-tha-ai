@@ -8,6 +8,8 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 
@@ -19,6 +21,7 @@ export const BabyNamerTool = ({ userId, onBack }: Props) => {
   const { toast } = useToast();
   const { credits, refetch } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { showGuide, saveOutput } = useToolOutput("baby_namer", "Baby Namer");
   const [birthdate, setBirthdate] = useState("");
   const [birthDay, setBirthDay] = useState("တနင်္လာ");
   const [category, setCategory] = useState("person");
@@ -55,6 +58,7 @@ Based on ${birthDay} (${category === "person" ? "ကလေး" : "စီးပ�
       if (data?.error) throw new Error(data.error);
       setResult(data?.result);
       refetch();
+      if (data?.result) saveOutput("text", data.result);
       toast({ title: "အောင်မြင်ပါသည်!", description: `နာမည်များ ဖန်တီးပြီးပါပြီ (${data.creditsUsed} Cr)` });
     } catch (e: any) {
       toast({ title: "အမှားရှိပါသည်", description: e.message, variant: "destructive" });

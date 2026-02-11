@@ -8,6 +8,8 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion } from "framer-motion";
 import {
   Select,
@@ -43,6 +45,7 @@ export const AutoAdTool = ({ userId, onBack }: AutoAdToolProps) => {
   const { toast } = useToast();
   const { credits, refetch: refetchCredits } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { showGuide, saveOutput } = useToolOutput("auto_ad", "Auto ကြော်ငြာ");
 
   const [images, setImages] = useState<string[]>([]);
   const [productDetails, setProductDetails] = useState("");
@@ -161,6 +164,7 @@ export const AutoAdTool = ({ userId, onBack }: AutoAdToolProps) => {
       setResultVideos(result.videos || []);
       setProgress(100);
       refetchCredits();
+      if (result.videos?.length) saveOutput("video", result.videos[0].url);
 
       toast({ title: "အောင်မြင်ပါသည် 🎬", description: `${result.creditsUsed} Credits အသုံးပြုပြီးပါပြီ` });
     } catch (error: any) {
@@ -175,6 +179,7 @@ export const AutoAdTool = ({ userId, onBack }: AutoAdToolProps) => {
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4 p-4 pb-24">
       <ToolHeader title="Auto ကြော်ငြာအပ်ရန်" subtitle="AI tools အကုန်လုံးကို ခြုံကာ အော်တိုကြော်ငြာ ထုတ်ပေးမည်" onBack={onBack} />
+      <FirstOutputGuide toolName="Auto ကြော်ငြာ" show={showGuide} steps={["ပစ္စည်းပုံများ တင်ပါ", "အသေးစိတ် ရေးပါ", "Platform ရွေးပါ", "ကြော်ငြာ ထုတ်ပါ"]} />
 
       {/* Image Upload */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">

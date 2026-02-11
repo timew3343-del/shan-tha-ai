@@ -7,6 +7,8 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion } from "framer-motion";
 
 interface Props { userId?: string; onBack: () => void; }
@@ -24,6 +26,7 @@ export const StyleTransferTool = ({ userId, onBack }: Props) => {
   const { toast } = useToast();
   const { credits, refetch } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { showGuide, saveOutput } = useToolOutput("style_transfer", "Style Transfer");
   const [image, setImage] = useState<string | null>(null);
   const [style, setStyle] = useState("oil_paint");
   const [result, setResult] = useState<string | null>(null);
@@ -67,6 +70,7 @@ export const StyleTransferTool = ({ userId, onBack }: Props) => {
       if (data?.error) throw new Error(data.error);
       setResult(data?.imageUrl);
       refetch();
+      if (data?.imageUrl) saveOutput("image", data.imageUrl);
       toast({ title: "အောင်မြင်ပါသည်!", description: `Art Style ပြောင်းလဲပြီးပါပြီ (${data.creditsUsed} Cr)` });
     } catch (e: any) {
       toast({ title: "အမှားရှိပါသည်", description: e.message, variant: "destructive" });

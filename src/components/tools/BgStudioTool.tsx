@@ -8,6 +8,8 @@ import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
 import { Watermark, addWatermarkToImage } from "@/components/Watermark";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion } from "framer-motion";
 
 interface BgStudioToolProps {
@@ -30,6 +32,7 @@ export const BgStudioTool = ({ userId, onBack }: BgStudioToolProps) => {
   const { toast } = useToast();
   const { credits, refetch: refetchCredits } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { showGuide, saveOutput } = useToolOutput("bg_studio", "Background Studio");
   const [sourceImage, setSourceImage] = useState<string | null>(null);
   const [selectedBg, setSelectedBg] = useState<string>("clean_white");
   const [resultImage, setResultImage] = useState<string | null>(null);
@@ -122,6 +125,7 @@ export const BgStudioTool = ({ userId, onBack }: BgStudioToolProps) => {
       setResultImage(result.image);
       setProgress(100);
       refetchCredits();
+      saveOutput("image", result.image);
 
       toast({ title: "အောင်မြင်ပါသည် ✨", description: `နောက်ခံပြောင်းပြီးပါပြီ (${result.creditsUsed} Credit)` });
     } catch (error: any) {
@@ -136,6 +140,7 @@ export const BgStudioTool = ({ userId, onBack }: BgStudioToolProps) => {
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4 p-4 pb-24">
       <ToolHeader title="AI Background Studio" subtitle="ပစ္စည်းပုံထည့် အော်တိုနောက်ခံပြောင်း" onBack={onBack} />
+      <FirstOutputGuide toolName="Background Studio" show={showGuide} steps={["ပစ္စည်းပုံ တင်ပါ", "နောက်ခံ ရွေးပါ", "နောက်ခံပြောင်း နှိပ်ပါ"]} />
 
       {/* Image Upload */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">

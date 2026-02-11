@@ -7,6 +7,8 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion } from "framer-motion";
 
 interface Props { userId?: string; onBack: () => void; }
@@ -15,6 +17,7 @@ export const LegalAdvisorTool = ({ userId, onBack }: Props) => {
   const { toast } = useToast();
   const { credits, refetch } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { showGuide, saveOutput } = useToolOutput("legal_advisor", "Legal Advisor");
   const [question, setQuestion] = useState("");
   const [docImage, setDocImage] = useState<string | null>(null);
   const [result, setResult] = useState("");
@@ -43,6 +46,7 @@ export const LegalAdvisorTool = ({ userId, onBack }: Props) => {
       if (error) throw error;
       if (data?.error) { toast({ title: "Error", description: data.error, variant: "destructive" }); return; }
       setResult(data?.result || ""); refetch();
+      if (data?.result) saveOutput("text", data.result);
       toast({ title: "ဥပဒေ အကြံပြုချက် ရရှိပါပြီ!" });
     } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
     finally { setIsLoading(false); }

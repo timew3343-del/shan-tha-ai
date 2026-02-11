@@ -8,6 +8,8 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion } from "framer-motion";
 
 interface Props { userId?: string; onBack: () => void; }
@@ -35,6 +37,7 @@ export const InteriorDesignTool = ({ userId, onBack }: Props) => {
   const { toast } = useToast();
   const { credits, refetch } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { showGuide, saveOutput } = useToolOutput("interior_design", "Interior Design");
   const [image, setImage] = useState<string | null>(null);
   const [style, setStyle] = useState("modern minimalist");
   const [roomType, setRoomType] = useState("living room");
@@ -58,6 +61,7 @@ export const InteriorDesignTool = ({ userId, onBack }: Props) => {
       if (error) throw error;
       if (data?.error) { toast({ title: "Error", description: data.error, variant: "destructive" }); return; }
       setResult(data?.imageUrl); refetch();
+      if (data?.imageUrl) saveOutput("image", data.imageUrl);
       toast({ title: "ဒီဇိုင်း ဖန်တီးပြီးပါပြီ!" });
     } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
     finally { setIsLoading(false); }
@@ -66,6 +70,7 @@ export const InteriorDesignTool = ({ userId, onBack }: Props) => {
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4 p-4 pb-24">
       <ToolHeader title="AI အိမ်တွင်းအလှဆင် ဒီဇိုင်နာ" subtitle="အခန်းပုံတင်ပြီး AI ဖြင့် ပြန်လည်ဒီဇိုင်းဆွဲခြင်း" onBack={onBack} />
+      <FirstOutputGuide toolName="Interior Design" show={showGuide} steps={["အခန်းပုံ တင်ပါ", "Style နှင့် အခန်းအမျိုးအစား ရွေးပါ", "ဒီဇိုင်း ဖန်တီးမည် နှိပ်ပါ"]} />
       <div id="input-area" className="gradient-card rounded-2xl p-4 border border-primary/20 space-y-4">
         <div>
           <label className="block text-sm font-medium text-primary mb-2 font-myanmar">အခန်းပုံ တင်ပါ</label>

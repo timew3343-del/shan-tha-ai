@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { ToolHeader } from "../ToolHeader";
+import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
@@ -79,6 +81,7 @@ export const VideoCopywritingTool = ({ userId, onBack }: VideoCopywritingToolPro
   const { toast } = useToast();
   const { costs } = useCreditCosts();
   const { credits, refetch: refetchCredits } = useCredits(userId);
+  const { showGuide, saveOutput } = useToolOutput("video_copywriting", "Video Copywriting");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
@@ -256,6 +259,7 @@ Format the output professionally with clear sections.`;
         }
         setProgress(100);
         refetchCredits();
+        saveOutput("text", data.reply);
         toast({ title: "✨ Video Copywriting ပြီးပါပြီ!" });
       } else {
         throw new Error(data?.error || "Generation failed");
@@ -299,6 +303,7 @@ Format the output professionally with clear sections.`;
         subtitle="AI ဖြင့် ဗီဒီယို ကြော်ငြာ ဖန်တီးမည်"
         onBack={onBack}
       />
+      <FirstOutputGuide toolName="Video Copywriting" show={showGuide} steps={["Video တင်ပါ", "Duration ရွေးပါ", "Generate နှိပ်ပါ"]} />
 
       {/* Upload Area */}
       {!videoFile ? (

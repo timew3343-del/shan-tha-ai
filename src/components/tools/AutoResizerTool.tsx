@@ -1,5 +1,7 @@
 import { useState, useRef } from "react";
-import { ToolHeader } from "../ToolHeader";
+import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Upload, Download, Smartphone, Monitor, Square, Loader2, X } from "lucide-react";
@@ -19,6 +21,7 @@ const PRESETS: { ratio: AspectRatio; label: string; platform: string; icon: type
 ];
 
 export const AutoResizerTool = ({ onBack }: AutoResizerToolProps) => {
+  const { showGuide, saveOutput } = useToolOutput("auto_resizer", "Auto Resizer");
   const { toast } = useToast();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -109,6 +112,7 @@ export const AutoResizerTool = ({ onBack }: AutoResizerToolProps) => {
 
       const url = URL.createObjectURL(blob);
       setResultUrl(url);
+      saveOutput("image", url);
 
       toast({ title: `${preset.label} format သို့ ပြောင်းပြီးပါပြီ!` });
     } catch (error) {
@@ -144,6 +148,7 @@ export const AutoResizerTool = ({ onBack }: AutoResizerToolProps) => {
       className="p-4 pb-24 space-y-4"
     >
       <ToolHeader title="Auto Resizer" subtitle="TikTok / YouTube / Facebook format" onBack={onBack} />
+      <FirstOutputGuide toolName="Auto Resizer" show={showGuide} steps={["ပုံတင်ပါ", "Format ရွေးပါ", "Resize လုပ်ပါ"]} />
 
       {/* Format Selection */}
       <div className="grid grid-cols-3 gap-2">

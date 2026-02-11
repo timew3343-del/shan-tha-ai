@@ -7,6 +7,8 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion } from "framer-motion";
 
 interface Props { userId?: string; onBack: () => void; }
@@ -15,6 +17,7 @@ export const ExteriorDesignTool = ({ userId, onBack }: Props) => {
   const { toast } = useToast();
   const { credits, refetch } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { showGuide, saveOutput } = useToolOutput("exterior_design", "Exterior Design");
   const [image, setImage] = useState<string | null>(null);
   const [style, setStyle] = useState("modern");
   const [result, setResult] = useState<string | null>(null);
@@ -56,6 +59,7 @@ export const ExteriorDesignTool = ({ userId, onBack }: Props) => {
       if (data?.error) throw new Error(data.error);
       setResult(data?.imageUrl);
       refetch();
+      if (data?.imageUrl) saveOutput("image", data.imageUrl);
       toast({ title: "အောင်မြင်ပါသည်!", description: `အိမ်ပြင်ပ ဒီဇိုင်း ဖန်တီးပြီးပါပြီ (${data.creditsUsed} Cr)` });
     } catch (e: any) {
       toast({ title: "အမှားရှိပါသည်", description: e.message, variant: "destructive" });
@@ -65,6 +69,7 @@ export const ExteriorDesignTool = ({ userId, onBack }: Props) => {
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4 p-4 pb-24">
       <ToolHeader title="AI အိမ်မက်အိမ် ဒီဇိုင်နာ - အပြင်ပိုင်း" subtitle="ခေတ်မီအိမ် ပြင်ပ ဒီဇိုင်း ဖန်တီးခြင်း" onBack={onBack} />
+      <FirstOutputGuide toolName="Exterior Design" show={showGuide} steps={["မြေကွက်/အိမ်ဟောင်းပုံ တင်ပါ", "Style ရွေးပါ", "ဒီဇိုင်း ဖန်တီးမည် နှိပ်ပါ"]} />
 
       <div className="gradient-card rounded-2xl p-4 border border-primary/20 space-y-3">
         <label className="block text-sm font-medium text-primary font-myanmar">မြေကွက် / အိမ်ဟောင်း ဓာတ်ပုံ</label>

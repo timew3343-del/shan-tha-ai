@@ -1,5 +1,7 @@
 import { useState, useRef } from "react";
-import { ToolHeader } from "../ToolHeader";
+import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -18,6 +20,7 @@ export const SceneSummarizerTool = ({ userId, onBack }: SceneSummarizerToolProps
   const { toast } = useToast();
   const { costs } = useCreditCosts();
   const { credits, refetch: refetchCredits } = useCredits(userId);
+  const { showGuide, saveOutput } = useToolOutput("scene_summarizer", "Video Summarizer");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
@@ -135,6 +138,7 @@ export const SceneSummarizerTool = ({ userId, onBack }: SceneSummarizerToolProps
         });
 
         refetchCredits();
+        saveOutput("text", data.reply);
         toast({ title: "✅ ခွဲခြမ်းစိတ်ဖြာပြီးပါပြီ!", description: `${creditCost} Credits နုတ်ယူပြီးပါပြီ` });
       } else {
         throw new Error(data?.error || "Analysis failed");
@@ -178,6 +182,7 @@ export const SceneSummarizerTool = ({ userId, onBack }: SceneSummarizerToolProps
         subtitle="Video Summary & Recap" 
         onBack={onBack} 
       />
+      <FirstOutputGuide toolName="Video Summarizer" show={showGuide} steps={["Video တင်ပါ", "Summarize နှိပ်ပါ"]} />
 
       {/* Upload Area */}
       {!videoFile ? (

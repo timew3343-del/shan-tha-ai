@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
-import { ToolHeader } from "../ToolHeader";
+import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
@@ -57,6 +59,7 @@ export const StoryVideoTool = ({ userId, onBack }: StoryVideoToolProps) => {
   const { toast } = useToast();
   const { costs } = useCreditCosts();
   const { credits, refetch: refetchCredits } = useCredits(userId);
+  const { showGuide, saveOutput } = useToolOutput("story_video", "Story Video");
 
   const [story, setStory] = useState("");
   const [sceneCount, setSceneCount] = useState(5);
@@ -136,6 +139,9 @@ export const StoryVideoTool = ({ userId, onBack }: StoryVideoToolProps) => {
         setCharacterId(result.characterId || "");
         setProgress(100);
         refetchCredits();
+        if (result.scenes && result.scenes.length > 0 && result.scenes[0].image) {
+          saveOutput("image", result.scenes[0].image);
+        }
         toast({
           title: "✨ Story Video ပြီးပါပြီ!",
           description: `${result.scenes?.filter((s: GeneratedScene) => s.image).length} scenes generated (${result.creditsUsed} Credits)`,
@@ -175,6 +181,7 @@ export const StoryVideoTool = ({ userId, onBack }: StoryVideoToolProps) => {
         subtitle="AI ဖြင့် ပုံပြင်မှ ဗီဒီယို ဖန်တီးမည်"
         onBack={onBack}
       />
+      <FirstOutputGuide toolName="Story Video" show={showGuide} steps={["ပုံပြင် ရေးပါ", "Scene အရေအတွက် ရွေးပါ", "ဖန်တီးမည် နှိပ်ပါ"]} />
 
       {/* Story Input */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">

@@ -7,6 +7,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useCredits } from "@/hooks/useCredits";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion } from "framer-motion";
 
 interface Props { userId?: string; onBack: () => void; }
@@ -32,6 +34,7 @@ const INITIAL_SLOTS: Omit<ItemSlot, "image">[] = [
 export const VirtualTryOnTool = ({ userId, onBack }: Props) => {
   const { toast } = useToast();
   const { credits, refetch } = useCredits(userId);
+  const { showGuide, saveOutput } = useToolOutput("virtual_tryon", "Virtual Try-On");
   const [personImage, setPersonImage] = useState<string | null>(null);
   const [slots, setSlots] = useState<ItemSlot[]>(INITIAL_SLOTS.map(s => ({ ...s, image: null })));
   const [pose, setPose] = useState<"standing" | "sitting">("standing");
@@ -106,6 +109,7 @@ export const VirtualTryOnTool = ({ userId, onBack }: Props) => {
       }
       setResult(data?.imageUrl);
       refetch();
+      if (data?.imageUrl) saveOutput("image", data.imageUrl);
       toast({ title: "အောင်မြင်ပါသည်!", description: `${data.creditsUsed} Credits သုံးပြီးပါပြီ` });
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });

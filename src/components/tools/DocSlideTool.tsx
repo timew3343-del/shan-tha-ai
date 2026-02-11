@@ -9,6 +9,8 @@ import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { exportToPDF, exportToPPTX, exportToDOCX } from "@/lib/docExport";
 
 interface Section {
@@ -30,6 +32,7 @@ export const DocSlideTool = ({ userId, onBack }: DocSlideToolProps) => {
   const { toast } = useToast();
   const { credits, refetch: refetchCredits } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { showGuide, saveOutput } = useToolOutput("doc_slide_generator", "Doc & Slide Generator");
 
   const [content, setContent] = useState("");
   const [imageCount, setImageCount] = useState([5]);
@@ -141,6 +144,7 @@ export const DocSlideTool = ({ userId, onBack }: DocSlideToolProps) => {
       setStep("finished");
       setProgress(100);
       refetchCredits();
+      saveOutput("document", `${sectionsWithImages.length} slides generated about: ${content.substring(0, 50)}...`);
 
       toast({ title: "အောင်မြင်ပါသည်!", description: `${sectionsWithImages.length} sections ဖန်တီးပြီးပါပြီ` });
     } catch (error: any) {
@@ -191,6 +195,7 @@ export const DocSlideTool = ({ userId, onBack }: DocSlideToolProps) => {
         subtitle="AI ဖြင့် Document နှင့် Slide ဖန်တီးပါ"
         onBack={onBack}
       />
+      <FirstOutputGuide toolName="Doc & Slide Generator" show={showGuide} steps={["အကြောင်းအရာ ရေးပါ", "ပုံအရေအတွက် ရွေးပါ", "ဖန်တီးမည် နှိပ်ပါ"]} />
 
       {/* Input Section */}
       <div className="space-y-4">

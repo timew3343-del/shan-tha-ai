@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { ToolHeader } from "@/components/ToolHeader";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useToolOutput } from "@/hooks/useToolOutput";
 import { supabase } from "@/integrations/supabase/client";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { useCredits } from "@/hooks/useCredits";
@@ -36,6 +38,7 @@ export const YouTubeToTextTool = ({ userId, onBack }: YouTubeToTextToolProps) =>
   const { toast } = useToast();
   const { costs } = useCreditCosts();
   const { refetch: refetchCredits } = useCredits(userId);
+  const { showGuide, saveOutput } = useToolOutput("youtube_to_text", "YouTube → စာ");
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [language, setLanguage] = useState("my");
   const [transcribedText, setTranscribedText] = useState("");
@@ -143,6 +146,7 @@ export const YouTubeToTextTool = ({ userId, onBack }: YouTubeToTextToolProps) =>
         setProgress(100);
         setTranscribedText(data.text);
         refetchCredits();
+        saveOutput("text", data.text);
         toast({
           title: "အောင်မြင်ပါသည်",
           description: `စာသားပြောင်းပြီးပါပြီ (${data.creditsUsed} Credits)`,
