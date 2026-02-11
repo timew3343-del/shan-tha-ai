@@ -32,7 +32,7 @@
     {
       "name": "BG Studio",
       "category": "Multimedia",
-      "features": ["Product Background Change", "Auto Scene Matching", "Multiple Templates"]
+      "features": ["Product Background Change", "Auto Scene Matching", "Multiple Templates", "Photoshoot Themes"]
     },
     {
       "name": "Logo & Graphic Design",
@@ -82,7 +82,7 @@
     {
       "name": "Live AI Vision & Voice",
       "category": "Real-time AI",
-      "features": ["Real-time Camera AI", "Voice Interaction", "Live Scene Analysis"]
+      "features": ["Real-time Camera AI", "Voice Interaction", "Live Scene Analysis", "Camera Switching", "Audio Response"]
     },
     {
       "name": "AI Video Redesign",
@@ -115,9 +115,9 @@
       "features": ["50-scene Story Video", "Character Lock", "Scene Generation"]
     },
     {
-      "name": "Video Recap",
+      "name": "Video Recap / Scene Summarizer",
       "category": "Video",
-      "features": ["Video Summarization", "Key Scene Extraction"]
+      "features": ["Video Summarization", "Key Scene Extraction", "Image-based Scene Analysis"]
     },
     {
       "name": "Text-to-Speech / STT",
@@ -213,6 +213,31 @@
       "name": "AI Travel Planner",
       "category": "Lifestyle",
       "features": ["Trip Planning", "Itinerary Creation", "Budget Estimation"]
+    },
+    {
+      "name": "Character Animation",
+      "category": "Multimedia",
+      "features": ["Image-to-Video Animation", "Dance Animation", "Reference Video Motion Transfer", "MP4 Download"]
+    },
+    {
+      "name": "Auto Resizer",
+      "category": "Utility",
+      "features": ["Multi-platform Resize (TikTok, YouTube, FB)", "Smart Crop", "Aspect Ratio Conversion"]
+    },
+    {
+      "name": "AI Video Multi-Tool PRO",
+      "category": "Video",
+      "features": ["Copyright Bypass (Zoom, Mirror, Color Shift)", "Intro/Outro Stitching", "Logo Overlay", "Object Removal", "AI Transcription & Translation", "Auto-subtitles", "Multi-platform Source Fetch", "Aspect Ratio Adjustment", "AI Voiceover"]
+    },
+    {
+      "name": "Video Editor",
+      "category": "Video",
+      "features": ["Trim & Cut", "Speed Adjustment", "Zoom & Rotate", "Mirror Flip", "Text Overlay", "Filter Effects"]
+    },
+    {
+      "name": "AI Chatbot",
+      "category": "Real-time AI",
+      "features": ["General AI Chat", "Myanmar Context Awareness", "Knowledge Base Integration"]
     }
   ]
 }
