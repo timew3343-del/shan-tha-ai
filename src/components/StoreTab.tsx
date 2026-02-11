@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useOutputStore, StoredOutput } from "@/hooks/useOutputStore";
-import { Trash2, Image, Video, FileText, Music, Copy, Download, Package, Search } from "lucide-react";
+import { Trash2, Image, Video, FileText, Music, Copy, Download, Package, Search, Clock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -13,8 +13,12 @@ const typeIcons: Record<string, any> = {
   text: FileText, image: Image, video: Video, audio: Music, document: FileText,
 };
 
-export const StoreTab = () => {
-  const { outputs, removeOutput, clearAll } = useOutputStore();
+interface StoreTabProps {
+  userId?: string;
+}
+
+export const StoreTab = ({ userId }: StoreTabProps) => {
+  const { outputs, removeOutput, clearAll, isLoading } = useOutputStore(userId);
   const { toast } = useToast();
   const { t } = useLanguage();
   const [filter, setFilter] = useState<FilterType>("all");
@@ -40,10 +44,12 @@ export const StoreTab = () => {
   };
 
   const handleDownload = (output: StoredOutput) => {
-    if (output.type === "image" || output.type === "video") {
+    if (output.type === "image" || output.type === "video" || output.type === "audio") {
       const link = document.createElement("a");
-      link.href = output.content; link.download = `${output.toolName}-${output.id}`;
-      link.target = "_blank"; link.click();
+      link.href = output.fileUrl || output.content;
+      link.download = `${output.toolName}-${output.id}`;
+      link.target = "_blank";
+      link.click();
     } else {
       const blob = new Blob([output.content], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);
@@ -66,6 +72,22 @@ export const StoreTab = () => {
     return `${days} ${t('store.daysAgo')}`;
   };
 
+  const getDaysLeft = (expiresAt?: string) => {
+    if (!expiresAt) return null;
+    const exp = new Date(expiresAt);
+    const now = new Date();
+    const days = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    return days > 0 ? days : 0;
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4 p-4 pb-24">
       <div className="text-center pt-2">
@@ -74,6 +96,9 @@ export const StoreTab = () => {
           {t('store.title')}
         </h1>
         <p className="text-muted-foreground text-xs font-myanmar">{t('store.subtitle')}</p>
+        <p className="text-muted-foreground text-[10px] font-myanmar mt-1 flex items-center justify-center gap-1">
+          <Clock className="w-3 h-3" /> ၁၀ ရက်အတွင်း ဒေါင်းလိုက်ပါ - အလိုအလျောက် ဖျက်သိမ်းပါမည်
+        </p>
       </div>
 
       <div className="relative">
@@ -118,6 +143,7 @@ export const StoreTab = () => {
           <div className="space-y-3">
             {filtered.map((output, idx) => {
               const Icon = typeIcons[output.type] || FileText;
+              const daysLeft = getDaysLeft(output.expiresAt);
               return (
                 <motion.div key={output.id} layout initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}
@@ -130,11 +156,16 @@ export const StoreTab = () => {
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-xs font-semibold text-primary font-myanmar">{output.toolName}</span>
                         <span className="text-[10px] text-muted-foreground">{formatDate(output.createdAt)}</span>
+                        {daysLeft !== null && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${daysLeft <= 2 ? 'bg-destructive/10 text-destructive' : 'bg-primary/10 text-primary'}`}>
+                            {daysLeft}d left
+                          </span>
+                        )}
                       </div>
                       {output.type === "image" ? (
-                        <img src={output.content} alt={output.toolName} className="w-full max-h-48 object-cover rounded-xl mb-2" loading="lazy" />
+                        <img src={output.fileUrl || output.content} alt={output.toolName} className="w-full max-h-48 object-cover rounded-xl mb-2" loading="lazy" />
                       ) : output.type === "video" ? (
-                        <video src={output.content} controls className="w-full max-h-48 rounded-xl mb-2" />
+                        <video src={output.fileUrl || output.content} controls className="w-full max-h-48 rounded-xl mb-2" />
                       ) : (
                         <p className="text-xs text-foreground/80 line-clamp-4 font-myanmar whitespace-pre-wrap mb-2">{output.content}</p>
                       )}

@@ -144,7 +144,7 @@ const Index = () => {
       <div className="max-w-lg mx-auto">
         <MaintenanceBanner className="mx-4 mt-4" />
         {activeTab === "ai-tools" && <AIToolsTab userId={user.id} />}
-        {activeTab === "store" && <StoreTab />}
+        {activeTab === "store" && <StoreTab userId={user.id} />}
         {activeTab === "dos-donts" && <DosDontsTab />}
         {activeTab === "course" && <CourseTab userId={user.id} />}
       </div>
