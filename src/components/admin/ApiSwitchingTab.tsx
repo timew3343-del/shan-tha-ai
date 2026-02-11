@@ -57,12 +57,12 @@ const API_KEYS: ApiKeyConfig[] = [
     tasks: ["Copyright Check", "Music Detection"],
   },
   {
-    key: "goapi_suno",
-    label: "Goapi / Suno",
-    description: "AI Song Generation with Human Vocals, MTV Music",
-    settingKey: "goapi_suno_api_key",
-    toggleKey: "api_enabled_goapi_suno",
-    tasks: ["Song Generation", "Vocals", "MTV Audio"],
+    key: "sunoapi",
+    label: "SunoAPI.org",
+    description: "AI Song Generation with Human Vocals, MTV Music (Suno v4)",
+    settingKey: "sunoapi_org_key",
+    toggleKey: "api_enabled_sunoapi",
+    tasks: ["Song Generation", "Human Vocals", "MTV Audio", "Lyrics"],
   },
 ];
 
