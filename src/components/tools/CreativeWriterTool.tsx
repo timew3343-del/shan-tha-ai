@@ -10,6 +10,8 @@ import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
 import { motion } from "framer-motion";
+import { useToolOutput } from "@/hooks/useToolOutput";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
 
 interface Props { userId?: string; onBack: () => void; }
 
@@ -39,6 +41,7 @@ export const CreativeWriterTool = ({ userId, onBack }: Props) => {
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const cost = costs.creative_writer || 5;
+  const { showGuide, markAsLearned, saveOutput } = useToolOutput("creative-writer", "ကဗျာနှင့် ဝတ္ထုတို");
 
   const handleGenerate = async () => {
     if (!topic.trim() || !userId) return;
@@ -52,6 +55,7 @@ export const CreativeWriterTool = ({ userId, onBack }: Props) => {
       if (error) throw error;
       if (data?.error) { toast({ title: "Error", description: data.error, variant: "destructive" }); return; }
       setResult(data?.result || ""); refetch();
+      saveOutput("text", data?.result || "");
       toast({ title: "ဖန်တီးပြီးပါပြီ!" });
     } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
     finally { setIsLoading(false); }
@@ -66,6 +70,7 @@ export const CreativeWriterTool = ({ userId, onBack }: Props) => {
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4 p-4 pb-24">
       <ToolHeader title="AI ကဗျာနှင့် ဝတ္ထုတို ဖန်တီးသူ" subtitle="အရည်အသွေးမြင့် မြန်မာစာပေ ဖန်တီးပေးခြင်း" onBack={onBack} />
+      <FirstOutputGuide toolName="ကဗျာနှင့် ဝတ္ထုတို" steps={["အမျိုးအစားနှင့် ခံစားချက် ရွေးပါ", "ခေါင်းစဉ်/အကြောင်းအရာ ထည့်ပါ", "စာပေ ဖန်တီးမည် နှိပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
       <div id="input-area" className="gradient-card rounded-2xl p-4 border border-primary/20 space-y-3">
         <div id="settings-panel" className="grid grid-cols-2 gap-3">
           <div className="space-y-1">

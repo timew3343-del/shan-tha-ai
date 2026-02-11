@@ -8,6 +8,8 @@ import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
 import { motion } from "framer-motion";
+import { useToolOutput } from "@/hooks/useToolOutput";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
 
 interface UpscaleToolProps {
   userId?: string;
@@ -23,6 +25,7 @@ export const UpscaleTool = ({ userId, onBack }: UpscaleToolProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const { showGuide, markAsLearned, saveOutput } = useToolOutput("upscale", "4K Upscaler");
 
   const creditCost = costs.upscale || 1;
 
@@ -115,6 +118,7 @@ export const UpscaleTool = ({ userId, onBack }: UpscaleToolProps) => {
       setResultImage(result.image);
       setProgress(100);
       refetchCredits();
+      saveOutput("image", result.image);
 
       toast({
         title: "အောင်မြင်ပါသည်",
@@ -145,6 +149,8 @@ export const UpscaleTool = ({ userId, onBack }: UpscaleToolProps) => {
         subtitle="ပုံကို 4K Resolution သို့ မြှင့်တင်ရန်"
         onBack={onBack} 
       />
+
+      <FirstOutputGuide toolName="4K Upscaler" steps={["ပုံထည့်ပါ", "4K Upscale နှိပ်ပါ", "ရလဒ် Download လုပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
 
       {/* Source Image Upload */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">

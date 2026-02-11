@@ -11,6 +11,8 @@ import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
 import { motion, AnimatePresence } from "framer-motion";
+import { useToolOutput } from "@/hooks/useToolOutput";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
 
 interface LogoDesignToolProps { userId?: string; onBack: () => void; }
 
@@ -66,6 +68,7 @@ export const LogoDesignTool = ({ userId, onBack }: LogoDesignToolProps) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<{ platform: string; url: string; aspect: string }[]>([]);
   const [generationProgress, setGenerationProgress] = useState({ done: 0, total: 0 });
+  const { showGuide, markAsLearned, saveOutput } = useToolOutput("logo-design", "Logo Design");
 
   const baseCostPerImage = costs.logo_design || 5;
   const totalCost = baseCostPerImage * selectedPlatforms.length;
@@ -144,6 +147,7 @@ export const LogoDesignTool = ({ userId, onBack }: LogoDesignToolProps) => {
       });
 
       refetchCredits();
+      if (results.length > 0) saveOutput("image", results[0].url);
       toast({ title: "ဖန်တီးပြီးပါပြီ!", description: `${results.length} ဒီဇိုင်း ဖန်တီးပြီးပါပြီ` });
     } catch (error: any) {
       console.error("Logo design error:", error);
@@ -171,6 +175,8 @@ export const LogoDesignTool = ({ userId, onBack }: LogoDesignToolProps) => {
         subtitle="Multi-Platform ဒီဇိုင်းများကို တစ်ပြိုင်နက် ဖန်တီးပါ"
         onBack={onBack}
       />
+
+      <FirstOutputGuide toolName="Logo Design" steps={["Platform ရွေးပါ", "လုပ်ငန်းအမည် ထည့်ပါ", "Style ရွေးပါ", "Generate နှိပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
 
       <div className="gradient-card rounded-2xl p-4 border border-primary/20 space-y-4">
         {/* Multi-Platform Checkbox Selection */}

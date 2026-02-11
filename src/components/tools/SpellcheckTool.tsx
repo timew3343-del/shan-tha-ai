@@ -8,6 +8,8 @@ import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
 import { motion } from "framer-motion";
+import { useToolOutput } from "@/hooks/useToolOutput";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
 
 interface Props { userId?: string; onBack: () => void; }
 
@@ -20,6 +22,7 @@ export const SpellcheckTool = ({ userId, onBack }: Props) => {
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const cost = costs.myanmar_spellcheck || 5;
+  const { showGuide, markAsLearned, saveOutput } = useToolOutput("spellcheck", "AI သတ်ပုံစစ်ဆေးစနစ်");
 
   const handleGenerate = async () => {
     if (!text.trim() || !userId) return;
@@ -31,6 +34,7 @@ export const SpellcheckTool = ({ userId, onBack }: Props) => {
       if (error) throw error;
       if (data?.error) { toast({ title: "Error", description: data.error, variant: "destructive" }); return; }
       setResult(data?.result || ""); refetch();
+      saveOutput("text", data?.result || "");
       toast({ title: "စစ်ဆေးပြီးပါပြီ!" });
     } catch (e: any) { toast({ title: "Error", description: e.message, variant: "destructive" }); }
     finally { setIsLoading(false); }
@@ -41,6 +45,7 @@ export const SpellcheckTool = ({ userId, onBack }: Props) => {
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4 p-4 pb-24">
       <ToolHeader title="AI မြန်မာစာ သတ်ပုံစစ်ဆေးစနစ်" subtitle="သတ်ပုံနှင့် သဒ္ဒါ စစ်ဆေးပေးခြင်း" onBack={onBack} />
+      <FirstOutputGuide toolName="AI သတ်ပုံစစ်ဆေးစနစ်" steps={["စစ်ဆေးလိုသော မြန်မာစာ ထည့်ပါ", "စစ်ဆေးမည် ခလုတ်ကို နှိပ်ပါ", "ရလဒ်ကို Copy လုပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
       <div id="input-area" className="gradient-card rounded-2xl p-4 border border-primary/20">
         <label className="block text-sm font-medium text-primary mb-2 font-myanmar">စစ်ဆေးလိုသော စာသား</label>
         <Textarea value={text} onChange={e => setText(e.target.value)} placeholder="မြန်မာစာ ထည့်ပါ..." className="min-h-[120px] bg-background/50 border-primary/30 rounded-xl text-sm font-myanmar" />

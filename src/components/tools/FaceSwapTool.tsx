@@ -8,6 +8,8 @@ import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { ToolHeader } from "@/components/ToolHeader";
 import { motion } from "framer-motion";
+import { useToolOutput } from "@/hooks/useToolOutput";
+import { FirstOutputGuide } from "@/components/FirstOutputGuide";
 
 interface FaceSwapToolProps {
   userId?: string;
@@ -40,6 +42,7 @@ export const FaceSwapTool = ({ userId, onBack }: FaceSwapToolProps) => {
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   const creditCost = inputMode === "camera" ? (costs.live_camera || 15) : (costs.face_swap || 15);
+  const { showGuide, markAsLearned, saveOutput } = useToolOutput("face-swap", "Face Swap");
 
   // Recording timer
   useEffect(() => {
@@ -274,6 +277,7 @@ export const FaceSwapTool = ({ userId, onBack }: FaceSwapToolProps) => {
       setResultVideo(result.video);
       setProgress(100);
       refetchCredits();
+      saveOutput("video", result.video);
 
       toast({
         title: "အောင်မြင်ပါသည်",
@@ -306,6 +310,8 @@ export const FaceSwapTool = ({ userId, onBack }: FaceSwapToolProps) => {
         subtitle="Face Swap Technology"
         onBack={onBack} 
       />
+
+      <FirstOutputGuide toolName="Face Swap" steps={["ဗီဒီယို ထည့်ပါ", "မျက်နှာပုံ ထည့်ပါ", "Face Swap လုပ်ရန် နှိပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
 
       {/* Input Mode Toggle */}
       <div className="grid grid-cols-2 gap-2">
