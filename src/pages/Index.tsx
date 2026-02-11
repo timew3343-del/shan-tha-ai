@@ -19,11 +19,7 @@ import { useCredits } from "@/hooks/useCredits";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useLanguage } from "@/i18n/LanguageContext";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
 const Index = () => {
@@ -40,44 +36,28 @@ const Index = () => {
 
   useEffect(() => {
     let isMounted = true;
-
-    // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
       if (!isMounted) return;
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
-      // Only mark loaded on meaningful events, not INITIAL_SESSION which is handled by getSession
-      if (event !== 'INITIAL_SESSION') {
-        setIsLoading(false);
-      }
+      if (event !== 'INITIAL_SESSION') setIsLoading(false);
     });
-
-    // THEN check for existing session (single source of truth for initial load)
     supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
       if (!isMounted) return;
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
       setIsLoading(false);
     });
-
-    return () => {
-      isMounted = false;
-      subscription.unsubscribe();
-    };
+    return () => { isMounted = false; subscription.unsubscribe(); };
   }, []);
 
   useEffect(() => {
-    if (!isLoading && !user) {
-      navigate("/auth", { replace: true });
-    }
+    if (!isLoading && !user) navigate("/auth", { replace: true });
   }, [user, isLoading, navigate]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    toast({
-      title: t('status.success'),
-      description: t('logout'),
-    });
+    toast({ title: t('status.success'), description: t('logout') });
     navigate("/auth");
   };
 
@@ -86,7 +66,7 @@ const Index = () => {
     await navigator.clipboard.writeText(user.id);
     setCopiedUuid(true);
     setTimeout(() => setCopiedUuid(false), 2000);
-    toast({ title: "UUID ကူးယူပြီး" });
+    toast({ title: t('menu.uuidCopied') });
   };
 
   if (isLoading) {
@@ -104,10 +84,8 @@ const Index = () => {
 
   return (
     <div className="min-h-screen gradient-navy">
-      {/* Promo Banner */}
       <PromoBanner />
       
-      {/* User Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
         <div className="flex items-center gap-3">
           <DropdownMenu>
@@ -119,81 +97,52 @@ const Index = () => {
             <DropdownMenuContent align="start" className="w-64 gradient-card border-border/50">
               <div className="px-3 py-2">
                 <p className="text-sm font-medium text-foreground truncate">{user.email}</p>
-                <p className="text-xs text-muted-foreground">
-                  {isAdmin ? "Admin" : "Member"}
-                </p>
+                <p className="text-xs text-muted-foreground">{isAdmin ? "Admin" : "Member"}</p>
               </div>
-              {/* UUID Display */}
               <div className="px-3 py-1.5">
                 <div className="flex items-center gap-1.5 bg-secondary/50 rounded-lg px-2 py-1.5">
-                  <code className="text-[9px] text-muted-foreground flex-1 truncate font-mono">
-                    {user.id}
-                  </code>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleCopyUuid(); }}
-                    className="p-1 rounded hover:bg-secondary transition-colors flex-shrink-0"
-                  >
-                    {copiedUuid ? (
-                      <Check className="w-3 h-3 text-primary" />
-                    ) : (
-                      <Copy className="w-3 h-3 text-muted-foreground" />
-                    )}
+                  <code className="text-[9px] text-muted-foreground flex-1 truncate font-mono">{user.id}</code>
+                  <button onClick={(e) => { e.stopPropagation(); handleCopyUuid(); }}
+                    className="p-1 rounded hover:bg-secondary transition-colors flex-shrink-0">
+                    {copiedUuid ? <Check className="w-3 h-3 text-primary" /> : <Copy className="w-3 h-3 text-muted-foreground" />}
                   </button>
                 </div>
               </div>
               <DropdownMenuSeparator className="bg-border/50" />
-              {/* Credit Transfer */}
-              <CreditTransferDialog
-                userId={user.id}
-                currentBalance={credits}
-                onTransferComplete={refetchCredits}
+              <CreditTransferDialog userId={user.id} currentBalance={credits} onTransferComplete={refetchCredits}
                 trigger={
-                  <DropdownMenuItem
-                    onSelect={(e) => e.preventDefault()}
-                    className="cursor-pointer"
-                  >
-                    <ArrowRightLeft className="w-4 h-4 mr-2" />
-                    Credit လွှဲပြောင်းခြင်း
+                  <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="cursor-pointer">
+                    <ArrowRightLeft className="w-4 h-4 mr-2" />{t('credit.transfer')}
                   </DropdownMenuItem>
-                }
-              />
+                } />
               <DropdownMenuSeparator className="bg-border/50" />
               <DropdownMenuItem onClick={() => navigate("/support")} className="cursor-pointer">
-                <HelpCircle className="w-4 h-4 mr-2" />
-                Help & Support
+                <HelpCircle className="w-4 h-4 mr-2" />{t('menu.helpSupport')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate("/about")} className="cursor-pointer">
-                <Info className="w-4 h-4 mr-2" />
-                About Myanmar AI
+                <Info className="w-4 h-4 mr-2" />{t('menu.aboutApp')}
               </DropdownMenuItem>
               {isAdmin && (
                 <DropdownMenuItem onClick={() => navigate("/admin")} className="cursor-pointer">
-                  <Shield className="w-4 h-4 mr-2" />
-                  Admin Dashboard
+                  <Shield className="w-4 h-4 mr-2" />{t('menu.adminDashboard')}
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator className="bg-border/50" />
               <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive">
-                <LogOut className="w-4 h-4 mr-2" />
-                Logout
+                <LogOut className="w-4 h-4 mr-2" />{t('logout')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-
           <CreditDisplay credits={credits} isLoading={creditsLoading} />
         </div>
-
         <div className="flex items-center gap-2">
           <LanguageSwitcher />
           <ThemeToggle />
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-lg mx-auto">
-        {/* Maintenance Banner */}
         <MaintenanceBanner className="mx-4 mt-4" />
-        
         {activeTab === "ai-tools" && <AIToolsTab userId={user.id} />}
         {activeTab === "store" && <StoreTab />}
         {activeTab === "dos-donts" && <DosDontsTab />}

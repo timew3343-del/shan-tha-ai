@@ -13,7 +13,7 @@ export const BottomNavigation = forwardRef<HTMLElement, BottomNavigationProps>(
 
     const tabs = [
       { id: "ai-tools", label: t('nav.aiTools'), icon: Wand2 },
-      { id: "store", label: "Store", icon: Package },
+      { id: "store", label: t('nav.store'), icon: Package },
       { id: "dos-donts", label: t('nav.guide'), icon: BookCheck },
       { id: "course", label: t('nav.course'), icon: GraduationCap },
     ];
