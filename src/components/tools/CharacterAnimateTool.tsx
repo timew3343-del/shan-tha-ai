@@ -108,6 +108,7 @@ export const CharacterAnimateTool = ({ userId, onBack }: CharacterAnimateToolPro
       }
 
       setResultUrl(result.video_url);
+      saveOutput("video", result.video_url);
       toast({
         title: "အောင်မြင်ပါသည်!",
         description: `ဗီဒီယို ဖန်တီးပြီးပါပြီ။ ${result.credits_deducted} Credits သုံးစွဲပါသည်။`,
