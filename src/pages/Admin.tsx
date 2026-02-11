@@ -113,6 +113,7 @@ export const Admin = () => {
   const [shotstackApiKey, setShotstackApiKey] = useState("");
   const [acrcloudAccessKey, setAcrcloudAccessKey] = useState("");
   const [acrcloudAccessSecret, setAcrcloudAccessSecret] = useState("");
+  const [sunoApiKey, setSunoApiKey] = useState("");
   // Track which keys have been loaded vs modified
   const [apiKeyStatus, setApiKeyStatus] = useState<Record<string, boolean>>({});
   const [isSavingApiKeys, setIsSavingApiKeys] = useState(false);
@@ -268,6 +269,10 @@ export const Admin = () => {
             case "acrcloud_access_secret":
               setAcrcloudAccessSecret(maskKey(setting.value || ""));
               keyConfigured["acrcloud_access_secret"] = !!(setting.value);
+              break;
+            case "sunoapi_org_key":
+              setSunoApiKey(maskKey(setting.value || ""));
+              keyConfigured["sunoapi_org_key"] = !!(setting.value);
               break;
             case "is_maintenance_mode":
               setIsMaintenanceMode(setting.value === "true");
@@ -516,6 +521,7 @@ export const Admin = () => {
         { key: "shotstack_api_key", value: shotstackApiKey },
         { key: "acrcloud_access_key", value: acrcloudAccessKey },
         { key: "acrcloud_access_secret", value: acrcloudAccessSecret },
+        { key: "sunoapi_org_key", value: sunoApiKey },
       ];
 
       for (const update of updates) {
