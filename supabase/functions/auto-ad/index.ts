@@ -174,8 +174,8 @@ serve(async (req) => {
                 const videoBuffer = await checkResponse.arrayBuffer();
                 const fileName = `auto-ad-${platform}-${userId}-${Date.now()}.mp4`;
                 await supabaseAdmin.storage.from("videos").upload(fileName, videoBuffer, { contentType: "video/mp4" });
-                const { data: urlData } = supabaseAdmin.storage.from("videos").getPublicUrl(fileName);
-                resultVideos.push({ platform, url: urlData.publicUrl });
+                const { data: signedData, error: signedErr } = await supabaseAdmin.storage.from("videos").createSignedUrl(fileName, 86400);
+                resultVideos.push({ platform, url: signedErr ? "" : signedData?.signedUrl || "" });
                 console.log(`Video for ${platform} completed`);
                 break;
               } else if (checkResponse.status !== 202) {

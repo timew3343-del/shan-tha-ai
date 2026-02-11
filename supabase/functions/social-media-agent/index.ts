@@ -175,7 +175,7 @@ serve(async (req) => {
       const uploadBytes = Uint8Array.from(atob(base64Result), (c) => c.charCodeAt(0));
 
       await supabaseAdmin.storage.from("videos").upload(fileName, uploadBytes, { contentType: "image/png", upsert: true });
-      const { data: urlData } = supabaseAdmin.storage.from("videos").getPublicUrl(fileName);
+      const { data: signedData, error: signedErr } = await supabaseAdmin.storage.from("videos").createSignedUrl(fileName, 86400);
 
       await supabaseAdmin.rpc("deduct_user_credits", { _user_id: userId, _amount: creditCost, _action: "Professional Photoshoot" });
       await supabaseAdmin.from("credit_audit_log").insert({
@@ -184,7 +184,7 @@ serve(async (req) => {
       });
 
       return new Response(JSON.stringify({
-        success: true, resultImageUrl: urlData.publicUrl, creditsUsed: creditCost,
+        success: true, resultImageUrl: signedErr ? "" : signedData?.signedUrl || "", creditsUsed: creditCost,
         newBalance: profile.credit_balance - creditCost,
       }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -274,8 +274,8 @@ Make each day unique. Include Myanmar and English captions. Create exactly ${act
           const fileName = `social_${userId}_day${i + 1}_${Date.now()}.png`;
           const uploadBytes = Uint8Array.from(atob(base64Result), (c) => c.charCodeAt(0));
           await supabaseAdmin.storage.from("videos").upload(fileName, uploadBytes, { contentType: "image/png", upsert: true });
-          const { data: urlData } = supabaseAdmin.storage.from("videos").getPublicUrl(fileName);
-          enhancedImages.push(urlData.publicUrl);
+          const { data: signedImgData, error: signedImgErr } = await supabaseAdmin.storage.from("videos").createSignedUrl(fileName, 86400);
+          enhancedImages.push(signedImgErr ? "" : signedImgData?.signedUrl || "");
           console.log(`Day ${i + 1} image enhanced`);
         } else {
           console.error(`Day ${i + 1} image failed:`, await stabResp.text());

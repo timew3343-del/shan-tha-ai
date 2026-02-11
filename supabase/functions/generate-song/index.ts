@@ -155,8 +155,8 @@ serve(async (req) => {
               const fileName = `song-${userId}-${Date.now()}.mp3`;
 
               await supabaseAdmin.storage.from("videos").upload(fileName, audioBuffer, { contentType: "audio/mpeg" });
-              const { data: urlData } = supabaseAdmin.storage.from("videos").getPublicUrl(fileName);
-              audioUrl = urlData.publicUrl;
+              const { data: signedData, error: signedErr } = await supabaseAdmin.storage.from("videos").createSignedUrl(fileName, 86400);
+              audioUrl = signedErr ? null : signedData?.signedUrl || null;
             } catch (uploadErr) {
               console.error("Audio upload error:", uploadErr);
             }
@@ -222,8 +222,8 @@ serve(async (req) => {
                   const videoBuffer = await videoCheck.arrayBuffer();
                   const fileName = `mtv-${userId}-${Date.now()}.mp4`;
                   await supabaseAdmin.storage.from("videos").upload(fileName, videoBuffer, { contentType: "video/mp4" });
-                  const { data: urlData } = supabaseAdmin.storage.from("videos").getPublicUrl(fileName);
-                  videoUrl = urlData.publicUrl;
+                  const { data: signedVidData, error: signedVidErr } = await supabaseAdmin.storage.from("videos").createSignedUrl(fileName, 86400);
+                  videoUrl = signedVidErr ? null : signedVidData?.signedUrl || null;
                   console.log("MTV video generated successfully");
                   break;
                 } else if (videoCheck.status !== 202) {
