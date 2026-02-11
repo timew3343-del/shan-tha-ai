@@ -294,6 +294,12 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
       }
     }
 
+    // Clean lyrics for subtitles: remove bracketed tags like [Intro], [Verse 1], [Chorus], etc.
+    let cleanLyrics: string | null = null;
+    if (lyrics) {
+      cleanLyrics = lyrics.replace(/\[.*?\]/g, "").replace(/\n{3,}/g, "\n\n").trim();
+    }
+
     // Verify we produced something useful
     if (serviceOption === "song_only" && !audioUrl) throw new Error("Failed to generate music");
     if (serviceOption === "mtv_only" && !videoUrl) throw new Error("Failed to generate MTV video");
@@ -314,6 +320,7 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
       audio: audioUrl,
       video: videoUrl,
       lyrics,
+      cleanLyrics,
       creditsUsed: creditCost,
       newBalance: (deductResult as any)?.new_balance,
     });
