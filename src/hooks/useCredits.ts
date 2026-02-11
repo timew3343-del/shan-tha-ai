@@ -69,18 +69,24 @@ export const useCredits = (userId: string | undefined) => {
     }
 
     try {
-      const newBalance = credits - amount;
-      const { error } = await supabase
-        .from("profiles")
-        .update({ credit_balance: newBalance })
-        .eq("user_id", userId);
+      // Use atomic RPC to prevent race conditions
+      const { data, error } = await supabase.rpc("deduct_user_credits", {
+        _user_id: userId,
+        _amount: amount,
+        _action: action,
+      });
 
       if (error) throw error;
       
-      setCredits(newBalance);
+      const result = data as any;
+      if (!result?.success) {
+        throw new Error(result?.error || "Failed to deduct credits");
+      }
+      
+      setCredits(result.new_balance);
       
       // Show low credits warning
-      if (newBalance <= 5) {
+      if (result.new_balance <= 5) {
         toast({
           title: "သတိပေးချက်",
           description: "သင့်ခရက်ဒစ် ကုန်ဆုံးတော့မည်။ ထပ်မံဖြည့်သွင်းပါ။",
