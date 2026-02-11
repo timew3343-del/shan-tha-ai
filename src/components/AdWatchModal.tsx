@@ -39,7 +39,9 @@ export const AdWatchModal = ({
   const loadAdScript = useCallback(() => {
     if (!adContainerRef.current) return;
 
-    adContainerRef.current.innerHTML = '';
+    while (adContainerRef.current.firstChild) {
+      adContainerRef.current.removeChild(adContainerRef.current.firstChild);
+    }
 
     const containerDiv = document.createElement('div');
     containerDiv.id = 'container-303f0f5972332b8fd635da8909294c40';
