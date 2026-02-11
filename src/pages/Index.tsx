@@ -85,6 +85,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen gradient-navy">
+      <a href="#main-content" className="skip-nav">Skip to main content</a>
       <WelcomeOnboarding userId={user.id} />
       <PromoBanner />
       
@@ -143,13 +144,13 @@ const Index = () => {
         </div>
       </div>
 
-      <div className="max-w-lg mx-auto">
+      <main id="main-content" className="max-w-lg mx-auto" role="main">
         <MaintenanceBanner className="mx-4 mt-4" />
         {activeTab === "ai-tools" && <AIToolsTab userId={user.id} />}
         {activeTab === "store" && <StoreTab userId={user.id} />}
         {activeTab === "dos-donts" && <DosDontsTab />}
         {activeTab === "course" && <CourseTab userId={user.id} />}
-      </div>
+      </main>
       
       <BottomNavigation activeTab={activeTab} onTabChange={setActiveTab} />
     </div>
