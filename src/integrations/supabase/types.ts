@@ -38,6 +38,36 @@ export type Database = {
         }
         Relationships: []
       }
+      api_balance_tracking: {
+        Row: {
+          api_name: string
+          created_at: string
+          current_balance: number
+          id: string
+          initial_balance: number
+          last_updated: string
+          low_balance_threshold: number
+        }
+        Insert: {
+          api_name: string
+          created_at?: string
+          current_balance?: number
+          id?: string
+          initial_balance?: number
+          last_updated?: string
+          low_balance_threshold?: number
+        }
+        Update: {
+          api_name?: string
+          created_at?: string
+          current_balance?: number
+          id?: string
+          initial_balance?: number
+          last_updated?: string
+          low_balance_threshold?: number
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           created_at: string
@@ -209,6 +239,42 @@ export type Database = {
           updated_at?: string
           video_type?: string
           video_url?: string | null
+        }
+        Relationships: []
+      }
+      knowledge_base: {
+        Row: {
+          ai_instruction: string | null
+          category: string
+          content: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          image_url: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          ai_instruction?: string | null
+          category: string
+          content?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          image_url?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          ai_instruction?: string | null
+          category?: string
+          content?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          image_url?: string | null
+          title?: string
+          updated_at?: string
         }
         Relationships: []
       }
