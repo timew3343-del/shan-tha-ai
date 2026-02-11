@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Upload, Loader2, Download, Calendar, Camera, Image, Sparkles, X, ChevronRight } from "lucide-react";
+import { Upload, Loader2, Download, Calendar, Camera, Image, Sparkles, X, ChevronRight, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
@@ -202,6 +202,72 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
     link.click();
   };
 
+  const downloadPDF = async () => {
+    try {
+      const { default: jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const margin = 15;
+      let y = 20;
+
+      // Title
+      doc.setFontSize(18);
+      doc.setTextColor(33, 33, 33);
+      doc.text(`${numDays}-Day Content Calendar`, margin, y);
+      y += 8;
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text(businessDesc.substring(0, 80), margin, y);
+      y += 12;
+
+      for (const day of calendarDays) {
+        if (y > 250) { doc.addPage(); y = 20; }
+
+        // Day header
+        doc.setFontSize(13);
+        doc.setTextColor(33, 33, 33);
+        doc.text(`Day ${day.day} - ${day.dayName}`, margin, y);
+        y += 6;
+        doc.setFontSize(9);
+        doc.setTextColor(100, 100, 100);
+        doc.text(`${day.contentType} | Best time: ${day.bestTime}`, margin, y);
+        y += 7;
+
+        // Myanmar caption
+        doc.setFontSize(10);
+        doc.setTextColor(33, 33, 33);
+        const myLines = doc.splitTextToSize(day.caption_my || "", pageWidth - margin * 2);
+        doc.text(myLines, margin, y);
+        y += myLines.length * 5 + 3;
+
+        // English caption
+        const enLines = doc.splitTextToSize(day.caption_en || "", pageWidth - margin * 2);
+        doc.text(enLines, margin, y);
+        y += enLines.length * 5 + 3;
+
+        // Hashtags
+        if (day.hashtags?.length) {
+          doc.setFontSize(8);
+          doc.setTextColor(80, 80, 200);
+          const hashText = day.hashtags.join(" ");
+          const hashLines = doc.splitTextToSize(hashText, pageWidth - margin * 2);
+          doc.text(hashLines, margin, y);
+          y += hashLines.length * 4 + 3;
+        }
+
+        // Separator
+        doc.setDrawColor(200, 200, 200);
+        doc.line(margin, y, pageWidth - margin, y);
+        y += 8;
+      }
+
+      doc.save(`content-calendar-${numDays}days-${Date.now()}.pdf`);
+      toast({ title: "PDF ဒေါင်းလုဒ်ပြီးပါပြီ" });
+    } catch (e: any) {
+      toast({ title: "PDF Error", description: e.message, variant: "destructive" });
+    }
+  };
+
   // ==================== UPLOAD VIEW ====================
   if (viewMode === "upload") {
     return (
@@ -315,9 +381,13 @@ export const SocialMediaManagerTool = ({ userId, onBack }: SocialMediaManagerToo
         <ToolHeader title={`${calendarDays.length}-Day Content Calendar`} subtitle="AI ဖန်တီးထားသော Content Plan" onBack={() => setViewMode("upload")} />
 
         <div className="flex gap-2 mb-2">
+          <Button onClick={downloadPDF} variant="outline" size="sm" className="rounded-xl">
+            <FileText className="w-4 h-4 mr-1" />
+            <span className="font-myanmar text-xs">PDF Download</span>
+          </Button>
           <Button onClick={downloadAll} variant="outline" size="sm" className="rounded-xl">
             <Download className="w-4 h-4 mr-1" />
-            <span className="font-myanmar text-xs">အားလုံး Download</span>
+            <span className="font-myanmar text-xs">ပုံအားလုံး</span>
           </Button>
           <Button onClick={() => setViewMode("photoshoot")} variant="outline" size="sm" className="rounded-xl">
             <Camera className="w-4 h-4 mr-1" />
