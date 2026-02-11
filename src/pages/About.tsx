@@ -8,7 +8,7 @@ const About = () => {
 
   const milestones = [
     { icon: Sparkles, title: "AI-Powered Tools", desc: "မြန်မာနိုင်ငံအတွက် ပထမဆုံး AI Video & Content Platform" },
-    { icon: Globe, title: "Multi-Language", desc: "မြန်မာ၊ English၊ Thai၊ Chinese အပါအဝင် ဘာသာ ၉ မျိုး support" },
+    { icon: Globe, title: "Multi-Language", desc: "မြန်မာ၊ English၊ Thai၊ Chinese အပါအဝင် ဘာသာ ၅၃+ မျိုး support" },
     { icon: Users, title: "Creator Community", desc: "Content Creators များအတွက် Professional Tools များ" },
     { icon: Zap, title: "Fast & Reliable", desc: "Cloud-based infrastructure ဖြင့် မြန်ဆန်သော processing" },
     { icon: Shield, title: "Secure Platform", desc: "End-to-end encryption နှင့် secure data storage" },
@@ -65,11 +65,11 @@ const About = () => {
 
           <div className="flex gap-3 pt-2">
             <div className="flex-1 bg-secondary/50 rounded-xl p-3 text-center">
-              <p className="text-lg font-bold text-primary">15+</p>
+              <p className="text-lg font-bold text-primary">47+</p>
               <p className="text-xs text-muted-foreground">AI Tools</p>
             </div>
             <div className="flex-1 bg-secondary/50 rounded-xl p-3 text-center">
-              <p className="text-lg font-bold text-primary">9</p>
+              <p className="text-lg font-bold text-primary">53+</p>
               <p className="text-xs text-muted-foreground">Languages</p>
             </div>
             <div className="flex-1 bg-secondary/50 rounded-xl p-3 text-center">

@@ -6,13 +6,11 @@ export const Support = () => {
   const navigate = useNavigate();
 
   const openTelegram = () => {
-    // Placeholder - will be updated with actual link
-    window.open("https://t.me/yourusername", "_blank");
+    window.open("https://t.me/MyanmarAIStudio", "_blank");
   };
 
   const openMessenger = () => {
-    // Placeholder - will be updated with actual link
-    window.open("https://m.me/yourpage", "_blank");
+    window.open("https://m.me/MyanmarAIStudio", "_blank");
   };
 
   return (
