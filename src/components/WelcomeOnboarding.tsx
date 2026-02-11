@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
-import { Sparkles, CreditCard, X, ChevronRight } from "lucide-react";
+import { Sparkles, X, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface WelcomeOnboardingProps {
@@ -14,37 +13,22 @@ export const WelcomeOnboarding = ({ userId }: WelcomeOnboardingProps) => {
 
   useEffect(() => {
     if (!userId) return;
-    checkOnboardingStatus();
+    // Show only once per browser session
+    const sessionKey = `welcome_shown_${userId}`;
+    if (!sessionStorage.getItem(sessionKey)) {
+      setShowWelcome(true);
+    }
   }, [userId]);
 
-  const checkOnboardingStatus = async () => {
-    try {
-      const { data } = await supabase
-        .from("app_settings")
-        .select("value")
-        .eq("key", `onboarding_seen_${userId}`)
-        .maybeSingle();
-      
-      if (!data) {
-        setShowWelcome(true);
-      }
-    } catch {
-      // If error (e.g. RLS), check localStorage as fallback
-      const seen = localStorage.getItem(`onboarding_seen_${userId}`);
-      if (!seen) setShowWelcome(true);
-    }
-  };
-
-  const dismissWelcome = async () => {
+  const dismissWelcome = () => {
     setShowWelcome(false);
-    localStorage.setItem(`onboarding_seen_${userId}`, "true");
-    // No need to save to DB since regular users can't write to app_settings
+    sessionStorage.setItem(`welcome_shown_${userId}`, "true");
   };
 
   const STEPS = [
     {
       icon: "👋",
-      title: "Shan Tha AI မှ ကြိုဆိုပါတယ်!",
+      title: "Myanmar AI Studio မှ ကြိုဆိုပါတယ်!",
       description: "AI Tools 50+ ခုကို အသုံးပြုနိုင်ပါပြီ။ ပုံထုပ်ခြင်း၊ ဗီဒီယိုထုပ်ခြင်း၊ သီချင်းဖန်တီးခြင်း စသဖြင့် အားလုံးကို AI ဖြင့် လုပ်ဆောင်နိုင်ပါသည်။",
     },
     {
