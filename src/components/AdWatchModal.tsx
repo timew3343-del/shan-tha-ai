@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Gift, Clock, CheckCircle, Play, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { supabase } from "@/integrations/supabase/client";
 
 interface AdWatchModalProps {
   isOpen: boolean;
@@ -32,27 +33,70 @@ export const AdWatchModal = ({
   const [isClaiming, setIsClaiming] = useState(false);
   const [claimed, setClaimed] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
+  const [adScriptCode, setAdScriptCode] = useState<string>("");
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const adContainerRef = useRef<HTMLDivElement>(null);
   const currentSessionRef = useRef(1);
 
+  // Load ad script code from DB
+  useEffect(() => {
+    const loadAdConfig = async () => {
+      const { data } = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", "adsterra_script_code")
+        .maybeSingle();
+      if (data?.value) setAdScriptCode(data.value);
+    };
+    loadAdConfig();
+  }, []);
+
   const loadAdScript = useCallback(() => {
     if (!adContainerRef.current) return;
 
+    // Clear existing content
     while (adContainerRef.current.firstChild) {
       adContainerRef.current.removeChild(adContainerRef.current.firstChild);
     }
 
-    const containerDiv = document.createElement('div');
-    containerDiv.id = 'container-303f0f5972332b8fd635da8909294c40';
-    adContainerRef.current.appendChild(containerDiv);
+    if (!adScriptCode) {
+      // Fallback: show placeholder if no script configured
+      const placeholder = document.createElement('div');
+      placeholder.className = 'text-center text-xs text-muted-foreground p-4';
+      placeholder.textContent = 'ကြော်ငြာ ကုတ် မထည့်ရသေးပါ (Admin > Adsterra)';
+      adContainerRef.current.appendChild(placeholder);
+      return;
+    }
 
-    const script = document.createElement('script');
-    script.async = true;
-    script.setAttribute('data-cfasync', 'false');
-    script.src = 'https://pl28623813.effectivegatecpm.com/303f0f5972332b8fd635da8909294c40/invoke.js';
-    adContainerRef.current.appendChild(script);
-  }, []);
+    // Parse and inject the script code from admin settings
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = adScriptCode;
+
+    // Extract and re-create script tags so they actually execute
+    const scripts = wrapper.querySelectorAll('script');
+    const nonScriptContent = adScriptCode.replace(/<script[\s\S]*?<\/script>/gi, '');
+    
+    // Add non-script HTML content first
+    if (nonScriptContent.trim()) {
+      const htmlDiv = document.createElement('div');
+      htmlDiv.innerHTML = nonScriptContent;
+      adContainerRef.current.appendChild(htmlDiv);
+    }
+
+    // Then inject scripts one by one
+    scripts.forEach(originalScript => {
+      const newScript = document.createElement('script');
+      // Copy attributes
+      Array.from(originalScript.attributes).forEach(attr => {
+        newScript.setAttribute(attr.name, attr.value);
+      });
+      // Copy inline content
+      if (originalScript.textContent) {
+        newScript.textContent = originalScript.textContent;
+      }
+      adContainerRef.current?.appendChild(newScript);
+    });
+  }, [adScriptCode]);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
@@ -80,11 +124,11 @@ export const AdWatchModal = ({
       setTimeout(() => {
         loadAdScript();
         startTimer();
-      }, 100);
+      }, 300);
     }
     return () => clearTimer();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, adScriptCode]);
 
   const startTimer = () => {
     clearTimer();
@@ -98,7 +142,6 @@ export const AdWatchModal = ({
           setIsTimerRunning(false);
           setSessionTimerDone(true);
 
-          // Use ref for current session to avoid nested state issues
           if (currentSessionRef.current >= TOTAL_SESSIONS) {
             setCanClaim(true);
           }
@@ -163,6 +206,9 @@ export const AdWatchModal = ({
             <Gift className="w-5 h-5" />
             ကြော်ငြာကြည့်၍ Credits ရယူပါ
           </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground font-myanmar">
+            ကြော်ငြာ {TOTAL_SESSIONS} ခု ကြည့်ပြီး Credits ရယူပါ
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5 py-4">
@@ -196,10 +242,11 @@ export const AdWatchModal = ({
             </p>
           </div>
 
-          {/* Ad Container */}
+          {/* Ad Container - larger and more visible */}
           <div
             ref={adContainerRef}
-            className="rounded-lg bg-secondary/50 overflow-hidden min-h-[150px] flex items-center justify-center p-2"
+            className="rounded-lg bg-secondary/50 overflow-hidden min-h-[250px] flex items-center justify-center p-2 border border-border"
+            style={{ minWidth: '300px' }}
           >
             <p className="text-xs text-muted-foreground font-myanmar animate-pulse">
               ကြော်ငြာ ဖွင့်နေသည်...
