@@ -49,7 +49,7 @@ export const useOutputStore = (userId?: string) => {
         console.error("Error fetching outputs:", error);
         setOutputs(getLocalStore());
       } else {
-        const mapped: StoredOutput[] = (data || []).map((o: any) => ({
+        const dbOutputs: StoredOutput[] = (data || []).map((o: any) => ({
           id: o.id,
           toolId: o.tool_id,
           toolName: o.tool_name,
@@ -60,7 +60,14 @@ export const useOutputStore = (userId?: string) => {
           expiresAt: o.expires_at,
           fileUrl: o.file_url,
         }));
-        setOutputs(mapped);
+        // Merge with localStorage to catch any outputs that failed DB save
+        const localOutputs = getLocalStore();
+        const dbIds = new Set(dbOutputs.map(o => o.id));
+        const uniqueLocal = localOutputs.filter(o => !dbIds.has(o.id));
+        const merged = [...dbOutputs, ...uniqueLocal]
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .slice(0, MAX_ITEMS);
+        setOutputs(merged);
       }
     } catch {
       setOutputs(getLocalStore());
