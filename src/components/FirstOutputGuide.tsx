@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Lightbulb, X, CheckCircle } from "lucide-react";
 import { useState } from "react";
 
@@ -15,13 +15,12 @@ export const FirstOutputGuide = ({ toolName, steps, show, onDismiss }: FirstOutp
   if (!show || dismissed) return null;
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0, y: -10, scale: 0.95 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: -10, scale: 0.95 }}
-        className="mb-4 rounded-2xl border border-primary/30 bg-primary/5 backdrop-blur-sm p-4 relative"
-      >
+    <motion.div
+      initial={{ opacity: 0, y: -10, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -10, scale: 0.95 }}
+      className="mb-4 rounded-2xl border border-primary/30 bg-primary/5 backdrop-blur-sm p-4 relative"
+    >
         <button
           onClick={() => { setDismissed(true); onDismiss?.(); }}
           className="absolute top-3 right-3 p-1 rounded-full hover:bg-secondary/50 transition-colors"
@@ -58,7 +57,6 @@ export const FirstOutputGuide = ({ toolName, steps, show, onDismiss }: FirstOutp
           <CheckCircle className="w-3 h-3" />
           <span className="font-myanmar">ရလဒ်ထုတ်ပြီးရင် ဒီ Tool ကို "Learned" အဖြစ် မှတ်သားပါမယ်</span>
         </div>
-      </motion.div>
-    </AnimatePresence>
+    </motion.div>
   );
 };

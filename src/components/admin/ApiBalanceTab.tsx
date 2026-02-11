@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { DollarSign, Save, Loader2, AlertTriangle, TrendingDown } from "lucide-react";
+import { DollarSign, Save, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
