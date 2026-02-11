@@ -2,7 +2,7 @@ import { useState, useEffect, lazy, Suspense, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Image, Video, Volume2, Crown, Wallet, Gift, 
-  ZoomIn, Eraser, Sparkles, Youtube, FileText, Captions,
+  ZoomIn, Eraser, Sparkles, Youtube, FileText, Captions, Film,
   Megaphone, Briefcase, Shield, BookOpen, ListChecks,
   Music, Palette, Zap, Loader2, Wand2, Search, Home,
   Mic, PenTool, Camera, ImagePlus, Type, Shirt, Star,
@@ -55,6 +55,7 @@ const StyleTransferTool = lazy(() => import("./tools/StyleTransferTool").then(m 
 const SmartChefTool = lazy(() => import("./tools/SmartChefTool").then(m => ({ default: m.SmartChefTool })));
 const TravelPlannerTool = lazy(() => import("./tools/TravelPlannerTool").then(m => ({ default: m.TravelPlannerTool })));
 const FashionDesignerTool = lazy(() => import("./tools/FashionDesignerTool").then(m => ({ default: m.FashionDesignerTool })));
+const VideoMultiTool = lazy(() => import("./tools/VideoMultiTool").then(m => ({ default: m.VideoMultiTool })));
 
 import { ToolCardCompact } from "./ToolCardCompact";
 import { FeatureRegistry } from "./FeatureRegistry";
@@ -75,7 +76,7 @@ interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv" | "videoredesign" | "logodesign" | "livecamera" | "photorestore" | "spellcheck" | "virtualtryon" | "astrology" | "interiordesign" | "cvbuilder" | "bizconsultant" | "creativewriter" | "legaladvisor" | "messagepolisher" | "nutritionplanner" | "cardealer" | "exteriordesign" | "voicetranslator" | "healthchecker" | "babynamer" | "legaldoc" | "styletransfer" | "smartchef" | "travelplanner" | "fashiondesigner";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv" | "videoredesign" | "logodesign" | "livecamera" | "photorestore" | "spellcheck" | "virtualtryon" | "astrology" | "interiordesign" | "cvbuilder" | "bizconsultant" | "creativewriter" | "legaladvisor" | "messagepolisher" | "nutritionplanner" | "cardealer" | "exteriordesign" | "voicetranslator" | "healthchecker" | "babynamer" | "legaldoc" | "styletransfer" | "smartchef" | "travelplanner" | "fashiondesigner" | "videomulti";
 
 type ToolCategory = "all" | "image" | "video" | "audio" | "premium" | "health" | "legal" | "lifestyle";
 
@@ -186,6 +187,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
     { id: "smartchef", icon: ChefHat, titleKey: "", fallbackTitle: "AI ဟင်းချက်နည်း", descKey: "", fallbackDesc: "ဟင်းချက်နည်းနှင့် ဈေးဖိုးတွက်", gradient: "bg-gradient-to-br from-orange-400 via-amber-500 to-yellow-600", credits: (costs as any).smart_chef || 2, category: ["lifestyle"], badge: "NEW" },
     { id: "travelplanner", icon: Plane, titleKey: "", fallbackTitle: "AI ခရီးသွား လမ်းညွှန်", descKey: "", fallbackDesc: "ကမ္ဘာပတ် ခရီးစဉ် ပလန်", gradient: "bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-600", credits: (costs as any).travel_planner || 3, category: ["lifestyle"], badge: "NEW" },
     { id: "fashiondesigner", icon: Shirt, titleKey: "", fallbackTitle: "AI Fashion Designer PRO", descKey: "", fallbackDesc: "ဖက်ရှင်ဒီဇိုင်း + Technical Sketch", gradient: "bg-gradient-to-br from-pink-500 via-rose-600 to-fuchsia-700", credits: (costs as any).fashion_designer || 8, category: ["image", "premium"], badge: "PRO" },
+    { id: "videomulti", icon: Film, titleKey: "", fallbackTitle: "AI Video Multi-Tool", descKey: "", fallbackDesc: "ဗီဒီယို ဘက်စုံတည်းဖြတ် (FFmpeg+AI)", gradient: "bg-gradient-to-br from-purple-600 via-violet-600 to-fuchsia-700", credits: (costs as any).video_multi || 10, category: ["video", "premium"], badge: "PRO" },
   ], [costs, docSlideCost]);
 
   const filteredTools = useMemo(() => {
@@ -249,6 +251,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
       case "smartchef": return <SmartChefTool key="smartchef" userId={userId} onBack={handleBack} />;
       case "travelplanner": return <TravelPlannerTool key="travelplanner" userId={userId} onBack={handleBack} />;
       case "fashiondesigner": return <FashionDesignerTool key="fashiondesigner" userId={userId} onBack={handleBack} />;
+      case "videomulti": return <VideoMultiTool key="videomulti" userId={userId} onBack={handleBack} />;
       default: return null;
     }
   };
