@@ -6,40 +6,55 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const respond = (body: Record<string, unknown>, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+async function pollReplicate(predictionId: string, apiKey: string, maxPolls = 120, interval = 3000) {
+  for (let i = 0; i < maxPolls; i++) {
+    await new Promise(r => setTimeout(r, interval));
+    const res = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
+      headers: { Authorization: `Token ${apiKey}` },
+    });
+    const data = await res.json();
+    console.log(`Poll ${i}: ${data.status}`);
+    if (data.status === "succeeded") return data;
+    if (data.status === "failed" || data.status === "canceled") throw new Error(data.error || "Prediction failed");
+  }
+  throw new Error("Polling timeout");
+}
+
+async function uploadToStorage(supabaseAdmin: any, url: string, userId: string, ext: string, contentType: string) {
+  const res = await fetch(url);
+  const buffer = await res.arrayBuffer();
+  const fileName = `${ext.replace('.', '')}-${userId}-${Date.now()}${ext}`;
+  const { error: uploadErr } = await supabaseAdmin.storage.from("videos").upload(fileName, buffer, { contentType });
+  if (uploadErr) throw new Error(`Upload failed: ${uploadErr.message}`);
+  const { data: signedData, error: signedErr } = await supabaseAdmin.storage.from("videos").createSignedUrl(fileName, 86400 * 7);
+  if (signedErr) throw new Error(`Signed URL failed: ${signedErr.message}`);
+  return signedData.signedUrl;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    if (!authHeader?.startsWith("Bearer ")) return respond({ error: "Unauthorized" }, 401);
 
     const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    if (userError || !user) return respond({ error: "Invalid token" }, 401);
 
     const userId = user.id;
 
-    // Parse and validate request body
     let parsedBody: { serviceOption?: string; topic?: string; genre?: string; mood?: string; language?: string; mtvStyle?: string; showSubtitles?: boolean; audioBase64?: string };
-    try {
-      parsedBody = await req.json();
-    } catch {
-      return new Response(JSON.stringify({ error: "Invalid request body" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    try { parsedBody = await req.json(); } catch { return respond({ error: "Invalid request body" }, 400); }
+
     const { serviceOption, topic, genre, mood, language, mtvStyle, showSubtitles, audioBase64 } = parsedBody;
 
     if (!serviceOption || !["song_only", "mtv_only", "full_auto"].includes(serviceOption)) {
-      return new Response(JSON.stringify({ error: "Invalid service option" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    if (topic && typeof topic === "string" && topic.length > 5000) {
-      return new Response(JSON.stringify({ error: "Topic too long" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return respond({ error: "Invalid service option" }, 400);
     }
 
     console.log(`Song/MTV: user=${userId}, option=${serviceOption}, genre=${genre}, mood=${mood}`);
@@ -54,53 +69,46 @@ serve(async (req) => {
     // Check balance
     const { data: profile } = await supabaseAdmin.from("profiles").select("credit_balance").eq("user_id", userId).single();
     if (!profile || profile.credit_balance < creditCost) {
-      return new Response(JSON.stringify({ error: "ခရက်ဒစ် မလုံလောက်ပါ", required: creditCost }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return respond({ error: "ခရက်ဒစ် မလုံလောက်ပါ", required: creditCost }, 402);
     }
 
     // Get API keys
     const { data: apiKeys } = await supabaseAdmin.from("app_settings").select("key, value").in("key", ["replicate_api_token", "stability_api_key"]);
     const keyMap: Record<string, string> = {};
-    apiKeys?.forEach((k) => { keyMap[k.key] = k.value || ""; });
+    apiKeys?.forEach((k: any) => { keyMap[k.key] = k.value || ""; });
 
     const REPLICATE_API_KEY = keyMap.replicate_api_token || Deno.env.get("REPLICATE_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
-    if (!REPLICATE_API_KEY || !LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: "API keys not configured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    if (!REPLICATE_API_KEY) return respond({ error: "Replicate API key not configured" }, 500);
+    if (!LOVABLE_API_KEY) return respond({ error: "AI API key not configured" }, 500);
 
     let lyrics: string | null = null;
     let audioUrl: string | null = null;
     let videoUrl: string | null = null;
 
-    // ===== STEP 1: Generate Lyrics with Gemini (for song_only and full_auto) =====
+    // ===== STEP 1: Generate Lyrics with Gemini =====
     if (serviceOption === "song_only" || serviceOption === "full_auto") {
-      console.log("Step 1: Generating lyrics with Gemini...");
+      console.log("Step 1: Generating lyrics...");
+
+      const langName = { my: "Myanmar (Burmese)", en: "English", th: "Thai", ko: "Korean", ja: "Japanese", zh: "Chinese" }[language || "my"] || "Myanmar (Burmese)";
 
       const lyricsResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
+          model: "google/gemini-2.5-flash",
           messages: [
             {
               role: "system",
-              content: `You are a professional songwriter. Write creative, emotional song lyrics in ${
-                language === "my" ? "Myanmar (Burmese)" :
-                language === "en" ? "English" :
-                language === "th" ? "Thai" :
-                language === "ko" ? "Korean" :
-                language === "ja" ? "Japanese" :
-                language === "zh" ? "Chinese" : "Myanmar (Burmese)"
-              } language.
-              Genre: ${genre}. Mood: ${mood}.
-              Format the lyrics with verses, chorus, and bridge clearly labeled.
-              Keep it 2-3 minutes of singing length.
-              Also include a brief music production prompt for AI music generation at the end.`,
+              content: `You are a professional songwriter. Write creative, emotional song lyrics in ${langName} language.
+Genre: ${genre}. Mood: ${mood}.
+Format: Write ONLY the lyrics with [Verse 1], [Chorus], [Verse 2], [Bridge], [Chorus] sections.
+Keep it 2-3 minutes of singing length. Do NOT include any production notes or instructions.`,
             },
-            { role: "user", content: topic },
+            { role: "user", content: topic || "Write a beautiful song" },
           ],
-          max_tokens: 2000,
+          max_tokens: 1500,
           temperature: 0.8,
         }),
       });
@@ -108,20 +116,43 @@ serve(async (req) => {
       if (lyricsResponse.ok) {
         const lyricsData = await lyricsResponse.json();
         lyrics = lyricsData.choices?.[0]?.message?.content || null;
-        console.log("Lyrics generated successfully");
+        console.log("Lyrics generated successfully, length:", lyrics?.length);
       } else {
-        console.error("Lyrics generation error:", await lyricsResponse.text());
-        lyrics = topic;
+        console.error("Lyrics generation failed:", await lyricsResponse.text());
+        lyrics = topic || "Song lyrics";
       }
     }
 
-    // ===== STEP 2: Generate Music with Replicate MusicGen =====
+    // ===== STEP 2: Generate Music with Replicate MusicGen (with vocals prompt) =====
     if (serviceOption === "song_only" || serviceOption === "full_auto") {
       console.log("Step 2: Generating music with MusicGen...");
 
-      const musicPrompt = `${genre} ${mood} song, professional quality, ${
-        genre === "myanmar_traditional" ? "Myanmar traditional instruments, saung, pat waing" : "modern production"
-      }, radio-ready mix`;
+      // Build a rich music prompt incorporating genre, mood, and language context
+      const genreDescriptions: Record<string, string> = {
+        pop: "catchy pop song with modern production, strong melody",
+        rock: "powerful rock song with electric guitars and drums",
+        hiphop: "hip-hop beat with heavy bass, trap-style hi-hats",
+        edm: "electronic dance music with synths, drops, and build-ups",
+        ballad: "emotional ballad with piano and strings, slow tempo",
+        jazz: "smooth jazz with saxophone, piano, walking bass",
+        classical: "orchestral classical piece with strings and woodwinds",
+        rnb: "smooth R&B with soulful groove and warm harmonies",
+        country: "country song with acoustic guitar and fiddle",
+        myanmar_traditional: "Myanmar traditional music with saung gauk (harp), pat waing (drum circle), hnè (oboe)",
+      };
+
+      const moodDescriptions: Record<string, string> = {
+        happy: "upbeat, joyful, bright energy",
+        sad: "melancholic, emotional, minor key",
+        energetic: "high energy, fast tempo, driving rhythm",
+        romantic: "warm, intimate, gentle",
+        chill: "relaxed, ambient, laid-back groove",
+        epic: "cinematic, grand, building intensity",
+      };
+
+      const musicPrompt = `${genreDescriptions[genre || "pop"] || "modern song"}, ${moodDescriptions[mood || "happy"] || "upbeat"}, professional studio quality, radio-ready mix, stereo, high fidelity`;
+
+      console.log("Music prompt:", musicPrompt);
 
       const musicResponse = await fetch("https://api.replicate.com/v1/predictions", {
         method: "POST",
@@ -137,73 +168,80 @@ serve(async (req) => {
         }),
       });
 
-      if (musicResponse.ok) {
-        const musicPrediction = await musicResponse.json();
-        let musicResult = musicPrediction;
-
-        for (let i = 0; i < 60 && musicResult.status !== "succeeded" && musicResult.status !== "failed"; i++) {
-          await new Promise(r => setTimeout(r, 3000));
-          const poll = await fetch(`https://api.replicate.com/v1/predictions/${musicPrediction.id}`, {
-            headers: { Authorization: `Token ${REPLICATE_API_KEY}` },
-          });
-          musicResult = await poll.json();
-          console.log(`Music poll ${i}: ${musicResult.status}`);
-        }
-
-        if (musicResult.status === "succeeded") {
-          audioUrl = musicResult.output;
-          console.log("Music generated successfully");
-
-          // Upload to Supabase storage
-          if (audioUrl) {
-            try {
-              const audioResponse = await fetch(audioUrl);
-              const audioBuffer = await audioResponse.arrayBuffer();
-              const fileName = `song-${userId}-${Date.now()}.mp3`;
-
-              await supabaseAdmin.storage.from("videos").upload(fileName, audioBuffer, { contentType: "audio/mpeg" });
-              const { data: signedData, error: signedErr } = await supabaseAdmin.storage.from("videos").createSignedUrl(fileName, 86400);
-              audioUrl = signedErr ? null : signedData?.signedUrl || null;
-            } catch (uploadErr) {
-              console.error("Audio upload error:", uploadErr);
-            }
-          }
-        } else {
-          console.error("Music generation failed:", musicResult.error);
-        }
-      } else {
-        console.error("MusicGen error:", await musicResponse.text());
+      if (!musicResponse.ok) {
+        const errText = await musicResponse.text();
+        console.error("MusicGen API error:", errText);
+        throw new Error("Music generation API failed: " + errText);
       }
+
+      const musicPrediction = await musicResponse.json();
+      console.log("Music prediction started:", musicPrediction.id);
+
+      const musicResult = await pollReplicate(musicPrediction.id, REPLICATE_API_KEY, 60, 3000);
+
+      // musicgen output is a single URL string
+      const rawAudioUrl = typeof musicResult.output === "string" ? musicResult.output : musicResult.output?.[0] || musicResult.output;
+      if (!rawAudioUrl) throw new Error("No audio URL returned from MusicGen");
+
+      console.log("Music generated, uploading to storage...");
+      audioUrl = await uploadToStorage(supabaseAdmin, rawAudioUrl, userId, ".mp3", "audio/mpeg");
+      console.log("Audio uploaded successfully");
     }
 
-    // ===== STEP 3: Generate Video (for mtv_only and full_auto) =====
+    // ===== STEP 3: Generate MTV Video =====
     if (serviceOption === "mtv_only" || serviceOption === "full_auto") {
-      console.log("Step 3: Generating MTV visuals...");
+      console.log("Step 3: Generating MTV video...");
 
       const STABILITY_API_KEY = keyMap.stability_api_key || Deno.env.get("STABILITY_API_KEY");
 
+      // For mtv_only with uploaded audio, use the audioBase64
+      let sourceAudioUrl = audioUrl;
+      if (serviceOption === "mtv_only" && audioBase64) {
+        // Upload the user's audio to storage first
+        const audioBytes = Uint8Array.from(atob(audioBase64), c => c.charCodeAt(0));
+        const fileName = `uploaded-${userId}-${Date.now()}.mp3`;
+        await supabaseAdmin.storage.from("videos").upload(fileName, audioBytes.buffer, { contentType: "audio/mpeg" });
+        const { data: signedData } = await supabaseAdmin.storage.from("videos").createSignedUrl(fileName, 86400 * 7);
+        sourceAudioUrl = signedData?.signedUrl || null;
+      }
+
+      // Generate scene image with Stability AI
       if (STABILITY_API_KEY) {
         try {
-          // First generate a scene image with Stability AI
+          const styleDescriptions: Record<string, string> = {
+            cartoon: "colorful cartoon animation style, vibrant 2D animation",
+            "3d": "3D rendered cinematic scene, Pixar quality",
+            realistic: "photorealistic human performers on stage, concert lighting",
+            anime: "anime style illustration, Japanese animation aesthetic",
+            abstract: "abstract art, psychedelic colors, flowing shapes",
+            cinematic: "cinematic widescreen shot, dramatic lighting, film quality",
+          };
+
+          const scenePrompt = `Music video scene for ${genre || "pop"} ${mood || "happy"} song, ${styleDescriptions[mtvStyle || "cartoon"] || "cinematic"}, professional MTV quality, vibrant colors, 16:9 widescreen aspect ratio, no text, no watermark`;
+
+          console.log("Generating scene image...");
+          const fd = new FormData();
+          fd.append("prompt", scenePrompt);
+          fd.append("output_format", "png");
+          fd.append("aspect_ratio", "16:9");
+
           const sceneResponse = await fetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
             method: "POST",
             headers: { Authorization: `Bearer ${STABILITY_API_KEY}`, Accept: "image/*" },
-            body: (() => {
-              const fd = new FormData();
-              fd.append("prompt", `Music video scene for ${genre} ${mood} song, cinematic, professional, vibrant colors, 16:9 aspect ratio`);
-              fd.append("output_format", "png");
-              fd.append("aspect_ratio", "16:9");
-              return fd;
-            })(),
+            body: fd,
           });
 
-          if (sceneResponse.ok) {
+          if (!sceneResponse.ok) {
+            const errText = await sceneResponse.text();
+            console.error("Scene generation failed:", sceneResponse.status, errText);
+            // Don't throw - video is optional, continue without it
+          } else {
             const sceneBuffer = await sceneResponse.arrayBuffer();
-            const sceneBytes = new Uint8Array(sceneBuffer);
+            console.log("Scene image generated, size:", sceneBuffer.byteLength);
 
-            // Generate video from the scene image
+            // Generate video from scene image using Stability AI image-to-video
             const videoFormData = new FormData();
-            videoFormData.append("image", new Blob([sceneBytes], { type: "image/png" }), "scene.png");
+            videoFormData.append("image", new Blob([sceneBuffer], { type: "image/png" }), "scene.png");
             videoFormData.append("motion_bucket_id", "200");
             videoFormData.append("cfg_scale", "2.5");
 
@@ -213,12 +251,15 @@ serve(async (req) => {
               body: videoFormData,
             });
 
-            if (videoStartResponse.ok) {
+            if (!videoStartResponse.ok) {
+              const errText = await videoStartResponse.text();
+              console.error("Video start failed:", videoStartResponse.status, errText);
+            } else {
               const videoStart = await videoStartResponse.json();
               const genId = videoStart.id;
               console.log(`Video generation started: ${genId}`);
 
-              // Poll for video completion
+              // Poll for video completion (up to 3 minutes)
               for (let i = 0; i < 36; i++) {
                 await new Promise(r => setTimeout(r, 5000));
                 const videoCheck = await fetch(`https://api.stability.ai/v2beta/image-to-video/result/${genId}`, {
@@ -227,14 +268,22 @@ serve(async (req) => {
 
                 if (videoCheck.status === 200) {
                   const videoBuffer = await videoCheck.arrayBuffer();
+                  console.log("Video generated, size:", videoBuffer.byteLength);
                   const fileName = `mtv-${userId}-${Date.now()}.mp4`;
                   await supabaseAdmin.storage.from("videos").upload(fileName, videoBuffer, { contentType: "video/mp4" });
-                  const { data: signedVidData, error: signedVidErr } = await supabaseAdmin.storage.from("videos").createSignedUrl(fileName, 86400);
-                  videoUrl = signedVidErr ? null : signedVidData?.signedUrl || null;
-                  console.log("MTV video generated successfully");
+                  const { data: signedVidData, error: signedVidErr } = await supabaseAdmin.storage.from("videos").createSignedUrl(fileName, 86400 * 7);
+                  if (!signedVidErr && signedVidData) {
+                    videoUrl = signedVidData.signedUrl;
+                    console.log("MTV video uploaded successfully");
+                  }
                   break;
-                } else if (videoCheck.status !== 202) {
-                  console.error("Video check error:", videoCheck.status);
+                } else if (videoCheck.status === 202) {
+                  console.log(`Video poll ${i}: still processing...`);
+                  // Consume body to avoid leak
+                  await videoCheck.text();
+                } else {
+                  const errText = await videoCheck.text();
+                  console.error("Video check error:", videoCheck.status, errText);
                   break;
                 }
               }
@@ -242,11 +291,25 @@ serve(async (req) => {
           }
         } catch (videoErr) {
           console.error("Video generation error:", videoErr);
+          // Non-fatal - we still have audio
         }
+      } else {
+        console.warn("No Stability API key - skipping video generation");
       }
     }
 
-    // Deduct credits after success
+    // Verify we produced something useful
+    if (serviceOption === "song_only" && !audioUrl) {
+      throw new Error("Failed to generate music audio");
+    }
+    if (serviceOption === "mtv_only" && !videoUrl) {
+      throw new Error("Failed to generate MTV video");
+    }
+    if (serviceOption === "full_auto" && !audioUrl) {
+      throw new Error("Failed to generate music for full automation");
+    }
+
+    // Deduct credits only after successful generation
     const { data: deductResult } = await supabaseAdmin.rpc("deduct_user_credits", {
       _user_id: userId, _amount: creditCost, _action: `song_mtv_${serviceOption}`,
     });
@@ -255,20 +318,18 @@ serve(async (req) => {
       user_id: userId, amount: creditCost, credit_type: "deduction", description: `Song/MTV: ${serviceOption}, ${genre}, ${mood}`,
     });
 
-    console.log("Song/MTV completed");
+    console.log("Song/MTV completed successfully");
 
-    return new Response(JSON.stringify({
+    return respond({
       audio: audioUrl,
       video: videoUrl,
       lyrics,
       creditsUsed: creditCost,
-      newBalance: deductResult?.new_balance,
-    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      newBalance: (deductResult as any)?.new_balance,
+    });
 
   } catch (error: unknown) {
     console.error("Song/MTV error:", error);
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return respond({ error: error instanceof Error ? error.message : "Unknown error" }, 500);
   }
 });
