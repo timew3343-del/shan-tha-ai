@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Brain, Plus, Trash2, Save, Loader2, Upload, BookOpen, Search } from "lucide-react";
+import { Brain, Plus, Trash2, Save, Loader2, BookOpen, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
