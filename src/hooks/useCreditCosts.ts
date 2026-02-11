@@ -51,6 +51,7 @@ const BASE_API_COSTS = {
   style_transfer: 3,
   smart_chef: 1,
   travel_planner: 1,
+  fashion_designer: 5,
 };
 
 export type CreditCostKey = keyof typeof BASE_API_COSTS;
@@ -103,6 +104,7 @@ export interface CreditCosts {
   style_transfer: number;
   smart_chef: number;
   travel_planner: number;
+  fashion_designer: number;
 }
 
 function calculateDefaultCosts(margin: number = 40): CreditCosts {

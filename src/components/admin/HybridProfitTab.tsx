@@ -58,6 +58,7 @@ const TOOL_LABELS: Record<CreditCostKey, string> = {
   style_transfer: "Artistic Style Transfer",
   smart_chef: "Smart Chef & Grocery",
   travel_planner: "Travel Planner",
+  fashion_designer: "Fashion Designer PRO",
 };
 
 interface ToolPricing {
