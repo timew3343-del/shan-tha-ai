@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 import { EmailVerificationScreen } from "@/components/EmailVerificationScreen";
+import { SEOHead } from "@/components/SEOHead";
+import { PublicFeatureDirectory } from "@/components/PublicFeatureDirectory";
 
 const authSchema = z.object({
   email: z.string().email("မှန်ကန်သော အီးမေးလ် ထည့်ပါ"),
@@ -224,6 +226,7 @@ const Auth = () => {
 
   return (
     <div className="min-h-screen gradient-navy flex flex-col items-center justify-center p-4">
+      <SEOHead />
       {/* Header */}
       <div className="text-center mb-8 animate-fade-up">
         <div className="inline-flex items-center gap-2 mb-3">
@@ -390,8 +393,13 @@ const Auth = () => {
         </p>
       </div>
 
+      {/* Public Feature Directory for SEO crawlers */}
+      <div className="w-full max-w-md mt-6 animate-fade-up" style={{ animationDelay: "0.5s" }}>
+        <PublicFeatureDirectory />
+      </div>
+
       {/* Footer */}
-      <p className="mt-6 text-xs text-muted-foreground text-center animate-fade-up" style={{ animationDelay: "0.5s" }}>
+      <p className="mt-6 text-xs text-muted-foreground text-center animate-fade-up" style={{ animationDelay: "0.6s" }}>
         ဝန်ဆောင်မှုစည်းမျဉ်းများကို လက်ခံပြီး ဆက်လက်ဆောင်ရွက်ပါ
       </p>
     </div>
