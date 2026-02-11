@@ -22,19 +22,21 @@ export const ReferralSection = ({ userId }: ReferralSectionProps) => {
       if (!userId) return;
 
       try {
-        // Try to fetch existing code
-        const { data: existing } = await supabase
+        // Fetch existing codes - use limit 1 + order to get first created
+        const { data: existingCodes } = await supabase
           .from("referral_codes")
           .select("*")
           .eq("user_id", userId)
-          .maybeSingle();
+          .order("created_at", { ascending: true })
+          .limit(1);
 
-        if (existing) {
+        if (existingCodes && existingCodes.length > 0) {
+          const existing = existingCodes[0];
           setReferralCode(existing.code);
           setUsesCount(existing.uses_count);
           setCreditsEarned(existing.credits_earned);
         } else {
-          // Generate new code
+          // Generate new code only if none exists
           const code = `MAI${userId.substring(0, 6).toUpperCase()}${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
           const { data: newCode, error } = await supabase
             .from("referral_codes")
