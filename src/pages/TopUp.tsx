@@ -257,27 +257,6 @@ export const TopUp = () => {
           </div>
         )}
 
-        {/* Credit Usage Info */}
-        <div className="gradient-card rounded-2xl p-4 border border-border/30 animate-fade-up">
-          <h3 className="font-semibold text-foreground text-sm mb-3 flex items-center gap-2">
-            <CreditCard className="w-4 h-4 text-primary" />
-            Credit အသုံးပြုခ
-          </h3>
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="p-2 rounded-xl bg-secondary/50">
-              <p className="text-lg font-bold text-primary">2</p>
-              <p className="text-xs text-muted-foreground">ပုံဆွဲခြင်း</p>
-            </div>
-            <div className="p-2 rounded-xl bg-secondary/50">
-              <p className="text-lg font-bold text-primary">5</p>
-              <p className="text-xs text-muted-foreground">Video</p>
-            </div>
-            <div className="p-2 rounded-xl bg-secondary/50">
-              <p className="text-lg font-bold text-primary">1</p>
-              <p className="text-xs text-muted-foreground">Speech</p>
-            </div>
-          </div>
-        </div>
 
         {/* Payment Methods */}
         <div className="space-y-3 animate-fade-up" style={{ animationDelay: "0.1s" }}>
