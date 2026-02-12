@@ -50,6 +50,10 @@ interface PricingPackage {
   name: string;
   credits: number;
   price: number;
+  price_mmk?: number;
+  price_thb?: number;
+  currency?: "MMK" | "THB";
+  is_best_value?: boolean;
 }
 
 interface PaymentMethod {
@@ -75,12 +79,8 @@ export const Admin = () => {
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [loadingScreenshot, setLoadingScreenshot] = useState<string | null>(null);
   
-  // Pricing state
-  const [packages, setPackages] = useState<PricingPackage[]>([
-    { id: "starter", name: "Starter", credits: 300, price: 20000 },
-    { id: "professional", name: "Professional", credits: 700, price: 40000 },
-    { id: "enterprise", name: "Enterprise", credits: 2000, price: 120000 },
-  ]);
+  // Pricing state - loaded from database
+  const [packages, setPackages] = useState<PricingPackage[]>([]);
   const [isSavingPricing, setIsSavingPricing] = useState(false);
 
   // Credit Costs state removed - now uses Global Profit Margin
@@ -191,6 +191,7 @@ export const Admin = () => {
         loadSettings();
         loadUsers();
         loadCampaigns();
+        loadPricingPackages();
       }
       setIsLoading(false);
     }
@@ -634,14 +635,58 @@ export const Admin = () => {
 
   // saveCreditCosts removed - now uses Global Profit Margin
 
+  const loadPricingPackages = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("pricing_packages")
+        .select("*")
+        .eq("is_active", true)
+        .order("credits", { ascending: true });
+      
+      if (error) throw error;
+      if (data) {
+        setPackages(data.map(p => ({
+          id: p.id,
+          name: p.name,
+          credits: p.credits,
+          price: p.currency === "THB" ? p.price_thb : p.price_mmk,
+          price_thb: p.price_thb,
+          price_mmk: p.price_mmk,
+          currency: p.currency as "MMK" | "THB",
+          is_best_value: p.is_best_value || false,
+        })));
+      }
+    } catch (error) {
+      console.error("Error loading pricing:", error);
+    }
+  };
+
   const savePricingChanges = async () => {
     setIsSavingPricing(true);
     try {
-      localStorage.setItem("pricing_packages", JSON.stringify(packages));
+      for (const pkg of packages) {
+        const updateData: any = {
+          name: pkg.name,
+          credits: pkg.credits,
+          is_best_value: pkg.is_best_value || false,
+        };
+        if ((pkg as any).currency === "THB") {
+          updateData.price_thb = pkg.price;
+        } else {
+          updateData.price_mmk = pkg.price;
+        }
+        
+        const { error } = await supabase
+          .from("pricing_packages")
+          .update(updateData)
+          .eq("id", pkg.id);
+        
+        if (error) throw error;
+      }
       
       toast({
         title: "သိမ်းဆည်းပြီးပါပြီ",
-        description: "စျေးနှုန်းများကို အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ",
+        description: "စျေးနှုန်းများကို Database တွင် အောင်မြင်စွာ သိမ်းဆည်းပြီးပါပြီ။ TopUp စာမျက်နှာတွင် ချက်ခြင်း ပြောင်းလဲပါမည်။",
       });
     } catch (error) {
       console.error("Error saving pricing:", error);
@@ -1057,102 +1102,77 @@ export const Admin = () => {
               <div className="gradient-card rounded-2xl p-4 border border-primary/20">
                 <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
                   <DollarSign className="w-5 h-5 text-primary" />
-                  စျေးနှုန်း ပြင်ဆင်ခြင်း
+                  စျေးနှုန်း ပြင်ဆင်ခြင်း (Database)
                 </h3>
-                <div className="space-y-4">
-                  {packages.map((pkg) => (
-                    <div key={pkg.id} className="p-3 bg-secondary/30 rounded-xl">
-                      <p className="font-medium text-foreground mb-2">{pkg.name}</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-xs text-muted-foreground">Credits</label>
-                          <Input type="number" value={pkg.credits}
-                            onChange={(e) => updatePackagePrice(pkg.id, "credits", parseInt(e.target.value) || 0)}
-                            className="mt-1" />
+                {packages.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Loading packages...</p>
+                ) : (
+                  <div className="space-y-4">
+                    {packages.map((pkg) => (
+                      <div key={pkg.id} className="p-3 bg-secondary/30 rounded-xl">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-primary/20 text-primary font-medium">
+                            {(pkg as any).currency || "MMK"}
+                          </span>
+                          <p className="font-medium text-foreground">{pkg.name}</p>
+                          {pkg.is_best_value && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-success/20 text-success">Best Value</span>
+                          )}
                         </div>
-                        <div>
-                          <label className="text-xs text-muted-foreground">Price (MMK)</label>
-                          <Input type="number" value={pkg.price}
-                            onChange={(e) => updatePackagePrice(pkg.id, "price", parseInt(e.target.value) || 0)}
-                            className="mt-1" />
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs text-muted-foreground">Credits</label>
+                            <Input type="number" value={pkg.credits}
+                              onChange={(e) => updatePackagePrice(pkg.id, "credits", parseInt(e.target.value) || 0)}
+                              className="mt-1" />
+                          </div>
+                          <div>
+                            <label className="text-xs text-muted-foreground">
+                              Price ({(pkg as any).currency || "MMK"})
+                            </label>
+                            <Input type="number" value={pkg.price}
+                              onChange={(e) => updatePackagePrice(pkg.id, "price", parseInt(e.target.value) || 0)}
+                              className="mt-1" />
+                          </div>
                         </div>
                       </div>
+                    ))}
+                  </div>
+                )}
+                <Button onClick={savePricingChanges} disabled={isSavingPricing}
+                  className="w-full mt-4 gradient-gold text-primary-foreground">
+                  {isSavingPricing ? <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" /> : <><Save className="w-4 h-4 mr-2" />Database သို့ Save</>}
+                </Button>
+              </div>
+
+              {/* Connected Payment Methods */}
+              <div className="gradient-card rounded-2xl p-4 border border-primary/20 mt-4">
+                <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <Building className="w-5 h-5 text-primary" />
+                  ဘဏ်/ငွေပေးချေနည်း ({paymentMethods.length})
+                </h3>
+                <div className="space-y-2">
+                  {paymentMethods.map((pm) => (
+                    <div key={pm.id} className="flex items-center justify-between p-2 bg-secondary/30 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <span>{pm.country?.split(" ")[0]}</span>
+                        <span className="text-sm font-medium text-foreground">{pm.name}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">{pm.number}</span>
                     </div>
                   ))}
                 </div>
-                <Button onClick={savePricingChanges} disabled={isSavingPricing}
-                  className="w-full mt-4 gradient-gold text-primary-foreground">
-                  {isSavingPricing ? <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" /> : <><Save className="w-4 h-4 mr-2" />Save Changes</>}
-                </Button>
+                <p className="text-xs text-muted-foreground mt-2">
+                  💡 ဘဏ်အသစ်ထည့်/ပြင်ရန် Settings tab → Payment Methods သို့သွားပါ
+                </p>
               </div>
+
               <HybridProfitTab />
             </div>
           </TabsContent>
 
-          {/* Analytics Tab - consolidated with Audit, Pricing */}
-          <TabsContent value="analytics" className="space-y-4">
-            <FinancialDashboardTab />
-            
-            <div className="border-t border-border/50 pt-4 mt-4">
-              <h3 className="text-sm font-semibold text-foreground mb-3 font-myanmar">📊 ယနေ့စာရင်း</h3>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="gradient-card rounded-xl p-3 border border-primary/20 text-center">
-                  <p className="text-[10px] text-muted-foreground">ယနေ့</p>
-                  <p className="text-sm font-bold text-foreground">{formatCurrency(analytics.dailyIncome)}</p>
-                </div>
-                <div className="gradient-card rounded-xl p-3 border border-primary/20 text-center">
-                  <p className="text-[10px] text-muted-foreground">ဤအပတ်</p>
-                  <p className="text-sm font-bold text-foreground">{formatCurrency(analytics.weeklyIncome)}</p>
-                </div>
-                <div className="gradient-card rounded-xl p-3 border border-primary/20 text-center">
-                  <p className="text-[10px] text-muted-foreground">ဤလ</p>
-                  <p className="text-sm font-bold text-foreground">{formatCurrency(analytics.monthlyIncome)}</p>
-                </div>
-              </div>
-            </div>
 
-            <Button onClick={handleExportCSV} className="w-full" variant="outline">
-              <Download className="w-4 h-4 mr-2" />
-              CSV Export
-            </Button>
-
-            <ToolAnalyticsTab />
-            <CreditAuditTab />
-            <HybridProfitTab />
-
-            {/* Pricing */}
-            <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-                <DollarSign className="w-5 h-5 text-primary" />
-                စျေးနှုန်း ပြင်ဆင်ခြင်း
-              </h3>
-              <div className="space-y-4">
-                {packages.map((pkg) => (
-                  <div key={pkg.id} className="p-3 bg-secondary/30 rounded-xl">
-                    <p className="font-medium text-foreground mb-2">{pkg.name}</p>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-xs text-muted-foreground">Credits</label>
-                        <Input type="number" value={pkg.credits}
-                          onChange={(e) => updatePackagePrice(pkg.id, "credits", parseInt(e.target.value) || 0)}
-                          className="mt-1" />
-                      </div>
-                      <div>
-                        <label className="text-xs text-muted-foreground">Price (MMK)</label>
-                        <Input type="number" value={pkg.price}
-                          onChange={(e) => updatePackagePrice(pkg.id, "price", parseInt(e.target.value) || 0)}
-                          className="mt-1" />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <Button onClick={savePricingChanges} disabled={isSavingPricing}
-                className="w-full mt-4 gradient-gold text-primary-foreground">
-                {isSavingPricing ? <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" /> : <><Save className="w-4 h-4 mr-2" />Save</>}
-              </Button>
-            </div>
-          </TabsContent>
+          {/* Duplicate removed */}
 
           {/* Unified API Management Tab */}
           <TabsContent value="api-management" className="space-y-4">
