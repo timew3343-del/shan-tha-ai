@@ -1270,9 +1270,47 @@ export const Admin = () => {
               </div>
               {showAddForm && (
                 <div className="mt-4 p-4 border border-primary/30 rounded-xl bg-secondary/20 space-y-3">
-                  <Input value={newPayment.name} onChange={(e) => setNewPayment(p => ({ ...p, name: e.target.value }))} placeholder="Name" />
-                  <Input value={newPayment.number} onChange={(e) => setNewPayment(p => ({ ...p, number: e.target.value }))} placeholder="Number" />
-                  <Input value={newPayment.holder} onChange={(e) => setNewPayment(p => ({ ...p, holder: e.target.value }))} placeholder="Holder" />
+                  <Input value={newPayment.name} onChange={(e) => setNewPayment(p => ({ ...p, name: e.target.value }))} placeholder="Name (e.g. KBZ Bank, SCB Bank)" />
+                  <Input value={newPayment.number} onChange={(e) => setNewPayment(p => ({ ...p, number: e.target.value }))} placeholder="Account Number" />
+                  <Input value={newPayment.holder} onChange={(e) => setNewPayment(p => ({ ...p, holder: e.target.value }))} placeholder="Account Holder Name" />
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">နိုင်ငံ ရွေးချယ်ပါ</label>
+                    <select
+                      value={newPayment.country}
+                      onChange={(e) => setNewPayment(p => ({ ...p, country: e.target.value }))}
+                      className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="🇲🇲 Myanmar">🇲🇲 Myanmar</option>
+                      <option value="🇹🇭 Thailand">🇹🇭 Thailand</option>
+                      <option value="🇸🇬 Singapore">🇸🇬 Singapore</option>
+                      <option value="🇲🇾 Malaysia">🇲🇾 Malaysia</option>
+                      <option value="🇯🇵 Japan">🇯🇵 Japan</option>
+                      <option value="🇰🇷 South Korea">🇰🇷 South Korea</option>
+                      <option value="🇨🇳 China">🇨🇳 China</option>
+                      <option value="🇮🇳 India">🇮🇳 India</option>
+                      <option value="🇻🇳 Vietnam">🇻🇳 Vietnam</option>
+                      <option value="🇱🇦 Laos">🇱🇦 Laos</option>
+                      <option value="🇰🇭 Cambodia">🇰🇭 Cambodia</option>
+                      <option value="🇵🇭 Philippines">🇵🇭 Philippines</option>
+                      <option value="🇮🇩 Indonesia">🇮🇩 Indonesia</option>
+                      <option value="🇧🇩 Bangladesh">🇧🇩 Bangladesh</option>
+                      <option value="🇺🇸 USA">🇺🇸 USA</option>
+                      <option value="🇬🇧 UK">🇬🇧 UK</option>
+                      <option value="🇦🇺 Australia">🇦🇺 Australia</option>
+                      <option value="🇨🇦 Canada">🇨🇦 Canada</option>
+                      <option value="🇩🇪 Germany">🇩🇪 Germany</option>
+                      <option value="🇫🇷 France">🇫🇷 France</option>
+                      <option value="🇮🇹 Italy">🇮🇹 Italy</option>
+                      <option value="🇪🇸 Spain">🇪🇸 Spain</option>
+                      <option value="🇳🇱 Netherlands">🇳🇱 Netherlands</option>
+                      <option value="🇧🇷 Brazil">🇧🇷 Brazil</option>
+                      <option value="🇲🇽 Mexico">🇲🇽 Mexico</option>
+                      <option value="🇦🇪 UAE">🇦🇪 UAE</option>
+                      <option value="🇸🇦 Saudi Arabia">🇸🇦 Saudi Arabia</option>
+                      <option value="🇹🇼 Taiwan">🇹🇼 Taiwan</option>
+                      <option value="🇭🇰 Hong Kong">🇭🇰 Hong Kong</option>
+                    </select>
+                  </div>
                   <div className="flex gap-2">
                     <Button onClick={addNewPayment} className="flex-1 gradient-gold text-primary-foreground"><Plus className="w-4 h-4 mr-2" />Add</Button>
                     <Button onClick={() => setShowAddForm(null)} variant="outline" className="flex-1">Cancel</Button>

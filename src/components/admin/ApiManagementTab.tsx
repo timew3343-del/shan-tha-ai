@@ -78,6 +78,14 @@ const API_KEYS: ApiKeyConfig[] = [
     toggleKey: "api_enabled_sunoapi",
     tasks: ["Song Generation", "Human Vocals", "MTV Audio", "Lyrics"],
   },
+  {
+    key: "goapi_suno",
+    label: "GoAPI Suno",
+    description: "Suno AI via GoAPI (Backup Song Generation)",
+    settingKey: "goapi_suno_api_key",
+    toggleKey: "api_enabled_goapi_suno",
+    tasks: ["Song Generation Backup", "Music AI", "Vocals Backup"],
+  },
 ];
 
 // Additional keys that don't have toggle/auto-switch (Stripe, ACRCloud secret)
