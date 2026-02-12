@@ -88,6 +88,7 @@ async function generateSongWithFailover(
           body: JSON.stringify({
             customMode: true, instrumental: false,
             title: songTitle, tags: songTags, prompt: songLyrics, model: "V4",
+            callBackUrl: "https://example.com/callback",
           }),
         });
 
@@ -97,8 +98,9 @@ async function generateSongWithFailover(
         }
 
         const sunoData = await sunoResponse.json();
+        console.log("SunoAPI response:", JSON.stringify(sunoData).substring(0, 500));
         const taskId = sunoData.data?.taskId || sunoData.data?.task_id;
-        if (!taskId) throw new Error("SunoAPI: no task ID");
+        if (!taskId) throw new Error(`SunoAPI: no task ID in response: ${JSON.stringify(sunoData).substring(0, 200)}`);
 
         console.log("SunoAPI task:", taskId);
 
