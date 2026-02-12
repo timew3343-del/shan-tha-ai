@@ -85,24 +85,19 @@ const TOOL_CONFIGS: Record<string, ToolConfig> = {
   },
 };
 
-// Helper: check if an API provider is enabled
-async function isApiEnabled(supabaseAdmin: any, provider: string): Promise<boolean> {
-  const { data } = await supabaseAdmin
-    .from("app_settings")
-    .select("value")
-    .eq("key", `api_enabled_${provider}`)
-    .maybeSingle();
-  // Default to true if no setting exists
-  return data?.value !== "false";
-}
+// Priority-ordered model list for sequential failover
+const MODEL_PRIORITY = [
+  "google/gemini-3-flash-preview",
+  "google/gemini-2.5-flash",
+  "google/gemini-2.5-flash-lite",
+  "openai/gpt-5-mini",
+  "openai/gpt-5-nano",
+];
 
 // Helper: get daily free uses limit
 async function getDailyFreeUsesLimit(supabaseAdmin: any): Promise<number> {
   const { data } = await supabaseAdmin
-    .from("app_settings")
-    .select("value")
-    .eq("key", "daily_free_uses")
-    .maybeSingle();
+    .from("app_settings").select("value").eq("key", "daily_free_uses").maybeSingle();
   return data?.value ? parseInt(data.value, 10) : 3;
 }
 
@@ -110,27 +105,95 @@ async function getDailyFreeUsesLimit(supabaseAdmin: any): Promise<number> {
 async function checkDailyFreeUse(supabaseAdmin: any, userId: string): Promise<boolean> {
   const limit = await getDailyFreeUsesLimit(supabaseAdmin);
   if (limit <= 0) return false;
-
   const today = new Date().toISOString().split("T")[0];
-
-  // Count today's free uses from credit_audit_log
   const { count } = await supabaseAdmin
-    .from("credit_audit_log")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .eq("credit_type", "daily_free")
+    .from("credit_audit_log").select("id", { count: "exact", head: true })
+    .eq("user_id", userId).eq("credit_type", "daily_free")
     .gte("created_at", `${today}T00:00:00Z`);
-
   return (count || 0) < limit;
 }
 
 async function recordFreeUse(supabaseAdmin: any, userId: string, action: string) {
   await supabaseAdmin.from("credit_audit_log").insert({
-    user_id: userId,
-    amount: 0,
-    credit_type: "daily_free",
+    user_id: userId, amount: 0, credit_type: "daily_free",
     description: `Free daily use: ${action}`,
   });
+}
+
+// Sequential failover: try models in priority order
+async function callAIWithFailover(
+  apiKey: string,
+  systemPrompt: string,
+  userContent: any[],
+  models: string[]
+): Promise<{ result: string; modelUsed: string }> {
+  let lastError = "";
+
+  for (const model of models) {
+    try {
+      console.log(`Trying model: ${model}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userContent },
+          ],
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const aiResult = await response.json();
+        const resultText = aiResult.choices?.[0]?.message?.content || "";
+        if (resultText) {
+          console.log(`Success with model: ${model}`);
+          return { result: resultText, modelUsed: model };
+        }
+        lastError = `Empty response from ${model}`;
+        console.warn(lastError);
+        continue;
+      }
+
+      // Consume body to prevent leak
+      const errText = await response.text();
+      lastError = `${model} failed: ${response.status} - ${errText.substring(0, 200)}`;
+      console.warn(lastError);
+
+      // If rate limited, try next immediately
+      if (response.status === 429 || response.status === 402 || response.status === 404 || response.status >= 500) {
+        continue;
+      }
+
+      // For other client errors (400, 401), don't retry - it's a request issue
+      if (response.status >= 400 && response.status < 500) {
+        throw new Error(lastError);
+      }
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        lastError = `${model} timed out`;
+        console.warn(lastError);
+        continue;
+      }
+      // Re-throw non-retryable errors
+      if (err.message?.includes("failed:")) throw err;
+      lastError = `${model} error: ${err.message}`;
+      console.warn(lastError);
+      continue;
+    }
+  }
+
+  throw new Error(`API များအားလုံး မအောင်မြင်ပါ။ နောက်မှ ထပ်ကြိုးစားပါ။ (${lastError})`);
 }
 
 serve(async (req) => {
@@ -190,7 +253,6 @@ serve(async (req) => {
     let isFreeUse = false;
 
     if (!hasFreeUse) {
-      // Check credits normally
       const { data: profile } = await supabaseAdmin
         .from("profiles").select("credit_balance").eq("user_id", userId).single();
       if (!profile || profile.credit_balance < creditCost) {
@@ -200,27 +262,6 @@ serve(async (req) => {
       }
     } else {
       isFreeUse = true;
-    }
-
-    // Smart API Switching: check if primary provider is enabled, failover to backup
-    const provider = config.provider || "gemini";
-    const providerEnabled = await isApiEnabled(supabaseAdmin, provider);
-
-    // Determine which model to use based on provider toggle
-    let model = config.model || "google/gemini-3-flash-preview";
-
-    if (provider === "gemini" && !providerEnabled) {
-      // Failover: Gemini OFF → use Replicate via Lovable AI (fallback to a different model)
-      const replicateEnabled = await isApiEnabled(supabaseAdmin, "replicate");
-      if (replicateEnabled) {
-        // Use a different model as fallback
-        model = "google/gemini-2.5-flash-lite";
-        console.log(`Failover: Gemini OFF, routing to fallback model: ${model}`);
-      } else {
-        return new Response(JSON.stringify({ error: "All AI providers are currently disabled. Please contact admin." }), {
-          status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
     }
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -254,43 +295,17 @@ serve(async (req) => {
     }
     userContent.push({ type: "text", text: userText });
 
-    console.log(`AI Tool [${toolType}] for user ${userId}, model=${model}, freeUse=${isFreeUse}`);
+    console.log(`AI Tool [${toolType}] for user ${userId}, freeUse=${isFreeUse}`);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: config.systemPrompt },
-          { role: "user", content: userContent },
-        ],
-      }),
-    });
+    // Sequential API Failover: try models in priority order
+    const { result: resultText, modelUsed } = await callAIWithFailover(
+      LOVABLE_API_KEY,
+      config.systemPrompt,
+      userContent,
+      MODEL_PRIORITY
+    );
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("AI Gateway error:", response.status, errText);
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI service credits exhausted." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      return new Response(JSON.stringify({ error: "AI service error" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const aiResult = await response.json();
-    const resultText = aiResult.choices?.[0]?.message?.content || "";
+    console.log(`AI Tool [${toolType}] completed with model: ${modelUsed}`);
 
     // Handle credit deduction or free use recording
     if (isFreeUse) {
@@ -306,6 +321,7 @@ serve(async (req) => {
       result: resultText,
       creditsUsed: isFreeUse ? 0 : creditCost,
       isFreeUse,
+      modelUsed,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

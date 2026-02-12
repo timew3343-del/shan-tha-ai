@@ -6,6 +6,67 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Safe base64 encoding for large buffers (fixes "Maximum call stack size exceeded")
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 8192;
+  let result = "";
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    result += String.fromCharCode(...chunk);
+  }
+  return btoa(result);
+}
+
+// AI model failover list
+const AI_MODELS = [
+  "google/gemini-3-flash-preview",
+  "google/gemini-2.5-flash",
+  "openai/gpt-5-mini",
+];
+
+async function callAIWithFailover(apiKey: string, messages: any[]): Promise<any> {
+  let lastError = "";
+  for (const model of AI_MODELS) {
+    try {
+      console.log(`Auto-Ad AI trying: ${model}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
+
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          messages,
+          response_format: { type: "json_object" },
+          temperature: 0.7,
+          max_tokens: 1500,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content;
+        if (content) {
+          console.log(`Auto-Ad AI success: ${model}`);
+          try { return JSON.parse(content); } catch { return { voiceover: content, scenes: [], cta: "Shop Now" }; }
+        }
+      }
+      const errText = await response.text();
+      lastError = `${model}: ${response.status}`;
+      console.warn(`Auto-Ad AI ${lastError} - ${errText.substring(0, 100)}`);
+    } catch (err: any) {
+      lastError = `${model}: ${err.message}`;
+      console.warn(`Auto-Ad AI error: ${lastError}`);
+    }
+  }
+  return { voiceover: "", scenes: [], cta: "Shop Now" };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -24,7 +85,7 @@ serve(async (req) => {
     }
 
     const userId = user.id;
-    const { images, productDetails, language, resolution, platforms } = await req.json();
+    const { images, productDetails, language, resolution, platforms, adStyle, showSubtitles } = await req.json();
 
     if (!images?.length || !productDetails) {
       return new Response(JSON.stringify({ error: "Images and product details required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -32,10 +93,10 @@ serve(async (req) => {
 
     console.log(`Auto Ad: user=${userId}, images=${images.length}, platforms=${platforms.join(",")}, lang=${language}, res=${resolution}`);
 
-    // Calculate credit cost with auto_ad specific profit margin
+    // Calculate credit cost
     const { data: marginSettings } = await supabaseAdmin.from("app_settings").select("key, value").in("key", ["profit_margin", "auto_ad_profit_margin"]);
     const marginMap: Record<string, string> = {};
-    marginSettings?.forEach((s) => { marginMap[s.key] = s.value || ""; });
+    marginSettings?.forEach((s: any) => { marginMap[s.key] = s.value || ""; });
 
     const profitMargin = marginMap.auto_ad_profit_margin
       ? parseInt(marginMap.auto_ad_profit_margin, 10)
@@ -56,59 +117,38 @@ serve(async (req) => {
     // Get API keys
     const { data: apiKeySettings } = await supabaseAdmin.from("app_settings").select("key, value").in("key", ["stability_api_key", "shotstack_api_key"]);
     const keyMap: Record<string, string> = {};
-    apiKeySettings?.forEach((k) => { keyMap[k.key] = k.value || ""; });
+    apiKeySettings?.forEach((k: any) => { keyMap[k.key] = k.value || ""; });
 
     const STABILITY_API_KEY = keyMap.stability_api_key || Deno.env.get("STABILITY_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    const SHOTSTACK_API_KEY = keyMap.shotstack_api_key;
 
     if (!LOVABLE_API_KEY) {
       return new Response(JSON.stringify({ error: "AI service not configured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Step 1: Generate ad script with Gemini
+    // Step 1: Generate ad script with AI failover
     console.log("Step 1: Generating ad script...");
 
     const langMap: Record<string, string> = { my: "Myanmar (Burmese)", en: "English", th: "Thai" };
     const langName = langMap[language] || "Myanmar (Burmese)";
 
-    const scriptResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "system",
-            content: `You are a world-class advertising producer. Create a professional 30-second video ad script in ${langName}.
-            Include: voiceover narration, scene descriptions for ${images.length} product images, background music suggestion, call-to-action.
-            Return JSON: { "voiceover": "full narration text", "scenes": [{"description": "scene desc", "duration_seconds": 3}], "cta": "call to action", "music_mood": "upbeat/calm/dramatic" }`,
-          },
-          { role: "user", content: `Product: ${productDetails}. Number of product images: ${images.length}` },
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0.7,
-        max_tokens: 1500,
-      }),
-    });
+    const adScript = await callAIWithFailover(LOVABLE_API_KEY, [
+      {
+        role: "system",
+        content: `You are a world-class advertising producer. Create a professional 30-second video ad script in ${langName}.
+        Include: voiceover narration, scene descriptions for ${images.length} product images, background music suggestion, call-to-action.
+        Return JSON: { "voiceover": "full narration text", "scenes": [{"description": "scene desc", "duration_seconds": 3}], "cta": "call to action", "music_mood": "upbeat/calm/dramatic" }`,
+      },
+      { role: "user", content: `Product: ${productDetails}. Number of product images: ${images.length}` },
+    ]);
 
-    let adScript: any = {};
-    if (scriptResponse.ok) {
-      const scriptData = await scriptResponse.json();
-      try {
-        adScript = JSON.parse(scriptData.choices?.[0]?.message?.content || "{}");
-      } catch {
-        adScript = { voiceover: productDetails, scenes: [], cta: "Shop Now" };
-      }
-      console.log("Ad script generated");
-    }
+    console.log("Ad script generated");
 
     // Step 2: Enhance first image with Stability AI
     console.log("Step 2: Enhancing product images...");
-    const enhancedImages: string[] = [];
+    let enhancedImageBase64: string | null = null;
 
     if (STABILITY_API_KEY && images.length > 0) {
-      // Enhance first image as hero
       try {
         const imgBytes = Uint8Array.from(atob(images[0]), (c) => c.charCodeAt(0));
         const imgBlob = new Blob([imgBytes], { type: "image/png" });
@@ -127,9 +167,12 @@ serve(async (req) => {
 
         if (enhanceResponse.ok) {
           const resultBuffer = await enhanceResponse.arrayBuffer();
-          const base64 = btoa(String.fromCharCode(...new Uint8Array(resultBuffer)));
-          enhancedImages.push(`data:image/png;base64,${base64}`);
-          console.log("Hero image enhanced");
+          // Use chunked base64 encoding to avoid stack overflow
+          enhancedImageBase64 = arrayBufferToBase64(resultBuffer);
+          console.log("Hero image enhanced successfully");
+        } else {
+          const errText = await enhanceResponse.text();
+          console.warn("Image enhancement failed:", enhanceResponse.status, errText.substring(0, 100));
         }
       } catch (enhErr) {
         console.error("Image enhancement error:", enhErr);
@@ -142,11 +185,13 @@ serve(async (req) => {
 
     for (const platform of platforms) {
       try {
-        // Use Stability AI to generate a video clip from enhanced image
-        if (STABILITY_API_KEY && enhancedImages.length > 0) {
-          let videoImageData = enhancedImages[0];
-          if (videoImageData.includes(",")) videoImageData = videoImageData.split(",")[1];
-          const videoImageBytes = Uint8Array.from(atob(videoImageData), (c) => c.charCodeAt(0));
+        const imageToUse = enhancedImageBase64 || images[0];
+        
+        if (STABILITY_API_KEY && imageToUse) {
+          // Decode the base64 image
+          let rawBase64 = imageToUse;
+          if (rawBase64.includes(",")) rawBase64 = rawBase64.split(",")[1];
+          const videoImageBytes = Uint8Array.from(atob(rawBase64), (c) => c.charCodeAt(0));
 
           const videoFormData = new FormData();
           videoFormData.append("image", new Blob([videoImageBytes], { type: "image/png" }), "image.png");
@@ -178,11 +223,17 @@ serve(async (req) => {
                 resultVideos.push({ platform, url: signedErr ? "" : signedData?.signedUrl || "" });
                 console.log(`Video for ${platform} completed`);
                 break;
-              } else if (checkResponse.status !== 202) {
-                console.error(`Video ${platform} error:`, checkResponse.status);
+              } else if (checkResponse.status === 202) {
+                await checkResponse.text(); // consume body
+              } else {
+                const errText = await checkResponse.text();
+                console.error(`Video ${platform} error:`, checkResponse.status, errText.substring(0, 100));
                 break;
               }
             }
+          } else {
+            const errText = await startResponse.text();
+            console.error(`Video start failed for ${platform}:`, startResponse.status, errText.substring(0, 100));
           }
         }
       } catch (vidErr) {
@@ -206,7 +257,7 @@ serve(async (req) => {
       videos: resultVideos,
       script: adScript,
       creditsUsed: creditCost,
-      newBalance: deductResult?.new_balance,
+      newBalance: (deductResult as any)?.new_balance,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (error: unknown) {
