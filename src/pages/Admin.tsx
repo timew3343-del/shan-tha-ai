@@ -25,12 +25,11 @@ import { PromoCodesTab } from "@/components/admin/PromoCodesTab";
 import { UserFeedbackTab } from "@/components/admin/UserFeedbackTab";
 import { ContentFactoryTab } from "@/components/admin/ContentFactoryTab";
 import { AdminUserTable } from "@/components/admin/AdminUserTable";
-import { ApiSwitchingTab } from "@/components/admin/ApiSwitchingTab";
 import { AdsterraConfigTab } from "@/components/admin/AdsterraConfigTab";
 import { KnowledgeBaseTab } from "@/components/admin/KnowledgeBaseTab";
-import { ApiBalanceTab } from "@/components/admin/ApiBalanceTab";
 import { CollaboratorManagementTab } from "@/components/admin/CollaboratorManagementTab";
 import { FinancialDashboardTab } from "@/components/admin/FinancialDashboardTab";
+import { ApiManagementTab } from "@/components/admin/ApiManagementTab";
 
 interface PendingTransaction {
   id: string;
@@ -869,67 +868,31 @@ export const Admin = () => {
               <CreditCard className="w-4 h-4 mr-1" />
               ငွေသွင်း
             </TabsTrigger>
-            <TabsTrigger value="campaigns" className="text-xs">
-              <Gift className="w-4 h-4 mr-1" />
-              Campaign
-            </TabsTrigger>
-            <TabsTrigger value="audit" className="text-xs">
-              <Play className="w-4 h-4 mr-1" />
-              Audit
+            <TabsTrigger value="users-table" className="text-xs">
+              <Users className="w-4 h-4 mr-1" />
+              Users
             </TabsTrigger>
             <TabsTrigger value="analytics" className="text-xs">
               <BarChart3 className="w-4 h-4 mr-1" />
               စာရင်း
             </TabsTrigger>
-          </TabsList>
-          <TabsList className="grid w-full grid-cols-5 mb-6">
-            <TabsTrigger value="pricing" className="text-xs">
-              <DollarSign className="w-4 h-4 mr-1" />
-              စျေးနှုန်း
-            </TabsTrigger>
-            <TabsTrigger value="promo" className="text-xs">
-              <Tag className="w-4 h-4 mr-1" />
-              Promo
-            </TabsTrigger>
-            <TabsTrigger value="feedback" className="text-xs">
-              <MessageSquare className="w-4 h-4 mr-1" />
-              Feedback
-            </TabsTrigger>
-            <TabsTrigger value="appsettings" className="text-xs">
-              <Settings2 className="w-4 h-4 mr-1" />
-              App
-            </TabsTrigger>
-            <TabsTrigger value="system" className="text-xs">
-              <Activity className="w-4 h-4 mr-1" />
-              System
+            <TabsTrigger value="api-management" className="text-xs">
+              <Zap className="w-4 h-4 mr-1" />
+              API
             </TabsTrigger>
           </TabsList>
-          <TabsList className="grid w-full grid-cols-3 mb-2">
+          <TabsList className="grid w-full grid-cols-4 mb-6">
             <TabsTrigger value="content-factory" className="text-xs">
               <Film className="w-4 h-4 mr-1" />
               Content
             </TabsTrigger>
-            <TabsTrigger value="users-table" className="text-xs">
-              <Users className="w-4 h-4 mr-1" />
-              Users
-            </TabsTrigger>
-            <TabsTrigger value="api-switching" className="text-xs">
-              <Zap className="w-4 h-4 mr-1" />
-              API Switch
-            </TabsTrigger>
-          </TabsList>
-          <TabsList className="grid w-full grid-cols-4 mb-6">
-            <TabsTrigger value="adsterra" className="text-xs">
-              <DollarSign className="w-4 h-4 mr-1" />
-              Ads
+            <TabsTrigger value="system" className="text-xs">
+              <Settings className="w-4 h-4 mr-1" />
+              Settings
             </TabsTrigger>
             <TabsTrigger value="knowledge" className="text-xs">
               <Brain className="w-4 h-4 mr-1" />
               AI Brain
-            </TabsTrigger>
-            <TabsTrigger value="api-balance" className="text-xs">
-              <Wallet className="w-4 h-4 mr-1" />
-              API $
             </TabsTrigger>
             <TabsTrigger value="collaborators" className="text-xs">
               <Users className="w-4 h-4 mr-1" />
@@ -1053,55 +1016,9 @@ export const Admin = () => {
                 </div>
               )}
             </div>
-
-            {/* Completed Transactions */}
-            <div>
-              <h2 className="text-lg font-semibold text-foreground mb-4">မှတ်တမ်းများ</h2>
-              {completedTransactions.length === 0 ? (
-                <div className="gradient-card rounded-2xl p-6 border border-border/30 text-center">
-                  <p className="text-muted-foreground">မှတ်တမ်း မရှိသေးပါ</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {completedTransactions.slice(0, 10).map((tx) => (
-                    <div
-                      key={tx.id}
-                      className={`gradient-card rounded-xl p-3 border ${
-                        tx.status === "success" ? "border-success/30" : "border-destructive/30"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-foreground text-sm">{tx.package_name}</p>
-                          <p className="text-xs text-muted-foreground">{formatDate(tx.created_at)}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className={`text-sm font-medium ${
-                            tx.status === "success" ? "text-success" : "text-destructive"
-                          }`}>
-                            {tx.status === "success" ? "အတည်ပြုပြီး" : "ငြင်းပယ်ပြီး"}
-                          </p>
-                          <p className="text-xs text-muted-foreground">{tx.credits} Credits</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
           </TabsContent>
 
-          {/* Campaign Submissions Tab */}
-          <TabsContent value="campaigns" className="space-y-4">
-            <CampaignSubmissionsTab />
-          </TabsContent>
-
-          {/* Credit Audit Tab */}
-          <TabsContent value="audit" className="space-y-4">
-            <CreditAuditTab />
-          </TabsContent>
-
-          {/* Analytics / Financial Dashboard Tab */}
+          {/* Analytics / Financial Dashboard Tab - includes Audit, Pricing, Campaign, Promo, Feedback */}
           <TabsContent value="analytics" className="space-y-4">
             <FinancialDashboardTab />
             
@@ -1129,19 +1046,86 @@ export const Admin = () => {
             </Button>
 
             <ToolAnalyticsTab />
+
+            {/* Credit Audit embedded */}
+            <div className="border-t border-border/50 pt-4 mt-4">
+              <CreditAuditTab />
+            </div>
+
+            {/* Pricing embedded */}
+            <div className="border-t border-border/50 pt-4 mt-4">
+              <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+                <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-primary" />
+                  စျေးနှုန်း ပြင်ဆင်ခြင်း
+                </h3>
+                <div className="space-y-4">
+                  {packages.map((pkg) => (
+                    <div key={pkg.id} className="p-3 bg-secondary/30 rounded-xl">
+                      <p className="font-medium text-foreground mb-2">{pkg.name}</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs text-muted-foreground">Credits</label>
+                          <Input type="number" value={pkg.credits}
+                            onChange={(e) => updatePackagePrice(pkg.id, "credits", parseInt(e.target.value) || 0)}
+                            className="mt-1" />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground">Price (MMK)</label>
+                          <Input type="number" value={pkg.price}
+                            onChange={(e) => updatePackagePrice(pkg.id, "price", parseInt(e.target.value) || 0)}
+                            className="mt-1" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <Button onClick={savePricingChanges} disabled={isSavingPricing}
+                  className="w-full mt-4 gradient-gold text-primary-foreground">
+                  {isSavingPricing ? <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" /> : <><Save className="w-4 h-4 mr-2" />Save Changes</>}
+                </Button>
+              </div>
+              <HybridProfitTab />
+            </div>
           </TabsContent>
 
-          {/* Pricing Tab */}
-          <TabsContent value="pricing" className="space-y-4">
+          {/* Analytics Tab - consolidated with Audit, Pricing */}
+          <TabsContent value="analytics" className="space-y-4">
+            <FinancialDashboardTab />
+            
+            <div className="border-t border-border/50 pt-4 mt-4">
+              <h3 className="text-sm font-semibold text-foreground mb-3 font-myanmar">📊 ယနေ့စာရင်း</h3>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="gradient-card rounded-xl p-3 border border-primary/20 text-center">
+                  <p className="text-[10px] text-muted-foreground">ယနေ့</p>
+                  <p className="text-sm font-bold text-foreground">{formatCurrency(analytics.dailyIncome)}</p>
+                </div>
+                <div className="gradient-card rounded-xl p-3 border border-primary/20 text-center">
+                  <p className="text-[10px] text-muted-foreground">ဤအပတ်</p>
+                  <p className="text-sm font-bold text-foreground">{formatCurrency(analytics.weeklyIncome)}</p>
+                </div>
+                <div className="gradient-card rounded-xl p-3 border border-primary/20 text-center">
+                  <p className="text-[10px] text-muted-foreground">ဤလ</p>
+                  <p className="text-sm font-bold text-foreground">{formatCurrency(analytics.monthlyIncome)}</p>
+                </div>
+              </div>
+            </div>
+
+            <Button onClick={handleExportCSV} className="w-full" variant="outline">
+              <Download className="w-4 h-4 mr-2" />
+              CSV Export
+            </Button>
+
+            <ToolAnalyticsTab />
+            <CreditAuditTab />
+            <HybridProfitTab />
+
+            {/* Pricing */}
             <div className="gradient-card rounded-2xl p-4 border border-primary/20">
               <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
                 <DollarSign className="w-5 h-5 text-primary" />
                 စျေးနှုန်း ပြင်ဆင်ခြင်း
               </h3>
-              <p className="text-xs text-muted-foreground mb-4">
-                မှတ်ချက်: API costs များသည် USD ဖြင့် ဖြစ်သည်။ အမြတ်ရရန် သင့်လျော်သော စျေးနှုန်းများ သတ်မှတ်ပါ။
-              </p>
-
               <div className="space-y-4">
                 {packages.map((pkg) => (
                   <div key={pkg.id} className="p-3 bg-secondary/30 rounded-xl">
@@ -1149,449 +1133,30 @@ export const Admin = () => {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="text-xs text-muted-foreground">Credits</label>
-                        <Input
-                          type="number"
-                          value={pkg.credits}
+                        <Input type="number" value={pkg.credits}
                           onChange={(e) => updatePackagePrice(pkg.id, "credits", parseInt(e.target.value) || 0)}
-                          className="mt-1"
-                        />
+                          className="mt-1" />
                       </div>
                       <div>
                         <label className="text-xs text-muted-foreground">Price (MMK)</label>
-                        <Input
-                          type="number"
-                          value={pkg.price}
+                        <Input type="number" value={pkg.price}
                           onChange={(e) => updatePackagePrice(pkg.id, "price", parseInt(e.target.value) || 0)}
-                          className="mt-1"
-                        />
+                          className="mt-1" />
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
-
-              <Button 
-                onClick={savePricingChanges} 
-                disabled={isSavingPricing}
-                className="w-full mt-4 gradient-gold text-primary-foreground"
-              >
-                {isSavingPricing ? (
-                  <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <>
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Changes
-                  </>
-                )}
+              <Button onClick={savePricingChanges} disabled={isSavingPricing}
+                className="w-full mt-4 gradient-gold text-primary-foreground">
+                {isSavingPricing ? <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" /> : <><Save className="w-4 h-4 mr-2" />Save</>}
               </Button>
             </div>
-            {/* Hybrid Profit Manager */}
-            <HybridProfitTab />
           </TabsContent>
 
-          {/* Promo Codes Tab */}
-          <TabsContent value="promo" className="space-y-4">
-            <PromoCodesTab />
-          </TabsContent>
-
-          {/* User Feedback Tab */}
-          <TabsContent value="feedback" className="space-y-4">
-            <UserFeedbackTab />
-          </TabsContent>
-
-          {/* App Settings Tab */}
-          <TabsContent value="appsettings" className="space-y-4">
-            <AppSettingsTab />
-          </TabsContent>
-
-          {/* System Tab */}
-          <TabsContent value="system" className="space-y-4">
-            {/* Global Profit Margin removed - consolidated into Pricing tab's HybridProfitTab */}
-            {/* Manual Credit Management */}
-            <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-                <Wallet className="w-5 h-5 text-primary" />
-                Manual Credit Management
-              </h3>
-              <p className="text-xs text-muted-foreground mb-4">
-                User ID (UUID) ထည့်၍ Credit များ တိုက်ရိုက် ထည့်/နုတ်ယူနိုင်ပါသည်
-              </p>
-
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">User ID (UUID)</label>
-                  <Input
-                    type="text"
-                    value={manualCreditEmail}
-                    onChange={(e) => setManualCreditEmail(e.target.value)}
-                    placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                    className="bg-background/50"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-xs text-muted-foreground mb-1 block">Credits ပမာဏ</label>
-                    <Input
-                      type="number"
-                      value={manualCreditAmount}
-                      onChange={(e) => setManualCreditAmount(e.target.value)}
-                      placeholder="100"
-                      className="bg-background/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground mb-1 block">Action</label>
-                    <select
-                      value={manualCreditAction}
-                      onChange={(e) => setManualCreditAction(e.target.value as "add" | "subtract")}
-                      className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                    >
-                      <option value="add">ထည့်မည် (+)</option>
-                      <option value="subtract">နုတ်မည် (-)</option>
-                    </select>
-                  </div>
-                </div>
-
-                <Button
-                  onClick={handleManualCredit}
-                  disabled={isProcessingManualCredit || !manualCreditEmail || !manualCreditAmount}
-                  className={`w-full ${manualCreditAction === "add" ? "btn-gradient-green" : "btn-gradient-red"}`}
-                >
-                  {isProcessingManualCredit ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <>
-                      {manualCreditAction === "add" ? <Plus className="w-4 h-4 mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
-                      {manualCreditAction === "add" ? "Credits ထည့်မည်" : "Credits နုတ်မည်"}
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-
-            {/* Maintenance Mode Toggle */}
-            <div className={`gradient-card rounded-2xl p-4 border ${isMaintenanceMode ? 'border-warning/50 bg-warning/5' : 'border-primary/20'}`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${isMaintenanceMode ? 'bg-warning/20' : 'bg-primary/20'}`}>
-                    <Power className={`w-5 h-5 ${isMaintenanceMode ? 'text-warning' : 'text-primary'}`} />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-foreground">Maintenance Mode</h3>
-                    <p className="text-xs text-muted-foreground">
-                      {isMaintenanceMode 
-                        ? "API tools များ ခေတ္တပိတ်ထားပါသည်" 
-                        : "System အလုပ်လုပ်နေပါသည်"}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {isTogglingMaintenance ? (
-                    <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                  ) : (
-                    <Switch
-                      checked={isMaintenanceMode}
-                      onCheckedChange={toggleMaintenanceMode}
-                    />
-                  )}
-                </div>
-              </div>
-              {isMaintenanceMode && (
-                <div className="mt-3 p-3 bg-warning/10 rounded-lg border border-warning/30">
-                  <p className="text-xs text-warning flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4" />
-                    Users များအား AI generation tools များ သုံးခွင့် ခေတ္တပိတ်ထားပါသည်။
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* API Keys - Managed via Cloud Secrets */}
-            <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-              <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-                <Key className="w-5 h-5 text-primary" />
-                API Keys Status
-              </h3>
-              <p className="text-xs text-muted-foreground mb-4 font-myanmar">
-                API Keys များသည် Cloud Secrets တွင် လုံခြုံစွာ သိမ်းဆည်းထားပါသည်။ Edge Functions များမှ တိုက်ရိုက် အသုံးပြုပါသည်။
-              </p>
-              <div className="space-y-2">
-                {[
-                  { name: "Lovable AI (LOVABLE_API_KEY)", status: true },
-                  { name: "Google Gemini (GEMINI_API_KEY)", status: true },
-                  { name: "Stability AI (STABILITY_API_KEY)", status: true },
-                  { name: "Replicate (REPLICATE_API_KEY)", status: true },
-                ].map(key => (
-                  <div key={key.name} className="flex items-center justify-between p-3 bg-secondary/30 rounded-xl">
-                    <span className="text-sm text-foreground">{key.name}</span>
-                    <span className="text-xs px-2 py-1 rounded-full bg-green-500/20 text-green-500">
-                      ✓ Configured
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Payment Methods Settings */}
-            <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
-                <Wallet className="w-5 h-5 text-primary" />
-                Payment Methods
-              </h3>
-
-              {/* Payment Tabs */}
-              <div className="flex flex-wrap gap-2 mb-4">
-                {paymentMethods.map((payment) => (
-                  <button
-                    key={payment.id}
-                    onClick={() => setActivePaymentTab(payment.id)}
-                    className={`px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-                      activePaymentTab === payment.id
-                        ? "gradient-gold text-primary-foreground"
-                        : "bg-secondary/50 text-foreground hover:bg-secondary"
-                    }`}
-                  >
-                    {payment.country?.split(" ")[0]} {payment.name}
-                  </button>
-                ))}
-              </div>
-
-              {/* Active Payment Form */}
-              {currentPayment && (
-                <div className="p-4 bg-secondary/30 rounded-xl space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-foreground flex items-center gap-2">
-                      {currentPayment.type === "bank" ? <Building className="w-4 h-4" /> : <CardIcon className="w-4 h-4" />}
-                      {currentPayment.name}
-                    </span>
-                    <span className="text-xs text-muted-foreground">{currentPayment.country}</span>
-                  </div>
-                  
-                  <div>
-                    <label className="text-xs text-muted-foreground">
-                      {currentPayment.type === "bank" ? "Bank Name" : "Pay Name"}
-                    </label>
-                    <Input
-                      value={currentPayment.name}
-                      onChange={(e) => updatePaymentField(currentPayment.id, "name", e.target.value)}
-                      className="mt-1 bg-background/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground">
-                      {currentPayment.type === "bank" ? "Account Number" : "Phone Number"}
-                    </label>
-                    <Input
-                      value={currentPayment.number}
-                      onChange={(e) => updatePaymentField(currentPayment.id, "number", e.target.value)}
-                      className="mt-1 bg-background/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-muted-foreground">Holder Name</label>
-                    <Input
-                      value={currentPayment.holder}
-                      onChange={(e) => updatePaymentField(currentPayment.id, "holder", e.target.value)}
-                      className="mt-1 bg-background/50"
-                    />
-                  </div>
-                  
-                  <div className="flex gap-2 pt-2">
-                    <Button 
-                      onClick={() => savePaymentMethod(currentPayment)} 
-                      disabled={isSavingPayment}
-                      className="flex-1 gradient-gold text-primary-foreground"
-                    >
-                      {isSavingPayment ? (
-                        <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <>
-                          <Save className="w-4 h-4 mr-2" />
-                          Save
-                        </>
-                      )}
-                    </Button>
-                    {!["scb", "kpay", "wavepay"].includes(currentPayment.id) && (
-                      <Button 
-                        onClick={() => deletePayment(currentPayment.id)}
-                        variant="destructive"
-                        size="icon"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Add Payment Buttons */}
-              <div className="flex gap-2 mt-4">
-                <Button
-                  onClick={() => setShowAddForm("pay")}
-                  variant="outline"
-                  className="flex-1"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Pay
-                </Button>
-                <Button
-                  onClick={() => setShowAddForm("bank")}
-                  variant="outline"
-                  className="flex-1"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Bank
-                </Button>
-              </div>
-
-              {/* Add New Form */}
-              {showAddForm && (
-                <div className="mt-4 p-4 border border-primary/30 rounded-xl bg-secondary/20">
-                  <h4 className="font-medium text-foreground mb-3">
-                    {showAddForm === "pay" ? "Add New Payment" : "Add New Bank"}
-                  </h4>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-xs text-muted-foreground">
-                        {showAddForm === "pay" ? "Pay Name" : "Bank Name"}
-                      </label>
-                      <Input
-                        value={newPayment.name}
-                        onChange={(e) => setNewPayment(p => ({ ...p, name: e.target.value }))}
-                        placeholder={showAddForm === "pay" ? "e.g. AYAPay" : "e.g. KBZ Bank"}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground">
-                        {showAddForm === "pay" ? "Phone Number" : "Account Number"}
-                      </label>
-                      <Input
-                        value={newPayment.number}
-                        onChange={(e) => setNewPayment(p => ({ ...p, number: e.target.value }))}
-                        placeholder="09xxxxxxxxx"
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground">Holder Name</label>
-                      <Input
-                        value={newPayment.holder}
-                        onChange={(e) => setNewPayment(p => ({ ...p, holder: e.target.value }))}
-                        placeholder="Account holder name"
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground">Country</label>
-                      <select
-                        value={newPayment.country}
-                        onChange={(e) => setNewPayment(p => ({ ...p, country: e.target.value }))}
-                        className="mt-1 w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
-                      >
-                        {/* ASEAN Countries */}
-                        <optgroup label="ASEAN">
-                          <option value="🇲🇲 Myanmar">🇲🇲 Myanmar</option>
-                          <option value="🇹🇭 Thailand">🇹🇭 Thailand</option>
-                          <option value="🇸🇬 Singapore">🇸🇬 Singapore</option>
-                          <option value="🇲🇾 Malaysia">🇲🇾 Malaysia</option>
-                          <option value="🇮🇩 Indonesia">🇮🇩 Indonesia</option>
-                          <option value="🇵🇭 Philippines">🇵🇭 Philippines</option>
-                          <option value="🇻🇳 Vietnam">🇻🇳 Vietnam</option>
-                          <option value="🇰🇭 Cambodia">🇰🇭 Cambodia</option>
-                          <option value="🇱🇦 Laos">🇱🇦 Laos</option>
-                          <option value="🇧🇳 Brunei">🇧🇳 Brunei</option>
-                        </optgroup>
-                        {/* East Asia */}
-                        <optgroup label="East Asia">
-                          <option value="🇨🇳 China">🇨🇳 China</option>
-                          <option value="🇯🇵 Japan">🇯🇵 Japan</option>
-                          <option value="🇰🇷 South Korea">🇰🇷 South Korea</option>
-                          <option value="🇹🇼 Taiwan">🇹🇼 Taiwan</option>
-                          <option value="🇭🇰 Hong Kong">🇭🇰 Hong Kong</option>
-                          <option value="🇲🇴 Macau">🇲🇴 Macau</option>
-                          <option value="🇲🇳 Mongolia">🇲🇳 Mongolia</option>
-                        </optgroup>
-                        {/* South Asia */}
-                        <optgroup label="South Asia">
-                          <option value="🇮🇳 India">🇮🇳 India</option>
-                          <option value="🇧🇩 Bangladesh">🇧🇩 Bangladesh</option>
-                          <option value="🇱🇰 Sri Lanka">🇱🇰 Sri Lanka</option>
-                          <option value="🇳🇵 Nepal">🇳🇵 Nepal</option>
-                          <option value="🇵🇰 Pakistan">🇵🇰 Pakistan</option>
-                        </optgroup>
-                        {/* Middle East */}
-                        <optgroup label="Middle East">
-                          <option value="🇦🇪 UAE">🇦🇪 UAE</option>
-                          <option value="🇸🇦 Saudi Arabia">🇸🇦 Saudi Arabia</option>
-                          <option value="🇶🇦 Qatar">🇶🇦 Qatar</option>
-                          <option value="🇰🇼 Kuwait">🇰🇼 Kuwait</option>
-                          <option value="🇧🇭 Bahrain">🇧🇭 Bahrain</option>
-                          <option value="🇴🇲 Oman">🇴🇲 Oman</option>
-                          <option value="🇮🇱 Israel">🇮🇱 Israel</option>
-                          <option value="🇹🇷 Turkey">🇹🇷 Turkey</option>
-                        </optgroup>
-                        {/* Americas */}
-                        <optgroup label="Americas">
-                          <option value="🇺🇸 United States">🇺🇸 United States</option>
-                          <option value="🇨🇦 Canada">🇨🇦 Canada</option>
-                          <option value="🇲🇽 Mexico">🇲🇽 Mexico</option>
-                          <option value="🇧🇷 Brazil">🇧🇷 Brazil</option>
-                          <option value="🇦🇷 Argentina">🇦🇷 Argentina</option>
-                          <option value="🇨🇱 Chile">🇨🇱 Chile</option>
-                          <option value="🇨🇴 Colombia">🇨🇴 Colombia</option>
-                        </optgroup>
-                        {/* Europe */}
-                        <optgroup label="Europe">
-                          <option value="🇬🇧 United Kingdom">🇬🇧 United Kingdom</option>
-                          <option value="🇩🇪 Germany">🇩🇪 Germany</option>
-                          <option value="🇫🇷 France">🇫🇷 France</option>
-                          <option value="🇮🇹 Italy">🇮🇹 Italy</option>
-                          <option value="🇪🇸 Spain">🇪🇸 Spain</option>
-                          <option value="🇳🇱 Netherlands">🇳🇱 Netherlands</option>
-                          <option value="🇧🇪 Belgium">🇧🇪 Belgium</option>
-                          <option value="🇨🇭 Switzerland">🇨🇭 Switzerland</option>
-                          <option value="🇦🇹 Austria">🇦🇹 Austria</option>
-                          <option value="🇸🇪 Sweden">🇸🇪 Sweden</option>
-                          <option value="🇳🇴 Norway">🇳🇴 Norway</option>
-                          <option value="🇩🇰 Denmark">🇩🇰 Denmark</option>
-                          <option value="🇫🇮 Finland">🇫🇮 Finland</option>
-                          <option value="🇵🇱 Poland">🇵🇱 Poland</option>
-                          <option value="🇵🇹 Portugal">🇵🇹 Portugal</option>
-                          <option value="🇮🇪 Ireland">🇮🇪 Ireland</option>
-                          <option value="🇬🇷 Greece">🇬🇷 Greece</option>
-                          <option value="🇷🇺 Russia">🇷🇺 Russia</option>
-                          <option value="🇺🇦 Ukraine">🇺🇦 Ukraine</option>
-                        </optgroup>
-                        {/* Africa */}
-                        <optgroup label="Africa">
-                          <option value="🇿🇦 South Africa">🇿🇦 South Africa</option>
-                          <option value="🇳🇬 Nigeria">🇳🇬 Nigeria</option>
-                          <option value="🇰🇪 Kenya">🇰🇪 Kenya</option>
-                          <option value="🇪🇬 Egypt">🇪🇬 Egypt</option>
-                          <option value="🇬🇭 Ghana">🇬🇭 Ghana</option>
-                        </optgroup>
-                        {/* Oceania */}
-                        <optgroup label="Oceania">
-                          <option value="🇦🇺 Australia">🇦🇺 Australia</option>
-                          <option value="🇳🇿 New Zealand">🇳🇿 New Zealand</option>
-                        </optgroup>
-                      </select>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button onClick={addNewPayment} className="flex-1 gradient-gold text-primary-foreground">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add
-                      </Button>
-                      <Button onClick={() => setShowAddForm(null)} variant="outline" className="flex-1">
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+          {/* Unified API Management Tab */}
+          <TabsContent value="api-management" className="space-y-4">
+            <ApiManagementTab />
           </TabsContent>
 
           {/* Content Factory Tab */}
@@ -1604,24 +1169,122 @@ export const Admin = () => {
             <AdminUserTable />
           </TabsContent>
 
-          {/* API Switching Tab */}
-          <TabsContent value="api-switching" className="space-y-4">
-            <ApiSwitchingTab />
-          </TabsContent>
+          {/* Settings Tab - consolidated System + App + Ads + Campaign + Promo + Feedback */}
+          <TabsContent value="system" className="space-y-4">
+            {/* Maintenance Mode */}
+            <div className={`gradient-card rounded-2xl p-4 border ${isMaintenanceMode ? 'border-warning/50 bg-warning/5' : 'border-primary/20'}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${isMaintenanceMode ? 'bg-warning/20' : 'bg-primary/20'}`}>
+                    <Power className={`w-5 h-5 ${isMaintenanceMode ? 'text-warning' : 'text-primary'}`} />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-foreground">Maintenance Mode</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {isMaintenanceMode ? "API tools များ ခေတ္တပိတ်ထားပါသည်" : "System အလုပ်လုပ်နေပါသည်"}
+                    </p>
+                  </div>
+                </div>
+                {isTogglingMaintenance ? (
+                  <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                ) : (
+                  <Switch checked={isMaintenanceMode} onCheckedChange={toggleMaintenanceMode} />
+                )}
+              </div>
+            </div>
 
-          {/* Adsterra & API Balance Tab */}
-          <TabsContent value="adsterra" className="space-y-4">
+            {/* Manual Credit Management */}
+            <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                <Wallet className="w-5 h-5 text-primary" />
+                Manual Credit Management
+              </h3>
+              <div className="space-y-3">
+                <Input type="text" value={manualCreditEmail} onChange={(e) => setManualCreditEmail(e.target.value)}
+                  placeholder="User ID (UUID)" className="bg-background/50" />
+                <div className="grid grid-cols-2 gap-2">
+                  <Input type="number" value={manualCreditAmount} onChange={(e) => setManualCreditAmount(e.target.value)}
+                    placeholder="Credits" className="bg-background/50" />
+                  <select value={manualCreditAction} onChange={(e) => setManualCreditAction(e.target.value as "add" | "subtract")}
+                    className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm">
+                    <option value="add">ထည့်မည် (+)</option>
+                    <option value="subtract">နုတ်မည် (-)</option>
+                  </select>
+                </div>
+                <Button onClick={handleManualCredit} disabled={isProcessingManualCredit || !manualCreditEmail || !manualCreditAmount}
+                  className={`w-full ${manualCreditAction === "add" ? "btn-gradient-green" : "btn-gradient-red"}`}>
+                  {isProcessingManualCredit ? <Loader2 className="w-4 h-4 animate-spin" /> : manualCreditAction === "add" ? "Credits ထည့်မည်" : "Credits နုတ်မည်"}
+                </Button>
+              </div>
+            </div>
+
+            {/* App Settings */}
+            <AppSettingsTab />
+
+            {/* Adsterra */}
             <AdsterraConfigTab />
+
+            {/* Campaign Submissions */}
+            <CampaignSubmissionsTab />
+
+            {/* Promo Codes */}
+            <PromoCodesTab />
+
+            {/* Feedback */}
+            <UserFeedbackTab />
+
+            {/* Payment Methods */}
+            <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+              <h3 className="font-semibold text-foreground mb-4 flex items-center gap-2">
+                <Wallet className="w-5 h-5 text-primary" />
+                Payment Methods
+              </h3>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {paymentMethods.map((payment) => (
+                  <button key={payment.id} onClick={() => setActivePaymentTab(payment.id)}
+                    className={`px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                      activePaymentTab === payment.id ? "gradient-gold text-primary-foreground" : "bg-secondary/50 text-foreground hover:bg-secondary"
+                    }`}>
+                    {payment.country?.split(" ")[0]} {payment.name}
+                  </button>
+                ))}
+              </div>
+              {currentPayment && (
+                <div className="p-4 bg-secondary/30 rounded-xl space-y-3">
+                  <Input value={currentPayment.name} onChange={(e) => updatePaymentField(currentPayment.id, "name", e.target.value)} placeholder="Name" className="bg-background/50" />
+                  <Input value={currentPayment.number} onChange={(e) => updatePaymentField(currentPayment.id, "number", e.target.value)} placeholder="Number" className="bg-background/50" />
+                  <Input value={currentPayment.holder} onChange={(e) => updatePaymentField(currentPayment.id, "holder", e.target.value)} placeholder="Holder" className="bg-background/50" />
+                  <div className="flex gap-2">
+                    <Button onClick={() => savePaymentMethod(currentPayment)} disabled={isSavingPayment} className="flex-1 gradient-gold text-primary-foreground">
+                      {isSavingPayment ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4 mr-2" />Save</>}
+                    </Button>
+                    {!["scb", "kpay", "wavepay"].includes(currentPayment.id) && (
+                      <Button onClick={() => deletePayment(currentPayment.id)} variant="destructive" size="icon"><Trash2 className="w-4 h-4" /></Button>
+                    )}
+                  </div>
+                </div>
+              )}
+              <div className="flex gap-2 mt-4">
+                <Button onClick={() => setShowAddForm("pay")} variant="outline" className="flex-1"><Plus className="w-4 h-4 mr-2" />Add Pay</Button>
+                <Button onClick={() => setShowAddForm("bank")} variant="outline" className="flex-1"><Plus className="w-4 h-4 mr-2" />Add Bank</Button>
+              </div>
+              {showAddForm && (
+                <div className="mt-4 p-4 border border-primary/30 rounded-xl bg-secondary/20 space-y-3">
+                  <Input value={newPayment.name} onChange={(e) => setNewPayment(p => ({ ...p, name: e.target.value }))} placeholder="Name" />
+                  <Input value={newPayment.number} onChange={(e) => setNewPayment(p => ({ ...p, number: e.target.value }))} placeholder="Number" />
+                  <Input value={newPayment.holder} onChange={(e) => setNewPayment(p => ({ ...p, holder: e.target.value }))} placeholder="Holder" />
+                  <div className="flex gap-2">
+                    <Button onClick={addNewPayment} className="flex-1 gradient-gold text-primary-foreground"><Plus className="w-4 h-4 mr-2" />Add</Button>
+                    <Button onClick={() => setShowAddForm(null)} variant="outline" className="flex-1">Cancel</Button>
+                  </div>
+                </div>
+              )}
+            </div>
           </TabsContent>
 
           {/* Knowledge Base Tab */}
           <TabsContent value="knowledge" className="space-y-4">
             <KnowledgeBaseTab />
-          </TabsContent>
-
-          {/* API Balance Tab */}
-          <TabsContent value="api-balance" className="space-y-4">
-            <ApiBalanceTab />
           </TabsContent>
 
           {/* Collaborator Management Tab */}

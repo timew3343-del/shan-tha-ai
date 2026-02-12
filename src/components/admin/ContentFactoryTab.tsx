@@ -1,14 +1,16 @@
 import { useState, useEffect } from "react";
-import { Film, Power, Clock, Copy, TrendingUp, Loader2, Play, RefreshCw } from "lucide-react";
+import { Film, Power, Clock, Copy, TrendingUp, Loader2, Play, RefreshCw, Edit3, Save, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
 interface VideoConfig {
   enabled: boolean;
   duration: number;
+  customTopic: string;
 }
 
 interface DailyVideo {
@@ -26,28 +28,57 @@ interface DailyVideo {
 }
 
 const VIDEO_TYPES = [
-  { key: "marketing", label: "Marketing Ad", emoji: "📢" },
-  { key: "burmese_tutorial", label: "မြန်မာ Tutorial", emoji: "🇲🇲" },
-  { key: "english_tutorial", label: "English Tutorial", emoji: "🇬🇧" },
+  { key: "marketing", label: "Marketing Ad", emoji: "📢", topicSettingKey: "content_factory_marketing_topic" },
+  { key: "burmese_tutorial", label: "မြန်မာ Tutorial", emoji: "🇲🇲", topicSettingKey: "content_factory_burmese_topic" },
+  { key: "english_tutorial", label: "English Tutorial", emoji: "🇬🇧", topicSettingKey: "content_factory_english_topic" },
 ];
 
 export const ContentFactoryTab = () => {
   const { toast } = useToast();
   const [configs, setConfigs] = useState<Record<string, VideoConfig>>({
-    marketing: { enabled: true, duration: 60 },
-    burmese_tutorial: { enabled: true, duration: 120 },
-    english_tutorial: { enabled: true, duration: 120 },
+    marketing: { enabled: true, duration: 60, customTopic: "" },
+    burmese_tutorial: { enabled: true, duration: 120, customTopic: "" },
+    english_tutorial: { enabled: true, duration: 120, customTopic: "" },
   });
   const [videos, setVideos] = useState<DailyVideo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [totalInvestment, setTotalInvestment] = useState(0);
   const [tutorialPrice, setTutorialPrice] = useState(500);
+  const [systemStatus, setSystemStatus] = useState<"checking" | "ok" | "error">("checking");
+  const [statusMessage, setStatusMessage] = useState("");
 
   useEffect(() => {
     loadConfigs();
     loadVideos();
+    checkSystemStatus();
   }, []);
+
+  const checkSystemStatus = async () => {
+    setSystemStatus("checking");
+    try {
+      // Check if required settings exist
+      const { data } = await supabase
+        .from("app_settings")
+        .select("key, value")
+        .in("key", ["gemini_api_key", "replicate_api_token", "shotstack_api_key"]);
+
+      const hasGemini = data?.some(s => s.key === "gemini_api_key" && s.value);
+      const hasReplicate = data?.some(s => s.key === "replicate_api_token" && s.value);
+
+      if (!hasGemini && !hasReplicate) {
+        setSystemStatus("error");
+        setStatusMessage("API Keys (Gemini/Replicate) မရှိသေးပါ - Script generation အတွက် လိုအပ်ပါသည်");
+      } else {
+        setSystemStatus("ok");
+        setStatusMessage("Script generation system အလုပ်လုပ်နေပါသည်");
+      }
+    } catch {
+      setSystemStatus("error");
+      setStatusMessage("System status စစ်ဆေးရာတွင် ပြဿနာရှိပါသည်");
+    }
+  };
 
   const loadConfigs = async () => {
     try {
@@ -61,6 +92,9 @@ export const ContentFactoryTab = () => {
           "content_factory_marketing_duration",
           "content_factory_burmese_duration",
           "content_factory_english_duration",
+          "content_factory_marketing_topic",
+          "content_factory_burmese_topic",
+          "content_factory_english_topic",
           "tutorial_access_fee",
         ]);
 
@@ -73,6 +107,9 @@ export const ContentFactoryTab = () => {
           if (s.key === "content_factory_marketing_duration") newConfigs.marketing.duration = parseInt(s.value || "60");
           if (s.key === "content_factory_burmese_duration") newConfigs.burmese_tutorial.duration = parseInt(s.value || "120");
           if (s.key === "content_factory_english_duration") newConfigs.english_tutorial.duration = parseInt(s.value || "120");
+          if (s.key === "content_factory_marketing_topic") newConfigs.marketing.customTopic = s.value || "";
+          if (s.key === "content_factory_burmese_topic") newConfigs.burmese_tutorial.customTopic = s.value || "";
+          if (s.key === "content_factory_english_topic") newConfigs.english_tutorial.customTopic = s.value || "";
           if (s.key === "tutorial_access_fee") setTutorialPrice(parseInt(s.value || "500"));
         });
         setConfigs(newConfigs);
@@ -113,6 +150,9 @@ export const ContentFactoryTab = () => {
         { key: "content_factory_marketing_duration", value: String(configs.marketing.duration) },
         { key: "content_factory_burmese_duration", value: String(configs.burmese_tutorial.duration) },
         { key: "content_factory_english_duration", value: String(configs.english_tutorial.duration) },
+        { key: "content_factory_marketing_topic", value: configs.marketing.customTopic },
+        { key: "content_factory_burmese_topic", value: configs.burmese_tutorial.customTopic },
+        { key: "content_factory_english_topic", value: configs.english_tutorial.customTopic },
         { key: "tutorial_access_fee", value: String(tutorialPrice) },
       ];
 
@@ -132,6 +172,32 @@ export const ContentFactoryTab = () => {
     }
   };
 
+  const regenerateToday = async () => {
+    setIsRegenerating(true);
+    try {
+      // Save custom topics first
+      await saveConfigs();
+
+      const { data, error } = await supabase.functions.invoke("daily-content-generate");
+      if (error) throw error;
+
+      toast({
+        title: "ပြန်ထုတ်ပေးပြီးပါပြီ",
+        description: `ယနေ့ content ${data?.results?.length || 0} ခု generate လုပ်ပြီးပါပြီ`,
+      });
+      await loadVideos();
+    } catch (error: any) {
+      console.error("Regeneration error:", error);
+      toast({
+        title: "ပြဿနာရှိပါသည်",
+        description: error.message || "Content generate လုပ်ရာတွင် ပြဿနာရှိပါသည်",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRegenerating(false);
+    }
+  };
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast({ title: "ကူးယူပြီးပါပြီ" });
@@ -144,6 +210,30 @@ export const ContentFactoryTab = () => {
 
   return (
     <div className="space-y-6">
+      {/* System Status */}
+      <div className={`rounded-xl p-3 border flex items-center gap-3 ${
+        systemStatus === "ok" ? "border-green-500/30 bg-green-500/5"
+          : systemStatus === "error" ? "border-destructive/30 bg-destructive/5"
+          : "border-primary/30 bg-primary/5"
+      }`}>
+        <div className={`w-3 h-3 rounded-full shrink-0 ${
+          systemStatus === "ok" ? "bg-green-500 animate-pulse"
+            : systemStatus === "error" ? "bg-destructive"
+            : "bg-primary animate-pulse"
+        }`} />
+        <div className="flex-1 min-w-0">
+          <span className={`text-xs font-medium ${
+            systemStatus === "ok" ? "text-green-500"
+              : systemStatus === "error" ? "text-destructive"
+              : "text-primary"
+          }`}>
+            {systemStatus === "ok" ? "System Active" : systemStatus === "error" ? "System Error" : "Checking..."}
+          </span>
+          <p className="text-[10px] text-muted-foreground truncate">{statusMessage}</p>
+        </div>
+        {systemStatus === "error" && <AlertTriangle className="w-4 h-4 text-destructive shrink-0" />}
+      </div>
+
       {/* Investment Tracker */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">
         <div className="flex items-center gap-2 mb-3">
@@ -167,7 +257,7 @@ export const ContentFactoryTab = () => {
         </p>
       </div>
 
-      {/* Video Type Controls */}
+      {/* Video Type Controls with Custom Topics */}
       <div className="space-y-3">
         <h3 className="font-semibold text-foreground font-myanmar flex items-center gap-2">
           <Film className="w-4 h-4 text-primary" />
@@ -182,7 +272,7 @@ export const ContentFactoryTab = () => {
                 <span className="text-sm font-medium text-foreground">{label}</span>
               </div>
               <div className="flex items-center gap-2">
-                <Power className={`w-3.5 h-3.5 ${configs[key]?.enabled ? "text-success" : "text-muted-foreground"}`} />
+                <Power className={`w-3.5 h-3.5 ${configs[key]?.enabled ? "text-green-500" : "text-muted-foreground"}`} />
                 <Switch
                   checked={configs[key]?.enabled || false}
                   onCheckedChange={(checked) =>
@@ -194,7 +284,9 @@ export const ContentFactoryTab = () => {
                 />
               </div>
             </div>
-            <div className="flex items-center gap-2">
+
+            {/* Duration */}
+            <div className="flex items-center gap-2 mb-3">
               <Clock className="w-3.5 h-3.5 text-muted-foreground" />
               <span className="text-xs text-muted-foreground font-myanmar">Duration (seconds):</span>
               <Input
@@ -210,6 +302,38 @@ export const ContentFactoryTab = () => {
                 min={10}
                 max={600}
               />
+            </div>
+
+            {/* Custom Topic Input */}
+            <div className="space-y-1">
+              <div className="flex items-center gap-1">
+                <Edit3 className="w-3 h-3 text-muted-foreground" />
+                <label className="text-xs text-muted-foreground font-myanmar">
+                  နောက်ရက် အကြောင်းအရာ (ထည့်ထားရင် အဲ့အကြောင်း ထုတ်ပေးမည်)
+                </label>
+              </div>
+              <Textarea
+                value={configs[key]?.customTopic || ""}
+                onChange={(e) =>
+                  setConfigs((prev) => ({
+                    ...prev,
+                    [key]: { ...prev[key], customTopic: e.target.value },
+                  }))
+                }
+                placeholder={
+                  key === "marketing"
+                    ? "ဥပမာ: AI Face Swap tool ကို promote လုပ်မယ့် ကြော်ငြာ..."
+                    : key === "burmese_tutorial"
+                    ? "ဥပမာ: AI Image Tool ကို အကောင့်ဖွင့်နည်းကနေ စပြီး သင်ပေးမယ်..."
+                    : "e.g. How to use AI Video Tool from account creation to export..."
+                }
+                className="text-xs min-h-[60px]"
+              />
+              {configs[key]?.customTopic && (
+                <p className="text-[10px] text-primary font-myanmar">
+                  ✓ Custom topic save ထားပါပြီ - နောက်ရက် ဒီအကြောင်းအရာနဲ့ ထုတ်ပေးပါမည်
+                </p>
+              )}
             </div>
           </div>
         ))}
@@ -227,23 +351,26 @@ export const ContentFactoryTab = () => {
           className="w-full h-10"
           min={0}
         />
-        <p className="text-xs text-muted-foreground mt-1 font-myanmar">
-          User များ သင်တန်းအားလုံး ကြည့်ရန် ပေးရမည့် credit ပမာဏ
-        </p>
       </div>
 
-      {/* Save Button */}
-      <Button onClick={saveConfigs} disabled={isSaving} className="w-full rounded-xl">
-        {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-        Settings သိမ်းဆည်းမည်
-      </Button>
+      {/* Save & Regenerate Buttons */}
+      <div className="flex gap-2">
+        <Button onClick={saveConfigs} disabled={isSaving} className="flex-1 rounded-xl">
+          {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+          Save Settings
+        </Button>
+        <Button onClick={regenerateToday} disabled={isRegenerating} variant="outline" className="flex-1 rounded-xl">
+          {isRegenerating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+          ယနေ့ ပြန်ထုတ်မည်
+        </Button>
+      </div>
 
       {/* Recent Generated Videos */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-foreground font-myanmar flex items-center gap-2">
             <Play className="w-4 h-4 text-primary" />
-            Generated Videos
+            Generated Content
           </h3>
           <Button variant="ghost" size="sm" onClick={loadVideos}>
             <RefreshCw className="w-3.5 h-3.5 mr-1" />
@@ -258,7 +385,7 @@ export const ContentFactoryTab = () => {
         ) : videos.length === 0 ? (
           <div className="gradient-card rounded-xl p-6 border border-border/30 text-center">
             <p className="text-sm text-muted-foreground font-myanmar">
-              ဗီဒီယိုများ မရှိသေးပါ။ API Keys ငွေဖြည့်ပြီးရင် အလိုအလျောက် ထုတ်လုပ်ပါမည်
+              Content မရှိသေးပါ။ "ယနေ့ ပြန်ထုတ်မည်" ကို နှိပ်ပါ
             </p>
           </div>
         ) : (
@@ -277,25 +404,24 @@ export const ContentFactoryTab = () => {
                     <p className="text-xs text-muted-foreground">
                       API Cost: {Number(video.api_cost_credits).toFixed(1)} credits
                     </p>
+                    {video.video_url && (
+                      <a href={video.video_url} target="_blank" rel="noopener noreferrer"
+                        className="text-xs text-primary underline mt-1 inline-block">
+                        📥 Video Download
+                      </a>
+                    )}
                   </div>
                   {video.is_published && (
-                    <span className="text-xs bg-success/20 text-success px-2 py-0.5 rounded-full">Published</span>
+                    <span className="text-xs bg-green-500/20 text-green-500 px-2 py-0.5 rounded-full">Published</span>
                   )}
                 </div>
 
-                {/* Social Media Kit */}
                 {video.facebook_caption && (
                   <div className="mt-2 p-2 bg-secondary/50 rounded-lg">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-medium text-muted-foreground">Facebook Caption</span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => copyToClipboard(video.facebook_caption!)}
-                        className="h-6 px-2"
-                      >
-                        <Copy className="w-3 h-3 mr-1" />
-                        Copy
+                      <Button variant="ghost" size="sm" onClick={() => copyToClipboard(video.facebook_caption!)} className="h-6 px-2">
+                        <Copy className="w-3 h-3 mr-1" /> Copy
                       </Button>
                     </div>
                     <p className="text-xs text-foreground line-clamp-2">{video.facebook_caption}</p>
@@ -307,12 +433,9 @@ export const ContentFactoryTab = () => {
                     {video.hashtags.map((tag, i) => (
                       <span key={i} className="text-xs text-primary">#{tag}</span>
                     ))}
-                    <Button
-                      variant="ghost"
-                      size="sm"
+                    <Button variant="ghost" size="sm"
                       onClick={() => copyToClipboard(video.hashtags!.map((t) => `#${t}`).join(" "))}
-                      className="h-5 px-1"
-                    >
+                      className="h-5 px-1">
                       <Copy className="w-3 h-3" />
                     </Button>
                   </div>

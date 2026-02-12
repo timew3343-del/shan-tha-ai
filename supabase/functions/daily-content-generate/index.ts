@@ -61,7 +61,7 @@ serve(async (req) => {
       });
     }
 
-    // Load configs
+    // Load configs including custom topics
     const { data: settings } = await supabaseAdmin
       .from("app_settings")
       .select("key, value")
@@ -69,6 +69,12 @@ serve(async (req) => {
         "content_factory_marketing_enabled",
         "content_factory_burmese_tutorial_enabled",
         "content_factory_english_tutorial_enabled",
+        "content_factory_marketing_duration",
+        "content_factory_burmese_duration",
+        "content_factory_english_duration",
+        "content_factory_marketing_topic",
+        "content_factory_burmese_topic",
+        "content_factory_english_topic",
       ]);
 
     const configMap: Record<string, string> = {};
@@ -77,6 +83,11 @@ serve(async (req) => {
     const marketingEnabled = configMap["content_factory_marketing_enabled"] !== "false";
     const burmeseEnabled = configMap["content_factory_burmese_tutorial_enabled"] !== "false";
     const englishEnabled = configMap["content_factory_english_tutorial_enabled"] !== "false";
+
+    // Custom topics from admin (if set, use them; otherwise auto-rotate)
+    const customMarketingTopic = configMap["content_factory_marketing_topic"] || "";
+    const customBurmeseTopic = configMap["content_factory_burmese_topic"] || "";
+    const customEnglishTopic = configMap["content_factory_english_topic"] || "";
 
     const today = new Date().toISOString().split("T")[0];
 
@@ -95,7 +106,12 @@ serve(async (req) => {
     );
     const featureIndex = dayOfYear % PLATFORM_FEATURES.length;
     const todayFeature = PLATFORM_FEATURES[featureIndex];
-    const marketingTopic = MARKETING_TOPICS[dayOfYear % MARKETING_TOPICS.length];
+    const defaultMarketingTopic = MARKETING_TOPICS[dayOfYear % MARKETING_TOPICS.length];
+
+    // Use custom topic if admin set one; otherwise auto-rotate
+    const marketingTopic = customMarketingTopic || defaultMarketingTopic;
+    const burmeseTopic = customBurmeseTopic || `${todayFeature} - မြန်မာဘာသာ Tutorial`;
+    const englishTopic = customEnglishTopic || `${todayFeature} - English Tutorial`;
 
     // Generate Marketing Ad
     if (marketingEnabled && !existingTypes.has("marketing")) {
@@ -122,11 +138,7 @@ serve(async (req) => {
     // Generate Burmese Tutorial
     if (burmeseEnabled && !existingTypes.has("burmese_tutorial")) {
       try {
-        const scriptResult = await generateScript(
-          LOVABLE_API_KEY,
-          "burmese_tutorial",
-          `${todayFeature} - မြန်မာဘာသာ Tutorial`
-        );
+        const scriptResult = await generateScript(LOVABLE_API_KEY, "burmese_tutorial", burmeseTopic);
         const record = await supabaseAdmin.from("daily_content_videos").insert({
           video_type: "burmese_tutorial",
           title: scriptResult.title,
@@ -148,11 +160,7 @@ serve(async (req) => {
     // Generate English Tutorial
     if (englishEnabled && !existingTypes.has("english_tutorial")) {
       try {
-        const scriptResult = await generateScript(
-          LOVABLE_API_KEY,
-          "english_tutorial",
-          `${todayFeature} - English Tutorial`
-        );
+        const scriptResult = await generateScript(LOVABLE_API_KEY, "english_tutorial", englishTopic);
         const record = await supabaseAdmin.from("daily_content_videos").insert({
           video_type: "english_tutorial",
           title: scriptResult.title,
@@ -168,6 +176,19 @@ serve(async (req) => {
       } catch (e) {
         console.error("English tutorial generation failed:", e);
         results.push({ type: "english_tutorial", success: false, error: String(e) });
+      }
+    }
+
+    // Clear custom topics after use (one-day only)
+    const topicsToClean = [
+      { key: "content_factory_marketing_topic", hadCustom: !!customMarketingTopic },
+      { key: "content_factory_burmese_topic", hadCustom: !!customBurmeseTopic },
+      { key: "content_factory_english_topic", hadCustom: !!customEnglishTopic },
+    ];
+    for (const t of topicsToClean) {
+      if (t.hadCustom) {
+        await supabaseAdmin.from("app_settings")
+          .upsert({ key: t.key, value: "" }, { onConflict: "key" });
       }
     }
 
@@ -200,20 +221,23 @@ async function generateScript(
     videoType === "marketing"
       ? `You are a marketing copywriter for an AI tools platform called "Shan Tha AI". 
          Generate a compelling marketing script in Burmese (Myanmar language) for social media.
-         The script should be catchy, engaging, and highlight the AI tool's benefits.`
+         The script should be catchy, engaging, and highlight the AI tool's benefits.
+         Include step-by-step instructions that could be turned into a video tutorial.`
       : videoType === "burmese_tutorial"
       ? `You are a tutorial content creator for "Shan Tha AI" platform.
-         Create a step-by-step tutorial script in Burmese (Myanmar language).
-         The tutorial should be easy to follow and practical.`
+         Create a detailed step-by-step tutorial script in Burmese (Myanmar language).
+         Start from account creation/login, then demonstrate each step with clear instructions.
+         The tutorial should be practical and easy to follow for beginners.`
       : `You are a tutorial content creator for "Shan Tha AI" platform.
-         Create a step-by-step tutorial script in English.
-         The tutorial should be easy to follow and practical.`;
+         Create a detailed step-by-step tutorial script in English.
+         Start from account creation/login, then demonstrate each step with clear instructions.
+         The tutorial should be practical and easy to follow for beginners.`;
 
   const userPrompt = `Create content for: ${topic}
 
 Return a JSON object with these fields:
 - title: Short title (max 60 chars)
-- description: Detailed script/description (200-400 words)
+- description: Detailed video script/description (300-600 words) with step-by-step instructions suitable for a video tutorial. Include timestamps like [0:00] Opening, [0:15] Step 1, etc.
 - facebookCaption: Ready-to-post Facebook caption with emojis (100-200 chars)
 - hashtags: Array of 5-8 relevant hashtags (without #)
 
