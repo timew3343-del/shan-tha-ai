@@ -223,7 +223,24 @@ export const AutoAdTool = ({ userId, onBack }: AutoAdToolProps) => {
           placeholder="ဥပမာ - ကိုရီးယား Skincare Set, အသားအရေ ဖြူဝင်းစေ, ဈေးနှုန်း 25,000 Ks..."
           value={productDetails}
           onChange={(e) => setProductDetails(e.target.value)}
-          className="min-h-[80px] bg-background/50 border-primary/30 rounded-xl resize-none text-sm font-myanmar"
+          onPaste={(e) => {
+            e.stopPropagation();
+            const pastedText = e.clipboardData.getData("text");
+            if (pastedText) {
+              e.preventDefault();
+              const target = e.target as HTMLTextAreaElement;
+              const start = target.selectionStart;
+              const end = target.selectionEnd;
+              const newValue = productDetails.substring(0, start) + pastedText + productDetails.substring(end);
+              setProductDetails(newValue);
+              // Restore cursor position after paste
+              setTimeout(() => {
+                target.selectionStart = target.selectionEnd = start + pastedText.length;
+              }, 0);
+            }
+          }}
+          className="min-h-[80px] bg-background/50 border-primary/30 rounded-xl resize-none text-sm font-myanmar select-text"
+          style={{ WebkitUserSelect: "text", userSelect: "text" }}
         />
       </div>
 

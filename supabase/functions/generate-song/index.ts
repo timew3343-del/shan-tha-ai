@@ -9,23 +9,204 @@ const corsHeaders = {
 const respond = (body: Record<string, unknown>, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-// Poll SunoAPI.org for task completion
-async function pollSunoApi(taskId: string, apiKey: string, maxPolls = 60, interval = 5000) {
-  for (let i = 0; i < maxPolls; i++) {
-    await new Promise(r => setTimeout(r, interval));
-    const res = await fetch(`https://api.sunoapi.org/api/v1/generate/record-info?taskId=${taskId}`, {
-      headers: { "Authorization": `Bearer ${apiKey}` },
-    });
-    const data = await res.json();
-    const status = data.data?.status;
-    console.log(`SunoAPI poll ${i}: status=${status}`);
-    
-    if (status === "SUCCESS") return data.data;
-    if (status === "CREATE_TASK_FAILED" || status === "GENERATE_AUDIO_FAILED" || status === "CALLBACK_EXCEPTION") {
-      throw new Error(data.data?.errorMessage || `Suno generation failed: ${status}`);
+// AI model failover for lyrics generation
+const LYRICS_MODELS = [
+  "google/gemini-2.5-flash",
+  "google/gemini-3-flash-preview",
+  "openai/gpt-5-mini",
+];
+
+async function generateLyricsWithFailover(apiKey: string, systemPrompt: string, userPrompt: string): Promise<string | null> {
+  for (const model of LYRICS_MODELS) {
+    try {
+      console.log(`Lyrics: trying ${model}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          max_tokens: 1500,
+          temperature: 0.8,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        const lyrics = data.choices?.[0]?.message?.content;
+        if (lyrics) {
+          console.log(`Lyrics success with ${model}, length: ${lyrics.length}`);
+          return lyrics;
+        }
+      }
+      const errText = await response.text();
+      console.warn(`Lyrics ${model} failed: ${response.status} - ${errText.substring(0, 100)}`);
+    } catch (err: any) {
+      console.warn(`Lyrics ${model} error: ${err.message}`);
     }
   }
-  throw new Error("SunoAPI polling timeout");
+  return null;
+}
+
+// Song generation with failover: SunoAPI.org → GoAPI Suno
+async function generateSongWithFailover(
+  supabaseAdmin: any,
+  songTitle: string,
+  songTags: string,
+  songLyrics: string
+): Promise<{ audioUrl: string; videoUrl: string | null; provider: string }> {
+  // Get all song API keys
+  const { data: apiKeys } = await supabaseAdmin.from("app_settings").select("key, value").in("key", [
+    "sunoapi_org_key", "goapi_suno_api_key", "api_enabled_sunoapi", "api_enabled_goapi_suno"
+  ]);
+  const keyMap: Record<string, string> = {};
+  apiKeys?.forEach((k: any) => { keyMap[k.key] = k.value || ""; });
+
+  const providers: { name: string; enabled: boolean; generate: () => Promise<{ audioUrl: string; videoUrl: string | null }> }[] = [];
+
+  // Provider 1: SunoAPI.org
+  if (keyMap.sunoapi_org_key) {
+    providers.push({
+      name: "SunoAPI.org",
+      enabled: keyMap.api_enabled_sunoapi !== "false",
+      generate: async () => {
+        const SUNO_KEY = keyMap.sunoapi_org_key;
+        console.log("Trying SunoAPI.org...");
+        
+        const sunoResponse = await fetch("https://api.sunoapi.org/api/v1/generate", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${SUNO_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            customMode: true, instrumental: false,
+            title: songTitle, tags: songTags, prompt: songLyrics, model: "V4",
+          }),
+        });
+
+        if (!sunoResponse.ok) {
+          const errText = await sunoResponse.text();
+          throw new Error(`SunoAPI ${sunoResponse.status}: ${errText.substring(0, 200)}`);
+        }
+
+        const sunoData = await sunoResponse.json();
+        const taskId = sunoData.data?.taskId || sunoData.data?.task_id;
+        if (!taskId) throw new Error("SunoAPI: no task ID");
+
+        console.log("SunoAPI task:", taskId);
+
+        // Poll for completion
+        for (let i = 0; i < 60; i++) {
+          await new Promise(r => setTimeout(r, 5000));
+          const res = await fetch(`https://api.sunoapi.org/api/v1/generate/record-info?taskId=${taskId}`, {
+            headers: { "Authorization": `Bearer ${SUNO_KEY}` },
+          });
+          const data = await res.json();
+          const status = data.data?.status;
+          console.log(`SunoAPI poll ${i}: ${status}`);
+
+          if (status === "SUCCESS") {
+            const songs = data.data?.data || [];
+            if (Array.isArray(songs) && songs.length > 0) {
+              const audioUrl = songs[0]?.audio_url || songs[0]?.audioUrl || songs[0]?.stream_audio_url || "";
+              const videoUrl = songs[0]?.video_url || songs[0]?.videoUrl || songs[0]?.stream_video_url || null;
+              if (!audioUrl) throw new Error("SunoAPI: no audio URL in result");
+              return { audioUrl, videoUrl };
+            }
+            throw new Error("SunoAPI: empty songs array");
+          }
+          if (["CREATE_TASK_FAILED", "GENERATE_AUDIO_FAILED", "CALLBACK_EXCEPTION"].includes(status)) {
+            throw new Error(data.data?.errorMessage || `SunoAPI failed: ${status}`);
+          }
+        }
+        throw new Error("SunoAPI: polling timeout");
+      },
+    });
+  }
+
+  // Provider 2: GoAPI Suno
+  if (keyMap.goapi_suno_api_key) {
+    providers.push({
+      name: "GoAPI Suno",
+      enabled: keyMap.api_enabled_goapi_suno !== "false",
+      generate: async () => {
+        const GOAPI_KEY = keyMap.goapi_suno_api_key;
+        console.log("Trying GoAPI Suno...");
+
+        const goResponse = await fetch("https://api.goapi.ai/api/suno/v1/music", {
+          method: "POST",
+          headers: { "X-API-Key": GOAPI_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            custom_mode: true, input: { title: songTitle, tags: songTags, prompt: songLyrics },
+          }),
+        });
+
+        if (!goResponse.ok) {
+          const errText = await goResponse.text();
+          throw new Error(`GoAPI ${goResponse.status}: ${errText.substring(0, 200)}`);
+        }
+
+        const goData = await goResponse.json();
+        const taskId = goData.data?.task_id;
+        if (!taskId) throw new Error("GoAPI: no task ID");
+
+        console.log("GoAPI task:", taskId);
+
+        // Poll for completion
+        for (let i = 0; i < 60; i++) {
+          await new Promise(r => setTimeout(r, 5000));
+          const res = await fetch(`https://api.goapi.ai/api/suno/v1/music/${taskId}`, {
+            headers: { "X-API-Key": GOAPI_KEY },
+          });
+          const data = await res.json();
+          const status = data.data?.status;
+          console.log(`GoAPI poll ${i}: ${status}`);
+
+          if (status === "completed") {
+            const clips = data.data?.clips || data.data?.output || [];
+            const clipArr = Array.isArray(clips) ? clips : Object.values(clips);
+            if (clipArr.length > 0) {
+              const audioUrl = (clipArr[0] as any)?.audio_url || "";
+              const videoUrl = (clipArr[0] as any)?.video_url || null;
+              if (!audioUrl) throw new Error("GoAPI: no audio URL");
+              return { audioUrl, videoUrl };
+            }
+            throw new Error("GoAPI: empty clips");
+          }
+          if (status === "failed" || status === "error") {
+            throw new Error(`GoAPI failed: ${data.data?.error || status}`);
+          }
+        }
+        throw new Error("GoAPI: polling timeout");
+      },
+    });
+  }
+
+  // Try enabled providers first, then disabled ones as last resort
+  const enabledProviders = providers.filter(p => p.enabled);
+  const disabledProviders = providers.filter(p => !p.enabled);
+  const orderedProviders = [...enabledProviders, ...disabledProviders];
+
+  let lastError = "No song generation API keys configured";
+  for (const provider of orderedProviders) {
+    try {
+      const result = await provider.generate();
+      console.log(`Song generated via ${provider.name}`);
+      return { ...result, provider: provider.name };
+    } catch (err: any) {
+      lastError = `${provider.name}: ${err.message}`;
+      console.warn(`Song provider failed - ${lastError}`);
+    }
+  }
+
+  throw new Error(`သီချင်း API အားလုံး မအောင်မြင်ပါ။ ${lastError}`);
 }
 
 async function uploadToStorage(supabaseAdmin: any, url: string, userId: string, ext: string, contentType: string) {
@@ -77,144 +258,58 @@ serve(async (req) => {
       return respond({ error: "ခရက်ဒစ် မလုံလောက်ပါ", required: creditCost }, 402);
     }
 
-    // Get API keys from app_settings
-    const { data: apiKeys } = await supabaseAdmin.from("app_settings").select("key, value").in("key", [
-      "replicate_api_token", "stability_api_key", "sunoapi_org_key"
-    ]);
-    const keyMap: Record<string, string> = {};
-    apiKeys?.forEach((k: any) => { keyMap[k.key] = k.value || ""; });
-
-    const SUNO_API_KEY = keyMap.sunoapi_org_key || "";
-    const STABILITY_API_KEY = keyMap.stability_api_key || Deno.env.get("STABILITY_API_KEY");
+    const STABILITY_API_KEY = Deno.env.get("STABILITY_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
-    if (!SUNO_API_KEY) return respond({ error: "SunoAPI.org key not configured in Admin Settings" }, 500);
     if (!LOVABLE_API_KEY) return respond({ error: "AI API key not configured" }, 500);
 
     let lyrics: string | null = null;
     let audioUrl: string | null = null;
     let videoUrl: string | null = null;
 
-    // ===== STEP 1: Generate Lyrics with AI =====
+    // ===== STEP 1: Generate Lyrics with AI Failover =====
     if (serviceOption === "song_only" || serviceOption === "full_auto") {
-      console.log("Step 1: Generating lyrics...");
+      console.log("Step 1: Generating lyrics with failover...");
 
       const langName = { my: "Myanmar (Burmese)", en: "English", th: "Thai", ko: "Korean", ja: "Japanese", zh: "Chinese" }[language || "my"] || "Myanmar (Burmese)";
 
-      const lyricsResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            {
-              role: "system",
-              content: `You are a professional songwriter. Write creative, emotional song lyrics in ${langName} language.
+      const systemPrompt = `You are a professional songwriter. Write creative, emotional song lyrics in ${langName} language.
 Genre: ${genre}. Mood: ${mood}.
 Format: Write ONLY the lyrics with [Verse 1], [Chorus], [Verse 2], [Bridge], [Chorus] sections.
-Keep it 2-3 minutes of singing length. Do NOT include any production notes or instructions.`,
-            },
-            { role: "user", content: topic || "Write a beautiful song" },
-          ],
-          max_tokens: 1500,
-          temperature: 0.8,
-        }),
-      });
+Keep it 2-3 minutes of singing length. Do NOT include any production notes or instructions.`;
 
-      if (lyricsResponse.ok) {
-        const lyricsData = await lyricsResponse.json();
-        lyrics = lyricsData.choices?.[0]?.message?.content || null;
-        console.log("Lyrics generated successfully, length:", lyrics?.length);
-      } else {
-        console.error("Lyrics generation failed:", await lyricsResponse.text());
-        lyrics = topic || "Song lyrics";
-      }
+      lyrics = await generateLyricsWithFailover(LOVABLE_API_KEY, systemPrompt, topic || "Write a beautiful song");
+      if (!lyrics) lyrics = topic || "Song lyrics";
     }
 
-    // ===== STEP 2: Generate Music with SunoAPI.org (REAL VOCALS) =====
+    // ===== STEP 2: Generate Music with Sequential Failover =====
     if (serviceOption === "song_only" || serviceOption === "full_auto") {
-      console.log("Step 2: Generating song with SunoAPI.org (vocals)...");
+      console.log("Step 2: Generating song with failover (SunoAPI → GoAPI)...");
 
       const songTitle = (topic || "AI Song").substring(0, 80);
       const songTags = `${genre || "pop"}, ${mood || "happy"}`;
       const songLyrics = lyrics || topic || "A beautiful song about life";
 
-      // SunoAPI.org POST /api/v1/generate - customMode with lyrics
-      const sunoResponse = await fetch("https://api.sunoapi.org/api/v1/generate", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${SUNO_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          customMode: true,
-          instrumental: false,
-          title: songTitle,
-          tags: songTags,
-          prompt: songLyrics,
-          model: "V4",
-        }),
-      });
+      const songResult = await generateSongWithFailover(supabaseAdmin, songTitle, songTags, songLyrics);
 
-      if (!sunoResponse.ok) {
-        const errText = await sunoResponse.text();
-        console.error("SunoAPI error:", sunoResponse.status, errText);
-        throw new Error("SunoAPI music generation failed: " + errText);
-      }
-
-      const sunoData = await sunoResponse.json();
-      console.log("SunoAPI response:", JSON.stringify(sunoData).substring(0, 500));
-      
-      const taskId = sunoData.data?.taskId || sunoData.data?.task_id;
-      if (!taskId) {
-        console.error("No taskId from SunoAPI:", JSON.stringify(sunoData));
-        throw new Error("SunoAPI did not return a task ID");
-      }
-
-      console.log("SunoAPI task started:", taskId);
-
-      // Poll for completion (songs can take 1-3 minutes)
-      const sunoResult = await pollSunoApi(taskId, SUNO_API_KEY, 60, 5000);
-
-      // Get the audio URL from SunoAPI result - response has data[] array with songs
-      const songs = sunoResult?.data || [];
-      let rawAudioUrl: string | null = null;
-      let rawVideoUrl: string | null = null;
-
-      if (Array.isArray(songs) && songs.length > 0) {
-        rawAudioUrl = songs[0]?.audio_url || songs[0]?.audioUrl || null;
-        rawVideoUrl = songs[0]?.video_url || songs[0]?.videoUrl || null;
-        // Also try stream URLs as fallback
-        if (!rawAudioUrl) rawAudioUrl = songs[0]?.stream_audio_url || songs[0]?.streamAudioUrl || null;
-        if (!rawVideoUrl) rawVideoUrl = songs[0]?.stream_video_url || songs[0]?.streamVideoUrl || null;
-      }
-
-      if (!rawAudioUrl) {
-        console.error("No audio URL in SunoAPI result:", JSON.stringify(sunoResult).substring(0, 1000));
-        throw new Error("No audio URL returned from SunoAPI");
-      }
-
-      console.log("SunoAPI song generated with vocals, uploading...");
-      audioUrl = await uploadToStorage(supabaseAdmin, rawAudioUrl, userId, ".mp3", "audio/mpeg");
+      console.log(`Song generated via ${songResult.provider}, uploading...`);
+      audioUrl = await uploadToStorage(supabaseAdmin, songResult.audioUrl, userId, ".mp3", "audio/mpeg");
       console.log("Audio uploaded successfully");
 
-      // Upload video if Suno provided one
-      if (rawVideoUrl) {
-        console.log("SunoAPI also provided a video, uploading...");
+      if (songResult.videoUrl) {
         try {
-          videoUrl = await uploadToStorage(supabaseAdmin, rawVideoUrl, userId, ".mp4", "video/mp4");
-          console.log("SunoAPI video uploaded");
+          videoUrl = await uploadToStorage(supabaseAdmin, songResult.videoUrl, userId, ".mp4", "video/mp4");
+          console.log("Song video uploaded");
         } catch (e) {
-          console.warn("Failed to upload SunoAPI video:", e);
+          console.warn("Failed to upload song video:", e);
         }
       }
     }
 
-    // ===== STEP 3: Generate MTV Video (for mtv_only or full_auto without Suno video) =====
+    // ===== STEP 3: Generate MTV Video (for mtv_only or full_auto without video) =====
     if ((serviceOption === "mtv_only" || (serviceOption === "full_auto" && !videoUrl)) && STABILITY_API_KEY) {
       console.log("Step 3: Generating MTV video with Stability AI...");
 
-      // For mtv_only with uploaded audio
       if (serviceOption === "mtv_only" && audioBase64) {
         const audioBytes = Uint8Array.from(atob(audioBase64), c => c.charCodeAt(0));
         const fileName = `uploaded-${userId}-${Date.now()}.mp3`;
@@ -235,7 +330,6 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
 
         const scenePrompt = `Music video scene for ${genre || "pop"} ${mood || "happy"} song, ${styleDescriptions[mtvStyle || "cartoon"] || "cinematic"}, professional MTV quality, vibrant colors, 16:9 widescreen, no text, no watermark`;
 
-        // Generate scene image
         const fd = new FormData();
         fd.append("prompt", scenePrompt);
         fd.append("output_format", "png");
@@ -299,7 +393,7 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
       }
     }
 
-    // Clean lyrics for subtitles: remove bracketed tags like [Intro], [Verse 1], [Chorus], etc.
+    // Clean lyrics for subtitles
     let cleanLyrics: string | null = null;
     if (lyrics) {
       cleanLyrics = lyrics.replace(/\[.*?\]/g, "").replace(/\n{3,}/g, "\n\n").trim();
