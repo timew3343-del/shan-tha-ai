@@ -104,7 +104,7 @@ async function generateSongWithFailover(
 
         console.log("SunoAPI task:", taskId);
 
-        // Poll for completion
+        // Poll for completion - extract audio from FIRST_SUCCESS or SUCCESS
         for (let i = 0; i < 60; i++) {
           await new Promise(r => setTimeout(r, 5000));
           const res = await fetch(`https://api.sunoapi.org/api/v1/generate/record-info?taskId=${taskId}`, {
@@ -114,15 +114,31 @@ async function generateSongWithFailover(
           const status = data.data?.status;
           console.log(`SunoAPI poll ${i}: ${status}`);
 
-          if (status === "SUCCESS") {
-            const songs = data.data?.data || [];
-            if (Array.isArray(songs) && songs.length > 0) {
-              const audioUrl = songs[0]?.audio_url || songs[0]?.audioUrl || songs[0]?.stream_audio_url || "";
-              const videoUrl = songs[0]?.video_url || songs[0]?.videoUrl || songs[0]?.stream_video_url || null;
-              if (!audioUrl) throw new Error("SunoAPI: no audio URL in result");
-              return { audioUrl, videoUrl };
+          // Try to extract songs from FIRST_SUCCESS or SUCCESS
+          if (status === "FIRST_SUCCESS" || status === "SUCCESS") {
+            // Songs can be in data.data.data (array) or data.data.response.sunoData
+            const songs = data.data?.data || data.data?.response?.sunoData || [];
+            const songArr = Array.isArray(songs) ? songs : [];
+            
+            // Log full response structure on these statuses for debugging
+            console.log(`SunoAPI ${status} response keys:`, JSON.stringify(Object.keys(data.data || {})));
+            console.log(`SunoAPI ${status} songs count: ${songArr.length}, raw:`, JSON.stringify(data.data).substring(0, 800));
+
+            if (songArr.length > 0) {
+              const song = songArr[0];
+              const audioUrl = song?.audio_url || song?.audioUrl || song?.stream_audio_url || song?.source_audio_url || "";
+              const videoUrl = song?.video_url || song?.videoUrl || song?.stream_video_url || song?.source_video_url || null;
+              if (audioUrl) {
+                console.log(`SunoAPI: found audio at ${status}, url length: ${audioUrl.length}`);
+                return { audioUrl, videoUrl };
+              }
             }
-            throw new Error("SunoAPI: empty songs array");
+
+            // On SUCCESS with empty songs, that's a final failure
+            if (status === "SUCCESS") {
+              throw new Error(`SunoAPI: no audio found in SUCCESS response`);
+            }
+            // On FIRST_SUCCESS, songs might not have URLs yet - keep polling
           }
           if (["CREATE_TASK_FAILED", "GENERATE_AUDIO_FAILED", "CALLBACK_EXCEPTION"].includes(status)) {
             throw new Error(data.data?.errorMessage || `SunoAPI failed: ${status}`);
