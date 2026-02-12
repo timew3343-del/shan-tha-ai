@@ -19,18 +19,6 @@ interface PricingPackage {
   isBestValue?: boolean;
 }
 
-const mmkPackages: PricingPackage[] = [
-  { id: "starter", name: "Starter", credits: 300, price: 20000, priceDisplay: "၂၀,၀၀၀ MMK", currency: "MMK" },
-  { id: "professional", name: "Professional", credits: 700, price: 40000, priceDisplay: "၄၀,၀၀၀ MMK", currency: "MMK", isBestValue: true },
-  { id: "enterprise", name: "Enterprise", credits: 2000, price: 100000, priceDisplay: "၁၀၀,၀၀၀ MMK", currency: "MMK" },
-];
-
-const thbPackages: PricingPackage[] = [
-  { id: "starter-thb", name: "Starter", credits: 300, price: 250, priceDisplay: "฿250 THB", currency: "THB" },
-  { id: "professional-thb", name: "Professional", credits: 700, price: 500, priceDisplay: "฿500 THB", currency: "THB", isBestValue: true },
-  { id: "enterprise-thb", name: "Enterprise", credits: 2000, price: 1200, priceDisplay: "฿1,200 THB", currency: "THB" },
-];
-
 type PaymentMethod = "kbzpay" | "wavepay" | "thai_bank" | "stripe";
 
 export const TopUp = () => {
@@ -47,6 +35,10 @@ export const TopUp = () => {
   const [stripeAvailable, setStripeAvailable] = useState(false);
   const [isStripeLoading, setIsStripeLoading] = useState(false);
 
+  // Dynamic packages from database
+  const [mmkPackages, setMmkPackages] = useState<PricingPackage[]>([]);
+  const [thbPackages, setThbPackages] = useState<PricingPackage[]>([]);
+
   // SCB Bank details from settings
   const [scbAccount, setScbAccount] = useState("399-459002-6");
   const [scbNameTh, setScbNameTh] = useState("เงินฝากออมทรัพย์ (ไม่มีสมุดคู่ฝาก)");
@@ -54,6 +46,51 @@ export const TopUp = () => {
 
   // Show Thai packages for Thai Bank, USD-like for Stripe
   const packages = paymentMethod === "thai_bank" ? thbPackages : mmkPackages;
+
+  // Load packages from database
+  useEffect(() => {
+    const loadPackages = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("pricing_packages")
+          .select("*")
+          .eq("is_active", true)
+          .order("credits", { ascending: true });
+        
+        if (error) throw error;
+        if (data) {
+          const formatMMK = (price: number) => {
+            const burmese = new Intl.NumberFormat("my-MM").format(price);
+            return `${burmese} MMK`;
+          };
+          const formatTHB = (price: number) => `฿${price.toLocaleString()} THB`;
+
+          setMmkPackages(data.filter(p => p.currency === "MMK").map(p => ({
+            id: p.id,
+            name: p.name,
+            credits: p.credits,
+            price: p.price_mmk,
+            priceDisplay: formatMMK(p.price_mmk),
+            currency: "MMK" as const,
+            isBestValue: p.is_best_value || false,
+          })));
+
+          setThbPackages(data.filter(p => p.currency === "THB").map(p => ({
+            id: p.id,
+            name: p.name,
+            credits: p.credits,
+            price: p.price_thb,
+            priceDisplay: formatTHB(p.price_thb),
+            currency: "THB" as const,
+            isBestValue: p.is_best_value || false,
+          })));
+        }
+      } catch (error) {
+        console.error("Error loading packages:", error);
+      }
+    };
+    loadPackages();
+  }, []);
 
   // Check if Stripe is configured
    useEffect(() => {
