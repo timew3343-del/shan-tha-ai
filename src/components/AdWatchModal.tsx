@@ -67,16 +67,23 @@ export const AdWatchModal = ({
       return;
     }
 
-    // Add visual ad-active indicator (works for all ad types including popunder/social bar)
+    // Show ad-active indicator briefly, then let ad script render
     const adActiveDiv = document.createElement('div');
+    adActiveDiv.id = 'ad-loading-indicator';
     adActiveDiv.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:200px;gap:12px;';
     adActiveDiv.innerHTML = `
-      <div style="width:60px;height:60px;border:3px solid rgba(255,193,7,0.3);border-top-color:#ffc107;border-radius:50%;animation:spin 1s linear infinite;"></div>
-      <p style="font-size:13px;color:#ffc107;font-weight:600;">📺 ကြော်ငြာ ဖွင့်နေသည်...</p>
+      <p style="font-size:13px;color:#ffc107;font-weight:600;">📺 ကြော်ငြာ ပြသနေသည်</p>
       <p style="font-size:11px;color:rgba(255,255,255,0.5);">ကြော်ငြာကြည့်နေစဉ် Timer ဆက်သွားပါမည်</p>
-      <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
     `;
     adContainerRef.current.appendChild(adActiveDiv);
+
+    // Remove loading indicator after 3 seconds (ad should have loaded by then)
+    setTimeout(() => {
+      const indicator = document.getElementById('ad-loading-indicator');
+      if (indicator && adContainerRef.current && adContainerRef.current.childNodes.length > 1) {
+        indicator.remove();
+      }
+    }, 3000);
 
     // Parse and inject the ad script code
     const tempDiv = document.createElement('div');
