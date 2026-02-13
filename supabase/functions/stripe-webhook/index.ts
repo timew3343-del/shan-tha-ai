@@ -26,39 +26,42 @@ serve(async (req) => {
 
     const webhookSecret = webhookSetting?.value;
 
+    // SECURITY: Require webhook secret - reject if not configured
+    if (!webhookSecret || webhookSecret.length < 5) {
+      console.error("❌ Stripe webhook secret not configured. Rejecting request for security.");
+      return new Response(JSON.stringify({ error: "Webhook not configured. Set stripe_webhook_secret in app_settings." }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+      });
+    }
+
     // Get raw body for signature verification
     const body = await req.text();
     let event: any;
 
-    if (webhookSecret && webhookSecret.length > 5) {
-      // Verify signature using Stripe library
-      const signature = req.headers.get("stripe-signature");
-      if (!signature) {
-        console.error("Missing stripe-signature header");
-        return new Response(JSON.stringify({ error: "Missing signature" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 400,
-        });
-      }
+    // Verify signature - REQUIRED
+    const signature = req.headers.get("stripe-signature");
+    if (!signature) {
+      console.error("❌ Missing stripe-signature header");
+      return new Response(JSON.stringify({ error: "Missing signature" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
+    }
 
-      try {
-        const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
-          apiVersion: "2023-10-16",
-          httpClient: Stripe.createFetchHttpClient(),
-        });
-        event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
-        console.log("✅ Webhook signature verified successfully");
-      } catch (err: any) {
-        console.error("❌ Webhook signature verification failed:", err.message);
-        return new Response(JSON.stringify({ error: "Invalid signature" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-          status: 400,
-        });
-      }
-    } else {
-      // Fallback: no webhook secret configured yet
-      console.warn("⚠️ No webhook secret configured - processing without signature verification");
-      event = JSON.parse(body);
+    try {
+      const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
+        apiVersion: "2023-10-16",
+        httpClient: Stripe.createFetchHttpClient(),
+      });
+      event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
+      console.log("✅ Webhook signature verified successfully");
+    } catch (err: any) {
+      console.error("❌ Webhook signature verification failed:", err.message);
+      return new Response(JSON.stringify({ error: "Invalid signature" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+      });
     }
 
     console.log("Stripe webhook event:", event.type);
