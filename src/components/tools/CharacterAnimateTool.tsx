@@ -182,7 +182,7 @@ export const CharacterAnimateTool = ({ userId, onBack }: CharacterAnimateToolPro
       <div className="gradient-card rounded-2xl p-4 border border-primary/20 space-y-3">
         <div className="flex items-center gap-2">
           <Video className="w-4 h-4 text-primary" />
-          <h3 className="text-sm font-semibold text-foreground font-myanmar">ကကွက် ဗီဒီယို (Reference Video)</h3>
+          <h3 className="text-sm font-semibold text-foreground font-myanmar">ကကွက် ဗီဒီယို (လိုက်လုပ်စေချင်တဲ့ video)</h3>
         </div>
 
         {videoPreview ? (
@@ -221,7 +221,7 @@ export const CharacterAnimateTool = ({ userId, onBack }: CharacterAnimateToolPro
         ) : (
           <>
             <Sparkles className="w-5 h-5 mr-2" />
-            ဗီဒီယို ဖန်တီးမည်
+            ဗီဒီယို ဖန်တီးမည် ({costs.character_animation || 15} Cr)
           </>
         )}
       </Button>
