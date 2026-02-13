@@ -23,6 +23,8 @@ const ALLOWED_AD_DOMAINS = [
   "www.profitabledisplaynetwork.com",
   "a.magsrv.com",
   "s.magsrv.com",
+  "effectivegatecpm.com",
+  "pl28696347.effectivegatecpm.com",
 ];
 
 function isAllowedAdDomain(url: string): boolean {
