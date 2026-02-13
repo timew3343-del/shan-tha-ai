@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Gift, Play, CreditCard, Loader2, CheckCircle, ExternalLink, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Gift, Play, CreditCard, Loader2, CheckCircle, ExternalLink, AlertTriangle, ShieldAlert, RefreshCw, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -10,7 +10,8 @@ import { useAppSettings } from "@/hooks/useAppSettings";
 import { AdWatchModal } from "@/components/AdWatchModal";
 import { PromoCodeRedeem } from "@/components/PromoCodeRedeem";
 import { ReferralSection } from "@/components/ReferralSection";
-import { motion } from "framer-motion";
+import { useAdBlockDetection } from "@/hooks/useAdBlockDetection";
+import { motion, AnimatePresence } from "framer-motion";
 
 const EarnCredits = () => {
   const navigate = useNavigate();
@@ -19,7 +20,8 @@ const EarnCredits = () => {
   const [isLoading, setIsLoading] = useState(true);
   const { credits, isLoading: creditsLoading } = useCredits(user?.id);
   const { settings, isLoading: settingsLoading } = useAppSettings();
-  
+  const { adBlocked, checking: adBlockChecking, recheckAdBlock } = useAdBlockDetection();
+  const [showAdBlockGuide, setShowAdBlockGuide] = useState(false);
   // Campaign submission state
   const [fbLink, setFbLink] = useState("");
   const [tiktokLink, setTiktokLink] = useState("");
@@ -134,6 +136,10 @@ const EarnCredits = () => {
   };
 
   const handleWatchAd = () => {
+    if (adBlocked) {
+      setShowAdBlockGuide(true);
+      return;
+    }
     if (dailyAdCredits >= settings.daily_ad_limit) {
       toast({
         title: "ယနေ့ကန့်သတ်ချက်ပြည့်ပြီ",
@@ -254,13 +260,83 @@ const EarnCredits = () => {
             </div>
           </div>
 
+          {/* AdBlock Warning */}
+          <AnimatePresence>
+            {adBlocked && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="p-4 rounded-xl bg-destructive/10 border border-destructive/30 space-y-3"
+              >
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="w-5 h-5 text-destructive flex-shrink-0" />
+                  <p className="text-sm font-semibold text-destructive font-myanmar">
+                    ကြော်ငြာပိတ်ထားခြင်းကို ခဏပိတ်ပေးပါ (AdBlocker detected)
+                  </p>
+                </div>
+                <p className="text-xs text-muted-foreground font-myanmar">
+                  အခမဲ့ Credit ရယူရန်အတွက် AdBlocker ကို ပိတ်ပေးမှသာ ကြော်ငြာကြည့်လို့ရပါမည်။
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowAdBlockGuide(v => !v)}
+                    className="text-xs font-myanmar"
+                  >
+                    <Info className="w-3.5 h-3.5 mr-1" />
+                    ပိတ်နည်း လမ်းညွှန်
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      recheckAdBlock();
+                      toast({ title: "စစ်ဆေးနေသည်...", description: "AdBlocker ပိတ်ပြီးပါက ထပ်စစ်ပါ" });
+                    }}
+                    className="text-xs font-myanmar"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 mr-1" />
+                    ထပ်စစ်မည်
+                  </Button>
+                </div>
+
+                <AnimatePresence>
+                  {showAdBlockGuide && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="p-3 rounded-lg bg-secondary/50 border border-border text-xs text-muted-foreground font-myanmar space-y-2"
+                    >
+                      <p className="font-semibold text-foreground">AdBlocker ပိတ်နည်း:</p>
+                      <ol className="list-decimal list-inside space-y-1">
+                        <li>Browser ညာဘက်အပေါ်ထောင့်ရှိ AdBlock icon ကို နှိပ်ပါ</li>
+                        <li>"Pause on this site" သို့မဟုတ် "Don't run on this site" ကို ရွေးပါ</li>
+                        <li>Page ကို Refresh လုပ်ပါ (F5 သို့မဟုတ် ↻ ခလုတ်)</li>
+                        <li>ပြန်လာပြီး "ထပ်စစ်မည်" ခလုတ်ကို နှိပ်ပါ</li>
+                      </ol>
+                      <p className="text-primary">💡 Credits ရပြီးနောက် AdBlocker ကို ပြန်ဖွင့်နိုင်ပါသည်</p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <Button
             onClick={handleWatchAd}
-            disabled={dailyAdCredits >= settings.daily_ad_limit}
+            disabled={dailyAdCredits >= settings.daily_ad_limit || adBlocked}
             className="w-full gradient-gold text-primary-foreground"
           >
             {dailyAdCredits >= settings.daily_ad_limit ? (
               "ယနေ့ ကန့်သတ်ချက် ပြည့်ပြီ"
+            ) : adBlocked ? (
+              <span className="flex items-center gap-2 font-myanmar">
+                <ShieldAlert className="w-4 h-4" />
+                AdBlocker ပိတ်ပြီးမှ ကြည့်နိုင်ပါမည်
+              </span>
             ) : (
               <>
                 <Play className="w-4 h-4 mr-2" />
