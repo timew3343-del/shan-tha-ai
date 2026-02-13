@@ -153,7 +153,20 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
   const introRef = useRef<HTMLInputElement>(null);
   const outroRef = useRef<HTMLInputElement>(null);
 
-  const cost = (costs as any).video_multi || 10;
+  // Dynamic credit cost based on selected features
+  const baseCost = (costs as any).video_multi || 10;
+  const extraCost = 
+    (copyrightBypass ? 1 : 0) +
+    (autoColorGrade ? 1 : 0) +
+    (flipVideo ? 1 : 0) +
+    (textWatermark ? 1 : 0) +
+    (logoOverlay ? 1 : 0) +
+    (objectRemoval ? 2 : 0) +
+    (introFile ? 1 : 0) +
+    (outroFile ? 1 : 0) +
+    (autoSubtitles ? 2 : 0) +
+    (characterEnabled ? 2 : 0);
+  const cost = baseCost + extraCost;
 
   const handleImageUpload = (setter: (v: string | null) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -259,6 +272,7 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-3 p-4 pb-24">
       <ToolHeader title="AI Video Multi-Tool" subtitle="ဗီဒီယို ဘက်စုံတည်းဖြတ်ခြင်း (FFmpeg + AI)" onBack={onBack} />
+      <p className="text-[10px] text-muted-foreground font-myanmar text-center -mt-2 mb-1">လင့်ထည့် အော်တို vedio ထုပ်</p>
       <FirstOutputGuide toolName="Video Multi-Tool" show={showGuide} steps={["Video URL ထည့်ပါ", "Settings များ ရွေးပါ", "Generate Video နှိပ်ပါ"]} />
 
       {/* 1. Source Input */}

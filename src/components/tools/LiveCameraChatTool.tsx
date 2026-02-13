@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { 
   Camera, Send, Square, Loader2, Sparkles, MessageCircle, 
   AlertCircle, SwitchCamera, Mic, MicOff, Volume2, Eye, Radio, X,
-  Video, Phone
+  Video, Phone, Upload, ImageOff
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -68,7 +68,9 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
   }, [messages]);
 
   useEffect(() => {
-    synthRef.current = window.speechSynthesis;
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      synthRef.current = window.speechSynthesis;
+    }
     return () => { synthRef.current?.cancel(); };
   }, []);
 
@@ -123,7 +125,7 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
     } catch (err: any) {
       console.error("Camera error:", err);
       if (err?.name === "NotAllowedError" || err?.name === "PermissionDeniedError") {
-        setCameraError("ကင်မရာ ခွင့်ပြုချက် ပိတ်ထားပါသည်။\nSettings → Privacy → Camera → Allow");
+        setCameraError("PERMISSION_DENIED");
       } else if (err?.name === "NotFoundError") {
         setCameraError("ကင်မရာ ရှာမတွေ့ပါ။");
       } else {
@@ -340,22 +342,11 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
     setMode(null);
   };
 
-  const statusConfig = {
-    idle: { label: "Ready", color: "bg-muted text-muted-foreground" },
-    listening: { label: "နားထောင်နေသည်...", color: "bg-green-500/20 text-green-400" },
-    thinking: { label: "စဉ်းစားနေသည်...", color: "bg-amber-500/20 text-amber-400" },
-    speaking: { label: "ပြောနေသည်...", color: "bg-blue-500/20 text-blue-400" },
-  };
-
   // ========== MODE SELECTOR ==========
   if (!mode) {
     return (
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 p-4 pb-24">
-        <ToolHeader
-          title="Live AI"
-          subtitle="ကင်မရာ + အသံ + AI = Real-time"
-          onBack={onBack}
-        />
+        <ToolHeader title="Live AI" subtitle="ကင်မရာ + အသံ + AI = Real-time" onBack={onBack} />
         <FirstOutputGuide toolName="Live AI" show={showGuide} steps={["Mode ရွေးပါ", "မေးခွန်းမေးပါ", "AI က ဖြေပါလိမ့်မည်"]} />
 
         <div className="text-center py-6">
@@ -367,22 +358,15 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
         </div>
 
         <div className="grid grid-cols-1 gap-4 max-w-sm mx-auto">
-          {/* Camera Mode */}
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => enterMode("camera")}
-            className="relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 to-primary/5 p-6 text-left transition-all hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10"
-          >
+          <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => enterMode("camera")}
+            className="relative overflow-hidden rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 to-primary/5 p-6 text-left transition-all hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10">
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
                 <Camera className="w-6 h-6 text-primary" />
               </div>
               <div>
                 <h3 className="font-bold text-foreground font-myanmar text-base mb-1">📸 Live Camera Chat</h3>
-                <p className="text-xs text-muted-foreground font-myanmar leading-relaxed">
-                  ကင်မရာဖွင့်ပြီး ပုံပြ၍ AI ကို မေးပါ။ Real-time vision analysis
-                </p>
+                <p className="text-xs text-muted-foreground font-myanmar leading-relaxed">ကင်မရာဖွင့်ပြီး ပုံပြ၍ AI ကို မေးပါ။ Real-time vision analysis</p>
               </div>
             </div>
             <div className="mt-3 flex items-center gap-2">
@@ -390,22 +374,15 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
             </div>
           </motion.button>
 
-          {/* Voice Mode */}
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => enterMode("voice")}
-            className="relative overflow-hidden rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/10 to-blue-500/5 p-6 text-left transition-all hover:border-blue-500/60 hover:shadow-lg hover:shadow-blue-500/10"
-          >
+          <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => enterMode("voice")}
+            className="relative overflow-hidden rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/10 to-blue-500/5 p-6 text-left transition-all hover:border-blue-500/60 hover:shadow-lg hover:shadow-blue-500/10">
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center shrink-0">
                 <Mic className="w-6 h-6 text-blue-400" />
               </div>
               <div>
                 <h3 className="font-bold text-foreground font-myanmar text-base mb-1">🎤 Voice Chat</h3>
-                <p className="text-xs text-muted-foreground font-myanmar leading-relaxed">
-                  အသံနဲ့ ပြောပြီး AI ကို မေးပါ။ AI ကလည်း အသံနဲ့ ပြန်ဖြေပါမည်
-                </p>
+                <p className="text-xs text-muted-foreground font-myanmar leading-relaxed">အသံနဲ့ ပြောပြီး AI ကို မေးပါ။ AI ကလည်း အသံနဲ့ ပြန်ဖြေပါမည်</p>
               </div>
             </div>
             <div className="mt-3 flex items-center gap-2">
@@ -421,29 +398,67 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
     );
   }
 
-  // ========== CAMERA MODE ==========
+  // ========== CAMERA MODE (Gemini Live Style - Dark Full Screen) ==========
   if (mode === "camera") {
     return (
-      <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
-        className="space-y-3 p-4 pb-24">
-        <ToolHeader title="Live Camera Chat" subtitle="ကင်မရာ + AI Vision" onBack={exitMode} />
-
-        {/* Camera Preview */}
-        <div className="relative aspect-video bg-black rounded-2xl overflow-hidden border border-primary/20">
-          <video ref={videoRef} className="w-full h-full object-cover" playsInline autoPlay muted style={{ minHeight: "200px" }} />
-
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-black flex flex-col">
+        {/* Top Bar */}
+        <div className="relative z-10 flex items-center justify-between px-4 pt-3 pb-2">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-white/80" />
+            <span className="text-white/90 font-semibold text-sm">Live</span>
+          </div>
           {cameraActive && (
-            <div className="absolute top-3 left-3 flex items-center gap-1.5">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/90 text-white text-[10px] font-bold">
-                <Radio className="w-3 h-3 animate-pulse" /> LIVE
+            <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-500/80 text-white text-[10px] font-bold">
+                <Radio className="w-2.5 h-2.5 animate-pulse" /> LIVE
               </div>
               {creditsUsed > 0 && (
-                <div className="px-2 py-1 rounded-full bg-black/60 text-white/80 text-[10px]">{creditsUsed} Cr</div>
+                <span className="text-[10px] text-white/60 px-2 py-0.5 rounded-full bg-white/10">{creditsUsed} Cr</span>
               )}
             </div>
           )}
+          <button onClick={() => { /* toggle image off - placeholder */ }} className="p-1.5">
+            <ImageOff className="w-5 h-5 text-white/60" />
+          </button>
+        </div>
 
-          {cameraError && (
+        {/* Camera View - Full screen */}
+        <div className="flex-1 relative overflow-hidden">
+          <video ref={videoRef} className="absolute inset-0 w-full h-full object-cover" playsInline autoPlay muted />
+
+          {/* Camera Permission Denied - Explanation */}
+          {cameraError === "PERMISSION_DENIED" && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/95 p-6">
+              <div className="text-center max-w-xs space-y-4">
+                <div className="w-16 h-16 mx-auto rounded-full bg-red-500/20 flex items-center justify-center">
+                  <Camera className="w-8 h-8 text-red-400" />
+                </div>
+                <h3 className="text-white font-bold font-myanmar text-base">ကင်မရာ ခွင့်ပြုချက် လိုအပ်ပါသည်</h3>
+                <div className="bg-white/10 rounded-xl p-4 text-left space-y-2">
+                  <p className="text-white/80 text-xs font-myanmar leading-relaxed">
+                    ဤ feature ကို အသုံးပြုရန် သင့် browser မှ ကင်မရာ ခွင့်ပြုချက် လိုအပ်ပါသည်။
+                  </p>
+                  <div className="space-y-1.5 text-[11px] text-white/60 font-myanmar">
+                    <p>📱 <strong>Mobile:</strong> Settings → Apps → Browser → Permissions → Camera → Allow</p>
+                    <p>💻 <strong>Desktop:</strong> Address bar ဘေး 🔒 Lock icon → Camera → Allow</p>
+                    <p>⚠️ Messenger Bubble / Screen Recorder / Overlay Apps များ ပိတ်ပါ</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button onClick={exitMode} variant="outline" className="flex-1 text-white border-white/20 bg-white/5">
+                    <X className="w-4 h-4 mr-1" /> ပိတ်မည်
+                  </Button>
+                  <Button onClick={startCamera} className="flex-1 bg-primary">
+                    <Camera className="w-4 h-4 mr-1" /> ထပ်စမ်းမည်
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {cameraError && cameraError !== "PERMISSION_DENIED" && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/90 p-4">
               <div className="text-center max-w-xs">
                 <AlertCircle className="w-10 h-10 text-destructive mx-auto mb-3" />
@@ -464,120 +479,138 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
             </div>
           )}
 
-          {cameraActive && (
-            <button onClick={switchCamera}
-              className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center border border-white/20 hover:bg-black/70 transition-colors">
-              <SwitchCamera className="w-4 h-4 text-white" />
-            </button>
-          )}
-
+          {/* AI Status Overlay */}
           {aiStatus !== "idle" && (
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2">
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm ${statusConfig[aiStatus].color}`}>
-                {aiStatus === "listening" && <Mic className="w-3 h-3 animate-pulse" />}
-                {aiStatus === "thinking" && <Loader2 className="w-3 h-3 animate-spin" />}
-                {aiStatus === "speaking" && <Volume2 className="w-3 h-3 animate-pulse" />}
-                <span className="font-myanmar">{statusConfig[aiStatus].label}</span>
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-2 px-4 py-2 rounded-full backdrop-blur-md bg-black/40 border border-white/10 text-white text-xs font-medium">
+                {aiStatus === "listening" && <><Mic className="w-3.5 h-3.5 text-green-400 animate-pulse" /><span className="font-myanmar">နားထောင်နေသည်...</span></>}
+                {aiStatus === "thinking" && <><Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" /><span className="font-myanmar">စဉ်းစားနေသည်...</span></>}
+                {aiStatus === "speaking" && <><Volume2 className="w-3.5 h-3.5 text-blue-400 animate-pulse" /><span className="font-myanmar">ပြောနေသည်...</span></>}
               </motion.div>
             </div>
           )}
+
+          {/* AI Subtitle Response - Bottom overlay */}
+          <AnimatePresence>
+            {messages.length > 0 && messages[messages.length - 1].role === "assistant" && (
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                className="absolute bottom-4 left-3 right-3 z-10">
+                <div className="bg-black/60 backdrop-blur-md rounded-2xl p-3 border border-white/10 max-h-28 overflow-y-auto">
+                  <p className="text-xs text-white/90 font-myanmar leading-relaxed">
+                    {messages[messages.length - 1].content.slice(0, 400)}
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-        {/* Controls */}
-        <div className="flex items-center gap-2">
-          <Button onClick={toggleMic} variant={micActive ? "destructive" : "outline"} size="icon"
-            className={`shrink-0 w-12 h-12 rounded-2xl transition-all ${micActive ? "ring-2 ring-green-500 animate-pulse" : ""}`}
-            disabled={aiStatus === "thinking"}>
-            {micActive ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-          </Button>
-          <Button onClick={handleAnalyzeNow} variant="outline" className="shrink-0 h-12 rounded-2xl px-3 border-primary/30"
-            disabled={!cameraActive || aiStatus === "thinking"}>
-            <Eye className="w-4 h-4 mr-1.5" />
-            <span className="text-xs font-myanmar">ကြည့်ခိုင်း</span>
-          </Button>
-          <Button onClick={exitMode} variant="destructive" className="shrink-0 h-12 rounded-2xl px-3">
-            <X className="w-4 h-4 mr-1.5" />
-            <span className="text-xs font-myanmar">ပိတ်မည်</span>
-          </Button>
-          <div className="ml-auto text-right">
-            <p className="text-[10px] text-muted-foreground">{creditPerInteraction} Cr/interaction</p>
+        {/* Bottom Controls - Gemini Live style */}
+        <div className="relative z-10 pb-8 pt-4 px-6">
+          {/* Text input row */}
+          <div className="flex items-end gap-2 mb-4">
+            <Textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyPress}
+              placeholder={micActive ? "🎤 နားထောင်နေသည်..." : "စာရိုက်၍ မေးပါ..."}
+              className="min-h-[36px] max-h-[60px] resize-none rounded-2xl bg-white/10 border border-white/20 text-xs font-myanmar px-3 py-2 text-white placeholder:text-white/40 flex-1"
+              disabled={aiStatus === "thinking"} />
+            <Button onClick={handleSend} disabled={aiStatus === "thinking" || !input.trim()}
+              className="shrink-0 h-9 w-9 rounded-xl bg-primary">
+              {aiStatus === "thinking" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            </Button>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center justify-center gap-5">
+            {/* Camera Switch */}
+            <button onClick={switchCamera} disabled={!cameraActive}
+              className="w-14 h-14 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center border border-white/20 hover:bg-white/25 transition-all disabled:opacity-30">
+              <Video className="w-6 h-6 text-white" />
+            </button>
+
+            {/* Analyze */}
+            <button onClick={handleAnalyzeNow} disabled={!cameraActive || aiStatus === "thinking"}
+              className="w-14 h-14 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center border border-white/20 hover:bg-white/25 transition-all disabled:opacity-30">
+              <Upload className="w-6 h-6 text-white" />
+            </button>
+
+            {/* Mic - Large */}
+            <button onClick={toggleMic} disabled={aiStatus === "thinking"}
+              className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${
+                micActive
+                  ? "bg-white/90 ring-4 ring-white/30 animate-pulse"
+                  : "bg-white/15 backdrop-blur-sm border border-white/20 hover:bg-white/25"
+              }`}>
+              {micActive ? <MicOff className="w-7 h-7 text-black" /> : <Mic className="w-7 h-7 text-white" />}
+            </button>
+
+            {/* Close - Red */}
+            <button onClick={exitMode}
+              className="w-14 h-14 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-all">
+              <X className="w-6 h-6 text-white" />
+            </button>
           </div>
         </div>
-
-        {/* Chat */}
-        <ChatPanel messages={messages} aiStatus={aiStatus} input={input} setInput={setInput}
-          onSend={handleSend} onKeyPress={handleKeyPress} micActive={micActive} messagesEndRef={messagesEndRef} />
       </motion.div>
     );
   }
 
-  // ========== VOICE MODE (Gemini Live style) ==========
+  // ========== VOICE MODE (Gemini Live style - Dark ambient) ==========
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col h-[calc(100vh-120px)] p-4 pb-24">
-      <ToolHeader title="Voice Chat" subtitle="အသံနဲ့ AI ကို ပြောပါ" onBack={exitMode} />
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+      className="fixed inset-0 z-50 bg-gradient-to-b from-[#0a0a1a] via-[#0d1b2a] to-[#1b2838] flex flex-col">
+      {/* Top Bar */}
+      <div className="relative z-10 flex items-center justify-between px-4 pt-3 pb-2">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-white/80" />
+          <span className="text-white/90 font-semibold text-sm">Live</span>
+        </div>
+        {creditsUsed > 0 && (
+          <span className="text-[10px] text-white/50 px-2 py-0.5 rounded-full bg-white/10">{creditsUsed} Credits</span>
+        )}
+      </div>
 
-      {/* Ambient Background */}
-      <div className="flex-1 flex flex-col items-center justify-center relative overflow-hidden rounded-2xl bg-gradient-to-b from-background to-blue-950/30 border border-blue-500/20 my-3">
-        {/* Animated orb */}
-        <div className="relative">
+      {/* Main Ambient Area */}
+      <div className="flex-1 flex flex-col items-center justify-center relative overflow-hidden">
+        {/* Large ambient glow */}
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[120%] aspect-square">
           <motion.div
             animate={{
-              scale: aiStatus === "listening" ? [1, 1.15, 1] : aiStatus === "speaking" ? [1, 1.2, 0.95, 1.1, 1] : aiStatus === "thinking" ? [1, 1.05, 1] : 1,
-              opacity: aiStatus === "idle" ? 0.4 : 0.9,
+              scale: aiStatus === "speaking" ? [1, 1.08, 0.96, 1.04, 1] : aiStatus === "listening" ? [1, 1.05, 1] : 1,
+              opacity: aiStatus === "idle" ? 0.3 : 0.7,
             }}
-            transition={{
-              duration: aiStatus === "speaking" ? 0.6 : aiStatus === "listening" ? 1.5 : 2,
-              repeat: Infinity,
-              ease: "easeInOut",
-            }}
-            className="w-32 h-32 rounded-full bg-gradient-to-br from-blue-500/40 via-primary/30 to-purple-500/40 blur-xl"
+            transition={{ duration: aiStatus === "speaking" ? 0.8 : 2, repeat: Infinity, ease: "easeInOut" }}
+            className="w-full h-full rounded-[40%] bg-gradient-to-t from-blue-500/30 via-cyan-400/15 to-transparent blur-3xl"
           />
-          <motion.div
-            animate={{
-              scale: aiStatus === "listening" ? [1, 1.1, 1] : aiStatus === "speaking" ? [1, 1.15, 0.9, 1] : 1,
-            }}
-            transition={{ duration: 1, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute inset-4 rounded-full bg-gradient-to-br from-blue-400/60 via-primary/50 to-purple-400/50 backdrop-blur-sm flex items-center justify-center"
-          >
-            {aiStatus === "idle" && <Mic className="w-8 h-8 text-white/60" />}
-            {aiStatus === "listening" && <Mic className="w-8 h-8 text-green-400 animate-pulse" />}
-            {aiStatus === "thinking" && <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />}
-            {aiStatus === "speaking" && <Volume2 className="w-8 h-8 text-blue-400 animate-pulse" />}
-          </motion.div>
         </div>
 
-        {/* Status Text */}
-        <motion.p
-          key={aiStatus}
-          initial={{ opacity: 0, y: 5 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mt-6 text-sm font-myanmar text-center text-muted-foreground"
-        >
+        {/* Secondary glow */}
+        <motion.div
+          animate={{
+            scale: aiStatus !== "idle" ? [1, 1.1, 1] : 1,
+            opacity: aiStatus === "idle" ? 0.15 : 0.4,
+          }}
+          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute bottom-[10%] left-1/2 -translate-x-1/2 w-[80%] aspect-[2/1] rounded-[50%] bg-gradient-to-t from-blue-400/20 via-sky-300/10 to-transparent blur-2xl"
+        />
+
+        {/* Status text */}
+        <motion.p key={aiStatus} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
+          className="relative z-10 text-sm font-myanmar text-center text-white/60 mb-8">
           {aiStatus === "idle" && "🎤 Mic ဖွင့်ပြီး ပြောပါ"}
           {aiStatus === "listening" && "နားထောင်နေသည်..."}
           {aiStatus === "thinking" && "AI စဉ်းစားနေသည်..."}
           {aiStatus === "speaking" && "AI ပြောနေသည်..."}
         </motion.p>
 
-        {/* Credits used */}
-        {creditsUsed > 0 && (
-          <p className="mt-2 text-[10px] text-muted-foreground">Credits: {creditsUsed}</p>
-        )}
-
-        {/* Latest AI response (subtitle style) */}
+        {/* AI Subtitle Response - floating at bottom of ambient area */}
         <AnimatePresence>
           {messages.length > 0 && messages[messages.length - 1].role === "assistant" && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="absolute bottom-4 left-4 right-4 max-h-24 overflow-y-auto"
-            >
-              <div className="bg-black/40 backdrop-blur-sm rounded-xl p-3">
-                <p className="text-xs text-white/90 font-myanmar leading-relaxed line-clamp-4">
-                  {messages[messages.length - 1].content.slice(0, 300)}
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className="absolute bottom-6 left-4 right-4 z-10 max-h-28 overflow-y-auto">
+              <div className="bg-black/30 backdrop-blur-md rounded-2xl p-3 border border-white/5">
+                <p className="text-xs text-white/80 font-myanmar leading-relaxed">
+                  {messages[messages.length - 1].content.slice(0, 400)}
                 </p>
               </div>
             </motion.div>
@@ -585,104 +618,50 @@ export const LiveCameraChatTool = ({ userId, onBack }: LiveCameraChatToolProps) 
         </AnimatePresence>
       </div>
 
-      {/* Voice Controls */}
-      <div className="flex items-center justify-center gap-4 py-3">
-        <Button onClick={toggleMic}
-          size="icon"
-          className={`w-16 h-16 rounded-full transition-all ${
-            micActive
-              ? "bg-green-500 hover:bg-green-600 ring-4 ring-green-500/30 animate-pulse"
-              : "bg-primary hover:bg-primary/90"
-          }`}
-          disabled={aiStatus === "thinking"}
-        >
-          {micActive ? <MicOff className="w-7 h-7 text-white" /> : <Mic className="w-7 h-7 text-white" />}
-        </Button>
-
-        <Button onClick={exitMode} size="icon" variant="destructive" className="w-14 h-14 rounded-full">
-          <X className="w-6 h-6" />
-        </Button>
-      </div>
-
-      {/* Text input fallback */}
-      <div className="flex items-end gap-2">
-        <div className="flex-1">
+      {/* Bottom Controls */}
+      <div className="relative z-10 pb-8 pt-4 px-6">
+        {/* Text input */}
+        <div className="flex items-end gap-2 mb-4">
           <Textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyPress}
             placeholder={micActive ? "🎤 နားထောင်နေသည်..." : "စာရိုက်၍ မေးပါ..."}
-            className="min-h-[40px] max-h-[80px] resize-none rounded-xl bg-secondary border border-primary/30 text-xs font-myanmar px-3 py-2"
+            className="min-h-[36px] max-h-[60px] resize-none rounded-2xl bg-white/10 border border-white/15 text-xs font-myanmar px-3 py-2 text-white placeholder:text-white/30 flex-1"
             disabled={aiStatus === "thinking"} />
-        </div>
-        <Button onClick={handleSend} disabled={aiStatus === "thinking" || !input.trim()}
-          className="shrink-0 h-9 w-9 rounded-xl bg-primary">
-          {aiStatus === "thinking" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-        </Button>
-      </div>
-    </motion.div>
-  );
-};
-
-// ========== CHAT PANEL SUB-COMPONENT ==========
-function ChatPanel({ messages, aiStatus, input, setInput, onSend, onKeyPress, micActive, messagesEndRef }: {
-  messages: ChatMessage[];
-  aiStatus: AIStatus;
-  input: string;
-  setInput: (v: string) => void;
-  onSend: () => void;
-  onKeyPress: (e: React.KeyboardEvent) => void;
-  micActive: boolean;
-  messagesEndRef: React.RefObject<HTMLDivElement>;
-}) {
-  return (
-    <div className="gradient-card rounded-2xl border border-primary/20 overflow-hidden">
-      <div className="h-48 overflow-y-auto p-3 space-y-3">
-        {messages.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center text-center">
-            <MessageCircle className="w-10 h-10 text-muted-foreground/30 mb-2" />
-            <p className="text-xs text-muted-foreground font-myanmar">🎤 Mic ဖွင့်ပြီး ပြောပါ သို့ 👁️ ကြည့်ခိုင်းပါ</p>
-          </div>
-        )}
-        <AnimatePresence>
-          {messages.map((msg, idx) => (
-            <motion.div key={idx} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[85%] rounded-2xl p-2.5 ${
-                msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground"}`}>
-                {msg.hasImage && <span className="text-xs opacity-70">📸 </span>}
-                {msg.role === "assistant" ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none font-myanmar text-xs leading-relaxed">
-                    <ReactMarkdown>{msg.content}</ReactMarkdown>
-                  </div>
-                ) : (
-                  <p className="text-xs font-myanmar">{msg.content}</p>
-                )}
-              </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-        {aiStatus === "thinking" && messages[messages.length - 1]?.role === "user" && (
-          <div className="flex justify-start">
-            <div className="bg-secondary rounded-2xl p-2.5 flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-              <span className="text-xs text-muted-foreground font-myanmar">စဉ်းစားနေသည်...</span>
-            </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-      <div className="p-2.5 border-t border-primary/20 bg-background/50">
-        <div className="flex items-end gap-2">
-          <div className="flex-1">
-            <Textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={onKeyPress}
-              placeholder={micActive ? "🎤 နားထောင်နေသည်..." : "ကင်မရာ အကြောင်း မေးပါ..."}
-              className="min-h-[40px] max-h-[80px] resize-none rounded-xl bg-secondary border border-primary/30 text-xs font-myanmar px-3 py-2"
-              disabled={aiStatus === "thinking"} />
-          </div>
-          <Button onClick={onSend} disabled={aiStatus === "thinking" || !input.trim()}
+          <Button onClick={handleSend} disabled={aiStatus === "thinking" || !input.trim()}
             className="shrink-0 h-9 w-9 rounded-xl bg-primary">
             {aiStatus === "thinking" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           </Button>
         </div>
+
+        {/* Action buttons - matching reference image layout */}
+        <div className="flex items-center justify-center gap-5">
+          {/* Switch to Camera */}
+          <button onClick={() => { exitMode(); setTimeout(() => enterMode("camera"), 100); }}
+            className="w-14 h-14 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center border border-white/20 hover:bg-white/25 transition-all">
+            <Video className="w-6 h-6 text-white" />
+          </button>
+
+          {/* Upload placeholder */}
+          <button className="w-14 h-14 rounded-full bg-white/15 backdrop-blur-sm flex items-center justify-center border border-white/20 hover:bg-white/25 transition-all opacity-40" disabled>
+            <Upload className="w-6 h-6 text-white" />
+          </button>
+
+          {/* Mic - Large center */}
+          <button onClick={toggleMic} disabled={aiStatus === "thinking"}
+            className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${
+              micActive
+                ? "bg-white/90 ring-4 ring-white/30 animate-pulse"
+                : "bg-white/15 backdrop-blur-sm border border-white/20 hover:bg-white/25"
+            }`}>
+            {micActive ? <MicOff className="w-7 h-7 text-black" /> : <Mic className="w-7 h-7 text-white" />}
+          </button>
+
+          {/* Close - Red */}
+          <button onClick={exitMode}
+            className="w-14 h-14 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-all">
+            <X className="w-6 h-6 text-white" />
+          </button>
+        </div>
       </div>
-    </div>
+    </motion.div>
   );
-}
+};
