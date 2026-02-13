@@ -100,9 +100,9 @@ function sanitizeAndInjectAdScript(container: HTMLDivElement, rawCode: string) {
       });
       document.body.appendChild(newScript);
     } else if (originalScript.textContent) {
-      // Inline scripts - only allow simple variable assignments for ad config
+      // Inline scripts - allow ad config variable assignments
       const content = originalScript.textContent.trim();
-      // Basic safety check: only allow if it looks like ad config (variable assignments)
+      // Allow ad config patterns (variable assignments) and simple expressions
       const isSafeInline = /^[\s\S]*?(atOptions|adConfig|options)\s*=\s*\{[\s\S]*?\};?\s*$/.test(content);
       if (isSafeInline) {
         const newScript = document.createElement('script');
@@ -156,18 +156,22 @@ export const AdWatchModal = ({
   const loadAdScript = useCallback(() => {
     if (!adContainerRef.current) return;
 
-    if (!adScriptCode) {
-      while (adContainerRef.current.firstChild) {
-        adContainerRef.current.removeChild(adContainerRef.current.firstChild);
-      }
-      const placeholder = document.createElement('div');
-      placeholder.className = 'text-center text-xs text-muted-foreground p-4';
-      placeholder.textContent = 'ကြော်ငြာ ကုတ် မထည့်ရသေးပါ (Admin > Adsterra)';
-      adContainerRef.current.appendChild(placeholder);
+    // Clear existing content
+    while (adContainerRef.current.firstChild) {
+      adContainerRef.current.removeChild(adContainerRef.current.firstChild);
+    }
+
+    // If we have raw ad script code from admin, use sanitized injection
+    if (adScriptCode) {
+      sanitizeAndInjectAdScript(adContainerRef.current, adScriptCode);
       return;
     }
 
-    sanitizeAndInjectAdScript(adContainerRef.current, adScriptCode);
+    // Fallback: no ad code configured
+    const placeholder = document.createElement('div');
+    placeholder.className = 'text-center text-xs text-muted-foreground p-4';
+    placeholder.textContent = 'ကြော်ငြာ ကုတ် မထည့်ရသေးပါ (Admin > Adsterra)';
+    adContainerRef.current.appendChild(placeholder);
   }, [adScriptCode]);
 
   const clearTimer = useCallback(() => {
@@ -290,8 +294,8 @@ export const AdWatchModal = ({
 
           {/* Ad Container */}
           <div ref={adContainerRef}
-            className="rounded-lg bg-secondary/50 overflow-hidden min-h-[250px] flex items-center justify-center p-2 border border-border"
-            style={{ minWidth: '300px' }}>
+            className="rounded-lg bg-secondary/50 overflow-hidden flex items-center justify-center p-2 border border-border"
+            style={{ minWidth: '300px', minHeight: '250px', height: '250px' }}>
             <p className="text-xs text-muted-foreground font-myanmar animate-pulse">ကြော်ငြာ ဖွင့်နေသည်...</p>
           </div>
 
