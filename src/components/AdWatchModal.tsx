@@ -135,15 +135,18 @@ export const AdWatchModal = ({
   const adContainerRef = useRef<HTMLDivElement>(null);
   const currentSessionRef = useRef(1);
 
-  // Load ad script code from DB
+  // Load ad script code and ad unit ID from DB
   useEffect(() => {
     const loadAdConfig = async () => {
       const { data } = await supabase
         .from("app_settings")
-        .select("value")
-        .eq("key", "adsterra_script_code")
-        .maybeSingle();
-      if (data?.value) setAdScriptCode(data.value);
+        .select("key, value")
+        .in("key", ["adsterra_script_code", "adsterra_ad_unit_id"]);
+      if (data) {
+        data.forEach(s => {
+          if (s.key === "adsterra_script_code") setAdScriptCode(s.value || "");
+        });
+      }
     };
     loadAdConfig();
   }, []);

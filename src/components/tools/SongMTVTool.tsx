@@ -93,12 +93,18 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
   const audioInputRef = useRef<HTMLInputElement>(null);
 
   const getCreditCost = () => {
+    let base: number;
     switch (serviceOption) {
-      case "song_only": return costs.song_mtv || 20;
-      case "mtv_only": return Math.ceil((costs.song_mtv || 20) * 1.2);
-      case "full_auto": return Math.ceil((costs.song_mtv || 20) * 2);
-      default: return costs.song_mtv || 20;
+      case "song_only": base = costs.song_mtv || 20; break;
+      case "mtv_only": base = Math.ceil((costs.song_mtv || 20) * 1.2); break;
+      case "full_auto": base = Math.ceil((costs.song_mtv || 20) * 2); break;
+      default: base = costs.song_mtv || 20;
     }
+    // 15% discount when subtitles are OFF (Logic 1)
+    if (!showSubtitles && (serviceOption === "full_auto" || serviceOption === "mtv_only")) {
+      base = Math.ceil(base * 0.85);
+    }
+    return base;
   };
 
   const creditCost = getCreditCost();
@@ -308,7 +314,12 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
 
             {serviceOption === "full_auto" && (
               <div className="gradient-card rounded-2xl p-3 border border-primary/20 flex items-center justify-between">
-                <label className="text-sm font-medium text-primary font-myanmar">📝 စာတန်းထိုးမည်</label>
+                <div>
+                  <label className="text-sm font-medium text-primary font-myanmar">📝 စာတန်းထိုးမည်</label>
+                  {!showSubtitles && (
+                    <p className="text-[10px] text-green-500 font-myanmar">💰 15% discount applied!</p>
+                  )}
+                </div>
                 <button onClick={() => setShowSubtitles(!showSubtitles)} className={`w-12 h-6 rounded-full transition-colors ${showSubtitles ? "bg-primary" : "bg-muted"}`}>
                   <div className={`w-5 h-5 bg-white rounded-full transition-transform shadow ${showSubtitles ? "translate-x-6" : "translate-x-0.5"}`} />
                 </button>
@@ -361,8 +372,14 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
               </div>
             </div>
 
+            {/* Subtitle toggle for MTV only mode */}
             <div className="gradient-card rounded-2xl p-3 border border-primary/20 flex items-center justify-between">
-              <label className="text-sm font-medium text-primary font-myanmar">📝 စာတန်းထိုးမည်</label>
+              <div>
+                <label className="text-sm font-medium text-primary font-myanmar">📝 စာတန်းထိုးမည်</label>
+                {!showSubtitles && (
+                  <p className="text-[10px] text-green-500 font-myanmar">💰 15% discount applied!</p>
+                )}
+              </div>
               <button onClick={() => setShowSubtitles(!showSubtitles)} className={`w-12 h-6 rounded-full transition-colors ${showSubtitles ? "bg-primary" : "bg-muted"}`}>
                 <div className={`w-5 h-5 bg-white rounded-full transition-transform shadow ${showSubtitles ? "translate-x-6" : "translate-x-0.5"}`} />
               </button>

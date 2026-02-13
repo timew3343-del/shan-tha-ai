@@ -19,11 +19,37 @@ interface VideoRedesignToolProps {
 
 const STYLE_PRESETS = [
   { label: "🐯 Tiger Walking", prompt: "A majestic tiger walking through a dense jungle, cinematic lighting, 4K" },
-  { label: "🦁 Lion in Savanna", prompt: "A powerful lion walking across the African savanna at golden hour, dramatic shadows" },
-  { label: "🐉 Dragon Flying", prompt: "A mythical dragon flying through stormy skies, epic fantasy style, fire breathing" },
-  { label: "🤖 Robot Cyborg", prompt: "A futuristic cyborg robot walking in a neon-lit cyberpunk city, metallic skin" },
-  { label: "🧙 Wizard Magic", prompt: "A wizard casting magical spells, purple magical energy, mystical forest background" },
-  { label: "🎨 Anime Style", prompt: "Anime style character, vibrant colors, Studio Ghibli inspired, beautiful scenery" },
+  { label: "🦁 Lion in Savanna", prompt: "A powerful lion walking across the African savanna at golden hour" },
+  { label: "🐉 Dragon Flying", prompt: "A mythical dragon flying through stormy skies, epic fantasy, fire breathing" },
+  { label: "🤖 Robot Cyborg", prompt: "A futuristic cyborg robot in a neon-lit cyberpunk city, metallic skin" },
+  { label: "🧙 Wizard Magic", prompt: "A wizard casting magical spells, purple energy, mystical forest" },
+  { label: "🎨 Anime Style", prompt: "Anime style, vibrant colors, Studio Ghibli inspired, beautiful scenery" },
+  { label: "🌆 Cyberpunk", prompt: "Cyberpunk neon city, holographic signs, rain-soaked streets, synthwave" },
+  { label: "🎭 Van Gogh", prompt: "Van Gogh painting style, swirling brushstrokes, starry night colors" },
+  { label: "✏️ Pencil Sketch", prompt: "Detailed pencil sketch, hand-drawn illustration, crosshatching" },
+  { label: "🧱 Claymation", prompt: "Claymation stop-motion style, clay figures, handcrafted texture" },
+  { label: "👾 8-Bit Pixel", prompt: "Retro 8-bit pixel art style, NES era graphics, pixelated" },
+  { label: "🎪 Pop Art", prompt: "Andy Warhol pop art style, bold colors, halftone dots, comic" },
+  { label: "🌸 Watercolor", prompt: "Delicate watercolor painting, soft washes, flowing colors" },
+  { label: "🖼️ Oil Painting", prompt: "Classical oil painting, rich textures, Renaissance style lighting" },
+  { label: "🎬 Film Noir", prompt: "Black and white film noir, dramatic shadows, 1940s detective style" },
+  { label: "🌈 Psychedelic", prompt: "Psychedelic 1960s art, kaleidoscope colors, trippy patterns" },
+  { label: "⛩️ Ukiyo-e", prompt: "Japanese ukiyo-e woodblock print style, traditional art" },
+  { label: "🏰 Medieval", prompt: "Medieval illuminated manuscript style, gold leaf, ornate borders" },
+  { label: "🚀 Sci-Fi", prompt: "Hard sci-fi space opera, spacecraft, nebula backgrounds, futuristic" },
+  { label: "🎃 Horror", prompt: "Dark horror aesthetic, eerie atmosphere, gothic, Tim Burton style" },
+  { label: "🌿 Nature Doc", prompt: "National Geographic nature documentary, stunning wildlife, 4K HDR" },
+  { label: "🎮 3D Game", prompt: "Unreal Engine 5 cinematic, photorealistic 3D, raytracing" },
+  { label: "📚 Comic Book", prompt: "American comic book style, bold ink lines, Ben-Day dots" },
+  { label: "🗿 Ancient", prompt: "Ancient Egyptian or Greek mythology style, golden artifacts" },
+  { label: "🎻 Baroque", prompt: "Baroque art style, dramatic chiaroscuro, Caravaggio inspired" },
+  { label: "❄️ Frozen Ice", prompt: "Frozen ice crystal world, winter wonderland, sparkling frost" },
+  { label: "🔥 Fire & Lava", prompt: "Volcanic landscape, molten lava flows, dramatic fire effects" },
+  { label: "🌊 Underwater", prompt: "Deep underwater scene, bioluminescent creatures, coral reefs" },
+  { label: "☁️ Dreamy", prompt: "Dreamy ethereal atmosphere, soft focus, pastel colors, clouds" },
+  { label: "🤡 Cartoon", prompt: "Exaggerated cartoon style, Looney Tunes inspired, slapstick" },
+  { label: "🦾 Steampunk", prompt: "Victorian steampunk, brass gears, clockwork machinery, steam" },
+  { label: "🌌 Galaxy", prompt: "Cosmic galaxy theme, nebula colors, stars, space exploration" },
 ];
 
 export const VideoRedesignTool = ({ userId, onBack }: VideoRedesignToolProps) => {
@@ -35,6 +61,7 @@ export const VideoRedesignTool = ({ userId, onBack }: VideoRedesignToolProps) =>
   const [inputVideo, setInputVideo] = useState<string | null>(null);
   const [inputVideoName, setInputVideoName] = useState<string>("");
   const [prompt, setPrompt] = useState("");
+  const [activeStylePreset, setActiveStylePreset] = useState<string | null>(null);
   const [resultVideo, setResultVideo] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -72,8 +99,23 @@ export const VideoRedesignTool = ({ userId, onBack }: VideoRedesignToolProps) =>
     if (videoInputRef.current) videoInputRef.current.value = "";
   };
 
-  const applyPreset = (presetPrompt: string) => {
-    setPrompt(presetPrompt);
+  const applyPreset = (presetPrompt: string, presetLabel: string) => {
+    if (activeStylePreset === presetLabel) {
+      // Deselect
+      setActiveStylePreset(null);
+      setPrompt("");
+    } else {
+      setActiveStylePreset(presetLabel);
+      setPrompt(presetPrompt);
+    }
+  };
+
+  const handlePromptChange = (value: string) => {
+    setPrompt(value);
+    // If user types in prompt, deselect any quick style (mutual exclusion - Logic 8)
+    if (activeStylePreset) {
+      setActiveStylePreset(null);
+    }
   };
 
   const handleTransform = async () => {
@@ -253,12 +295,16 @@ export const VideoRedesignTool = ({ userId, onBack }: VideoRedesignToolProps) =>
           <Sparkles className="w-4 h-4 text-primary" />
           Quick Styles
         </label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-1.5 max-h-[200px] overflow-y-auto pr-1">
           {STYLE_PRESETS.map((preset, i) => (
             <button
               key={i}
-              onClick={() => applyPreset(preset.prompt)}
-              className="px-3 py-2 text-xs rounded-xl border border-border/50 bg-background/50 hover:bg-primary/10 hover:border-primary/30 transition-all text-left font-myanmar truncate"
+              onClick={() => applyPreset(preset.prompt, preset.label)}
+              className={`px-2 py-1.5 text-[10px] rounded-lg border transition-all text-left font-myanmar truncate ${
+                activeStylePreset === preset.label
+                  ? "border-primary bg-primary/15 ring-1 ring-primary/30 text-primary font-semibold"
+                  : "border-border/50 bg-background/50 hover:bg-primary/10 hover:border-primary/30"
+              }`}
             >
               {preset.label}
             </button>
@@ -270,13 +316,14 @@ export const VideoRedesignTool = ({ userId, onBack }: VideoRedesignToolProps) =>
       <div className="rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm p-4 space-y-3">
         <label className="flex items-center gap-2 text-sm font-semibold text-foreground font-myanmar">
           <Wand2 className="w-4 h-4 text-primary" />
-          Style Prompt
+          Style Prompt {activeStylePreset && <span className="text-[10px] text-muted-foreground">(Quick Style ရွေးထားသဖြင့် ပိတ်ထားသည်)</span>}
         </label>
         <Textarea
-          placeholder="ဥပမာ - A tiger walking in the jungle, cinematic lighting, 4K quality..."
+          placeholder="ဗီဒီယိုကို ပြောင်းလဲစေချင်တဲ့ prompt ညွှန်ကြားချက်ကို ရေးပေးပါ"
           value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          className="min-h-[80px] rounded-xl border-border/50 bg-background/50 resize-none text-sm font-myanmar"
+          onChange={(e) => handlePromptChange(e.target.value)}
+          disabled={!!activeStylePreset}
+          className={`min-h-[80px] rounded-xl border-border/50 bg-background/50 resize-none text-sm font-myanmar ${activeStylePreset ? "opacity-50" : ""}`}
           maxLength={500}
         />
         <p className="text-[10px] text-muted-foreground text-right">{prompt.length}/500</p>

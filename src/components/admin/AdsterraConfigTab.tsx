@@ -10,6 +10,7 @@ export const AdsterraConfigTab = () => {
   const { toast } = useToast();
   const [publisherId, setPublisherId] = useState("");
   const [scriptCode, setScriptCode] = useState("");
+  const [adUnitId, setAdUnitId] = useState("");
   const [apiInitialBalance, setApiInitialBalance] = useState("");
   const [apiRemainingBalance, setApiRemainingBalance] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -24,6 +25,7 @@ export const AdsterraConfigTab = () => {
           .in("key", [
             "adsterra_publisher_id",
             "adsterra_script_code",
+            "adsterra_ad_unit_id",
             "api_initial_balance",
             "api_remaining_balance",
           ]);
@@ -33,6 +35,7 @@ export const AdsterraConfigTab = () => {
             switch (s.key) {
               case "adsterra_publisher_id": setPublisherId(s.value || ""); break;
               case "adsterra_script_code": setScriptCode(s.value || ""); break;
+              case "adsterra_ad_unit_id": setAdUnitId(s.value || ""); break;
               case "api_initial_balance": setApiInitialBalance(s.value || ""); break;
               case "api_remaining_balance": setApiRemainingBalance(s.value || ""); break;
             }
@@ -53,6 +56,7 @@ export const AdsterraConfigTab = () => {
       const updates = [
         { key: "adsterra_publisher_id", value: publisherId },
         { key: "adsterra_script_code", value: scriptCode },
+        { key: "adsterra_ad_unit_id", value: adUnitId },
         { key: "api_initial_balance", value: apiInitialBalance },
         { key: "api_remaining_balance", value: apiRemainingBalance },
       ];
@@ -162,17 +166,27 @@ export const AdsterraConfigTab = () => {
             />
           </div>
           <div className="space-y-2">
+            <label className="text-sm font-medium font-myanmar text-foreground">Ad Unit ID</label>
+            <Input
+              value={adUnitId}
+              onChange={e => setAdUnitId(e.target.value)}
+              placeholder="e.g. 28594848"
+            />
+            <p className="text-[10px] text-muted-foreground font-myanmar">Native Banner Ad Unit ID (Earn Credits modal တွင် အသုံးပြုမည်)</p>
+          </div>
+          <div className="space-y-2">
             <label className="text-sm font-medium font-myanmar text-foreground flex items-center gap-2">
               <Code className="w-4 h-4 text-muted-foreground" />
-              Script Code
+              Script Code (Native Banner)
             </label>
             <Textarea
               value={scriptCode}
               onChange={e => setScriptCode(e.target.value)}
-              placeholder="<script>...</script>"
+              placeholder='<script async="async" data-cfasync="false" src="https://..."></script><div id="container-..."></div>'
               rows={4}
               className="font-mono text-xs"
             />
+            <p className="text-[10px] text-muted-foreground font-myanmar">Native Banner script + container div ကို ထည့်ပါ (Social Bar မသုံးပါနှင့်)</p>
           </div>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Upload, Sparkles, Download, Loader2, X, Globe, Monitor, Film } from "lucide-react";
+import { Upload, Sparkles, Download, Loader2, X, Globe, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
@@ -36,10 +36,7 @@ const LANGUAGE_OPTIONS = [
   { value: "th", label: "🇹🇭 Thai" },
 ];
 
-const RESOLUTION_OPTIONS = [
-  { value: "1080p", label: "1080p Full HD" },
-  { value: "4k", label: "4K Ultra HD" },
-];
+// Resolution removed per Logic 2 - auto-determined by platform
 
 const STYLE_OPTIONS = [
   { value: "cartoon", label: "🎨 ကာတွန်း" },
@@ -58,7 +55,7 @@ export const AutoAdTool = ({ userId, onBack }: AutoAdToolProps) => {
   const [images, setImages] = useState<string[]>([]);
   const [productDetails, setProductDetails] = useState("");
   const [language, setLanguage] = useState("my");
-  const [resolution, setResolution] = useState("1080p");
+  // Resolution auto-determined by platform (Logic 2)
   const [adStyle, setAdStyle] = useState("cinematic");
   const [showSubtitles, setShowSubtitles] = useState(true);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["youtube"]);
@@ -162,7 +159,6 @@ export const AutoAdTool = ({ userId, onBack }: AutoAdToolProps) => {
             images: images.map(img => img.split(",")[1]),
             productDetails: productDetails.trim(),
             language,
-            resolution,
             adStyle,
             showSubtitles,
             platforms: selectedPlatforms,
@@ -244,7 +240,7 @@ export const AutoAdTool = ({ userId, onBack }: AutoAdToolProps) => {
         />
       </div>
 
-      {/* Language & Resolution & Style */}
+      {/* Language & Style */}
       <div className="grid grid-cols-2 gap-3">
         <div className="gradient-card rounded-2xl p-4 border border-primary/20">
           <label className="flex items-center gap-1.5 text-sm font-medium text-primary mb-2 font-myanmar">
@@ -257,18 +253,6 @@ export const AutoAdTool = ({ userId, onBack }: AutoAdToolProps) => {
         </div>
         <div className="gradient-card rounded-2xl p-4 border border-primary/20">
           <label className="flex items-center gap-1.5 text-sm font-medium text-primary mb-2 font-myanmar">
-            <Monitor className="w-4 h-4" />Resolution
-          </label>
-          <Select value={resolution} onValueChange={setResolution}>
-            <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
-            <SelectContent>{RESOLUTION_OPTIONS.map((r) => (<SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>))}</SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-          <label className="flex items-center gap-1.5 text-sm font-medium text-primary mb-2 font-myanmar">
             <Film className="w-4 h-4" />ဒီဇိုင်း Style
           </label>
           <Select value={adStyle} onValueChange={setAdStyle}>
@@ -276,14 +260,14 @@ export const AutoAdTool = ({ userId, onBack }: AutoAdToolProps) => {
             <SelectContent>{STYLE_OPTIONS.map((s) => (<SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>))}</SelectContent>
           </Select>
         </div>
-        <div className="gradient-card rounded-2xl p-3 border border-primary/20 flex flex-col justify-center">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-primary font-myanmar">📝 စာတန်းထိုး</label>
-            <button onClick={() => setShowSubtitles(!showSubtitles)} className={`w-12 h-6 rounded-full transition-colors ${showSubtitles ? "bg-primary" : "bg-muted"}`}>
-              <div className={`w-5 h-5 bg-white rounded-full transition-transform shadow ${showSubtitles ? "translate-x-6" : "translate-x-0.5"}`} />
-            </button>
-          </div>
-        </div>
+      </div>
+
+      {/* Subtitle Toggle */}
+      <div className="gradient-card rounded-2xl p-3 border border-primary/20 flex items-center justify-between">
+        <label className="text-sm font-medium text-primary font-myanmar">📝 စာတန်းထိုး</label>
+        <button onClick={() => setShowSubtitles(!showSubtitles)} className={`w-12 h-6 rounded-full transition-colors ${showSubtitles ? "bg-primary" : "bg-muted"}`}>
+          <div className={`w-5 h-5 bg-white rounded-full transition-transform shadow ${showSubtitles ? "translate-x-6" : "translate-x-0.5"}`} />
+        </button>
       </div>
 
       {/* Platform Selection */}
