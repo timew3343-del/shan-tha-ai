@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Gift, Clock, CheckCircle, Play, AlertCircle } from "lucide-react";
+import { Gift, Clock, CheckCircle, Play, AlertCircle, ShieldAlert, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -15,8 +15,10 @@ interface AdWatchModalProps {
 }
 
 const TOTAL_SESSIONS = 2;
+const AD_CONTAINER_ID = "container-bb84edf2d90786d814cdab867f67db1b";
+const AD_VERIFY_TIMEOUT = 8000; // 8s to wait for ad to render
+const AD_VERIFY_INTERVAL = 500;
 
-// Whitelist of allowed ad script domains
 const ALLOWED_AD_DOMAINS = [
   "adsterra.com",
   "www.highperformancedformats.com",
@@ -37,82 +39,56 @@ function isAllowedAdDomain(url: string): boolean {
 }
 
 function sanitizeAndInjectAdScript(container: HTMLDivElement, rawCode: string) {
-  // Clear existing content safely
-  while (container.firstChild) {
-    container.removeChild(container.firstChild);
-  }
+  while (container.firstChild) container.removeChild(container.firstChild);
 
-  // Show loading indicator
-  const loadingDiv = document.createElement('div');
-  loadingDiv.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:200px;gap:12px;';
-  const p1 = document.createElement('p');
-  p1.style.cssText = 'font-size:13px;color:#ffc107;font-weight:600;';
-  p1.textContent = '📺 ကြော်ငြာ ပြသနေသည်';
-  const p2 = document.createElement('p');
-  p2.style.cssText = 'font-size:11px;color:rgba(255,255,255,0.5);';
-  p2.textContent = 'ကြော်ငြာကြည့်နေစဉ် Timer ဆက်သွားပါမည်';
-  loadingDiv.appendChild(p1);
-  loadingDiv.appendChild(p2);
-  container.appendChild(loadingDiv);
-
-  // Remove loading after 3s
-  setTimeout(() => {
-    if (container.childNodes.length > 1 && loadingDiv.parentNode) {
-      loadingDiv.remove();
-    }
-  }, 3000);
-
-  // Parse the ad code safely using DOMParser (no innerHTML on live DOM)
   const parser = new DOMParser();
   const doc = parser.parseFromString(rawCode, 'text/html');
 
-  // Extract and append non-script elements safely
   const nonScriptElements = doc.body.querySelectorAll(':not(script)');
   nonScriptElements.forEach(el => {
-    // Clone element without event handlers
-    const clone = el.cloneNode(true) as HTMLElement;
-    container.appendChild(clone);
+    container.appendChild(el.cloneNode(true) as HTMLElement);
   });
 
-  // Only inject scripts from whitelisted domains
   const scripts = doc.querySelectorAll('script');
   scripts.forEach(originalScript => {
     const src = originalScript.getAttribute('src');
-
-    // If script has src, only allow whitelisted domains
     if (src) {
-      if (!isAllowedAdDomain(src)) {
-        console.warn(`Blocked ad script from non-whitelisted domain: ${src}`);
-        return;
-      }
+      if (!isAllowedAdDomain(src)) return;
       const newScript = document.createElement('script');
       newScript.src = src;
-      // Copy safe attributes
       ['type', 'async', 'defer', 'charset'].forEach(attr => {
         const val = originalScript.getAttribute(attr);
         if (val) newScript.setAttribute(attr, val);
       });
-      // Copy data attributes
       Array.from(originalScript.attributes).forEach(attr => {
-        if (attr.name.startsWith('data-')) {
-          newScript.setAttribute(attr.name, attr.value);
-        }
+        if (attr.name.startsWith('data-')) newScript.setAttribute(attr.name, attr.value);
       });
       document.body.appendChild(newScript);
     } else if (originalScript.textContent) {
-      // Inline scripts - allow ad config variable assignments
       const content = originalScript.textContent.trim();
-      // Allow ad config patterns (variable assignments) and simple expressions
       const isSafeInline = /^[\s\S]*?(atOptions|adConfig|options)\s*=\s*\{[\s\S]*?\};?\s*$/.test(content);
       if (isSafeInline) {
         const newScript = document.createElement('script');
         newScript.textContent = content;
         document.body.appendChild(newScript);
-      } else {
-        console.warn("Blocked potentially unsafe inline ad script");
       }
     }
   });
+}
+
+/** Check if the ad container has visible ad content */
+function isAdVisible(): boolean {
+  const el = document.getElementById(AD_CONTAINER_ID);
+  if (!el) return false;
+  // Check if ad container has child elements (ad rendered something)
+  if (el.children.length === 0) return false;
+  // Check dimensions
+  const rect = el.getBoundingClientRect();
+  if (rect.height < 10 || rect.width < 10) return false;
+  // Check not hidden
+  const style = getComputedStyle(el);
+  if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+  return true;
 }
 
 export const AdWatchModal = ({
@@ -133,17 +109,21 @@ export const AdWatchModal = ({
   const [claimed, setClaimed] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
   const [adScriptCode, setAdScriptCode] = useState<string>("");
+  const [adVerified, setAdVerified] = useState(false);
+  const [adBlocked, setAdBlocked] = useState(false);
+  const [adLoading, setAdLoading] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const adCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const adContainerRef = useRef<HTMLDivElement>(null);
   const currentSessionRef = useRef(1);
 
-  // Load ad script code and ad unit ID from DB
+  // Load ad script code from DB
   useEffect(() => {
     const loadAdConfig = async () => {
       const { data } = await supabase
         .from("app_settings")
         .select("key, value")
-        .in("key", ["adsterra_script_code", "adsterra_ad_unit_id"]);
+        .in("key", ["adsterra_script_code"]);
       if (data) {
         data.forEach(s => {
           if (s.key === "adsterra_script_code") setAdScriptCode(s.value || "");
@@ -153,29 +133,12 @@ export const AdWatchModal = ({
     loadAdConfig();
   }, []);
 
-  const loadAdScript = useCallback(() => {
-    if (!adContainerRef.current) return;
-
-    // Clear existing content
-    while (adContainerRef.current.firstChild) {
-      adContainerRef.current.removeChild(adContainerRef.current.firstChild);
-    }
-
-    // If we have raw ad script code from admin, use sanitized injection
-    if (adScriptCode) {
-      sanitizeAndInjectAdScript(adContainerRef.current, adScriptCode);
-      return;
-    }
-
-    // Fallback: no ad code configured
-    const placeholder = document.createElement('div');
-    placeholder.className = 'text-center text-xs text-muted-foreground p-4';
-    placeholder.textContent = 'ကြော်ငြာ ကုတ် မထည့်ရသေးပါ (Admin > Adsterra)';
-    adContainerRef.current.appendChild(placeholder);
-  }, [adScriptCode]);
-
   const clearTimer = useCallback(() => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  }, []);
+
+  const clearAdCheck = useCallback(() => {
+    if (adCheckRef.current) { clearInterval(adCheckRef.current); adCheckRef.current = null; }
   }, []);
 
   const resetState = useCallback(() => {
@@ -188,19 +151,14 @@ export const AdWatchModal = ({
     setClaimed(false);
     setIsClaiming(false);
     setClaimError(null);
+    setAdVerified(false);
+    setAdBlocked(false);
+    setAdLoading(false);
     clearTimer();
-  }, [sessionDuration, clearTimer]);
+    clearAdCheck();
+  }, [sessionDuration, clearTimer, clearAdCheck]);
 
-  useEffect(() => {
-    if (isOpen) {
-      resetState();
-      setTimeout(() => { loadAdScript(); startTimer(); }, 300);
-    }
-    return () => clearTimer();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, adScriptCode]);
-
-  const startTimer = () => {
+  const startTimer = useCallback(() => {
     clearTimer();
     setIsTimerRunning(true);
     setSessionTimerDone(false);
@@ -216,7 +174,66 @@ export const AdWatchModal = ({
         return prev - 1;
       });
     }, 1000);
-  };
+  }, [clearTimer]);
+
+  /** Inject ad and poll for visibility, only start timer once verified */
+  const loadAdAndVerify = useCallback(() => {
+    if (!adContainerRef.current) return;
+
+    setAdLoading(true);
+    setAdVerified(false);
+    setAdBlocked(false);
+
+    // Clear container
+    while (adContainerRef.current.firstChild) {
+      adContainerRef.current.removeChild(adContainerRef.current.firstChild);
+    }
+
+    if (!adScriptCode) {
+      // No ad code configured
+      const placeholder = document.createElement('div');
+      placeholder.className = 'text-center text-xs p-4';
+      placeholder.style.color = 'rgba(255,255,255,0.5)';
+      placeholder.textContent = 'ကြော်ငြာ ကုတ် မထည့်ရသေးပါ (Admin > Adsterra)';
+      adContainerRef.current.appendChild(placeholder);
+      setAdLoading(false);
+      setAdBlocked(true);
+      return;
+    }
+
+    // Inject the ad script
+    sanitizeAndInjectAdScript(adContainerRef.current, adScriptCode);
+
+    // Poll for ad visibility
+    clearAdCheck();
+    const startTime = Date.now();
+    adCheckRef.current = setInterval(() => {
+      if (isAdVisible()) {
+        clearAdCheck();
+        setAdVerified(true);
+        setAdLoading(false);
+        setAdBlocked(false);
+        // Ad is confirmed visible — NOW start the timer
+        startTimer();
+      } else if (Date.now() - startTime > AD_VERIFY_TIMEOUT) {
+        // Timed out — ad is blocked or failed
+        clearAdCheck();
+        setAdVerified(false);
+        setAdLoading(false);
+        setAdBlocked(true);
+      }
+    }, AD_VERIFY_INTERVAL);
+  }, [adScriptCode, clearAdCheck, startTimer]);
+
+  // When modal opens, inject ad and wait for verification
+  useEffect(() => {
+    if (isOpen) {
+      resetState();
+      setTimeout(() => loadAdAndVerify(), 300);
+    }
+    return () => { clearTimer(); clearAdCheck(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, adScriptCode]);
 
   const startNextSession = () => {
     const nextSession = currentSessionRef.current + 1;
@@ -224,12 +241,15 @@ export const AdWatchModal = ({
     setCurrentSession(nextSession);
     setTimeRemaining(sessionDuration);
     setSessionTimerDone(false);
-    loadAdScript();
-    startTimer();
+    setAdVerified(false);
+    setAdBlocked(false);
+    setAdLoading(true);
+    // Re-inject and re-verify for next session
+    setTimeout(() => loadAdAndVerify(), 200);
   };
 
   const handleClaim = async () => {
-    if (!canClaim || isClaiming) return;
+    if (!canClaim || isClaiming || !adVerified) return;
     setIsClaiming(true);
     setClaimError(null);
     try {
@@ -299,7 +319,37 @@ export const AdWatchModal = ({
             <p className="text-xs text-muted-foreground font-myanmar animate-pulse">ကြော်ငြာ ဖွင့်နေသည်...</p>
           </div>
 
-          {/* Timer */}
+          {/* Ad Loading State */}
+          {adLoading && !adBlocked && (
+            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span className="font-myanmar">ကြော်ငြာ စစ်ဆေးနေသည်...</span>
+            </div>
+          )}
+
+          {/* Ad Blocked Warning */}
+          <AnimatePresence>
+            {adBlocked && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="p-4 rounded-xl bg-destructive/10 border border-destructive/30 space-y-2"
+              >
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="w-5 h-5 text-destructive flex-shrink-0" />
+                  <p className="text-sm font-semibold text-destructive font-myanmar">
+                    ကြော်ငြာမပေါ်သဖြင့် Credit မရယူနိုင်ပါ။
+                  </p>
+                </div>
+                <p className="text-xs text-muted-foreground font-myanmar">
+                  ကျေးဇူးပြု၍ AdBlocker ပိတ်ပြီး Refresh လုပ်ပါ။ အခမဲ့ Credit ရယူရန်အတွက် AdBlocker ကို ပိတ်ပေးမှသာ ကြော်ငြာကြည့်လို့ရပါမည်။
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Timer — only meaningful when ad is verified */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -309,7 +359,14 @@ export const AdWatchModal = ({
               <span className="text-lg font-bold text-primary tabular-nums">{formatTime(timeRemaining)}</span>
             </div>
             <Progress value={progressValue} className="h-3" />
-            <p className="text-xs text-center text-muted-foreground">စုစုပေါင်း: {Math.floor(elapsedTime)}s / {totalTime}s</p>
+            <p className="text-xs text-center text-muted-foreground">
+              {adVerified
+                ? `စုစုပေါင်း: ${Math.floor(elapsedTime)}s / ${totalTime}s`
+                : adBlocked
+                  ? "ကြော်ငြာ ပိတ်ထားသဖြင့် Timer မစတင်နိုင်ပါ"
+                  : "ကြော်ငြာ ပေါ်လာပါက Timer အလိုအလျောက် စတင်ပါမည်"
+              }
+            </p>
           </div>
 
           <div className="text-center text-sm text-muted-foreground font-myanmar">
@@ -342,9 +399,14 @@ export const AdWatchModal = ({
               </motion.div>
             ) : (
               <motion.div key="claim" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                <Button onClick={handleClaim} disabled={!canClaim || isClaiming}
+                <Button onClick={handleClaim} disabled={!canClaim || isClaiming || adBlocked}
                   className="w-full h-12 text-base font-medium gradient-gold text-primary-foreground">
-                  {isClaiming ? (
+                  {adBlocked ? (
+                    <span className="flex items-center gap-2 font-myanmar">
+                      <ShieldAlert className="w-4 h-4" />
+                      AdBlocker ပိတ်ပြီးမှ ကြည့်နိုင်ပါမည်
+                    </span>
+                  ) : isClaiming ? (
                     <span className="font-myanmar">Credits ထည့်နေသည်...</span>
                   ) : canClaim ? (
                     <span className="flex items-center gap-2 font-myanmar"><Gift className="w-5 h-5" />{rewardAmount} Credits ရယူမည်</span>
@@ -352,9 +414,6 @@ export const AdWatchModal = ({
                     <span className="font-myanmar">ကျေးဇူးပြု၍ စောင့်ပါ... ({formatTime(timeRemaining)})</span>
                   )}
                 </Button>
-                {canClaim && claimError && (
-                  <Button onClick={handleClaim} variant="outline" className="w-full mt-2 font-myanmar">ထပ်ကြိုးစားမည်</Button>
-                )}
               </motion.div>
             )}
           </AnimatePresence>
