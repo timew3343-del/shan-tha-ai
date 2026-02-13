@@ -16,8 +16,9 @@ interface AdWatchModalProps {
 
 const TOTAL_SESSIONS = 2;
 const AD_CONTAINER_ID = "container-bb84edf2d90786d814cdab867f67db1b";
-const AD_VERIFY_TIMEOUT = 8000; // 8s to wait for ad to render
+const AD_VERIFY_TIMEOUT = 5000; // 5s to wait for ad to render before retry
 const AD_VERIFY_INTERVAL = 500;
+const MAX_AD_RETRIES = 1; // retry once before showing blocked
 
 const ALLOWED_AD_DOMAINS = [
   "adsterra.com",
@@ -38,8 +39,34 @@ function isAllowedAdDomain(url: string): boolean {
   }
 }
 
+/** Remove previously injected ad scripts from document.body */
+function cleanupInjectedAdScripts() {
+  const bodyScripts = document.body.querySelectorAll('script');
+  bodyScripts.forEach(script => {
+    const src = script.getAttribute('src');
+    if (src && isAllowedAdDomain(src)) {
+      script.remove();
+    } else if (!src && script.textContent) {
+      const content = script.textContent.trim();
+      if (/^[\s\S]*?(atOptions|adConfig|options)\s*=\s*\{[\s\S]*?\};?\s*$/.test(content)) {
+        script.remove();
+      }
+    }
+  });
+}
+
 function sanitizeAndInjectAdScript(container: HTMLDivElement, rawCode: string) {
+  // Clean previous container content
   while (container.firstChild) container.removeChild(container.firstChild);
+  
+  // Also clean up any previously injected scripts from body
+  cleanupInjectedAdScripts();
+
+  // Clear the native banner container if it exists in DOM outside our ref
+  const existingContainer = document.getElementById(AD_CONTAINER_ID);
+  if (existingContainer && existingContainer !== container) {
+    while (existingContainer.firstChild) existingContainer.removeChild(existingContainer.firstChild);
+  }
 
   const parser = new DOMParser();
   const doc = parser.parseFromString(rawCode, 'text/html');
@@ -55,7 +82,8 @@ function sanitizeAndInjectAdScript(container: HTMLDivElement, rawCode: string) {
     if (src) {
       if (!isAllowedAdDomain(src)) return;
       const newScript = document.createElement('script');
-      newScript.src = src;
+      // Add cache-busting to force fresh load for second ad
+      newScript.src = src + (src.includes('?') ? '&' : '?') + '_t=' + Date.now();
       ['type', 'async', 'defer', 'charset'].forEach(attr => {
         const val = originalScript.getAttribute(attr);
         if (val) newScript.setAttribute(attr, val);
@@ -116,6 +144,7 @@ export const AdWatchModal = ({
   const adCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const adContainerRef = useRef<HTMLDivElement>(null);
   const currentSessionRef = useRef(1);
+  const retryCountRef = useRef(0);
 
   // Load ad script code from DB
   useEffect(() => {
@@ -144,6 +173,7 @@ export const AdWatchModal = ({
   const resetState = useCallback(() => {
     setCurrentSession(1);
     currentSessionRef.current = 1;
+    retryCountRef.current = 0;
     setTimeRemaining(sessionDuration);
     setIsTimerRunning(false);
     setSessionTimerDone(false);
@@ -154,6 +184,7 @@ export const AdWatchModal = ({
     setAdVerified(false);
     setAdBlocked(false);
     setAdLoading(false);
+    cleanupInjectedAdScripts();
     clearTimer();
     clearAdCheck();
   }, [sessionDuration, clearTimer, clearAdCheck]);
@@ -176,7 +207,7 @@ export const AdWatchModal = ({
     }, 1000);
   }, [clearTimer]);
 
-  /** Inject ad and poll for visibility, only start timer once verified */
+  /** Inject ad and poll for visibility, with auto-retry for second ad */
   const loadAdAndVerify = useCallback(() => {
     if (!adContainerRef.current) return;
 
@@ -184,13 +215,13 @@ export const AdWatchModal = ({
     setAdVerified(false);
     setAdBlocked(false);
 
-    // Clear container
+    // Fully clean container and old scripts
     while (adContainerRef.current.firstChild) {
       adContainerRef.current.removeChild(adContainerRef.current.firstChild);
     }
+    cleanupInjectedAdScripts();
 
     if (!adScriptCode) {
-      // No ad code configured
       const placeholder = document.createElement('div');
       placeholder.className = 'text-center text-xs p-4';
       placeholder.style.color = 'rgba(255,255,255,0.5)';
@@ -201,28 +232,38 @@ export const AdWatchModal = ({
       return;
     }
 
-    // Inject the ad script
-    sanitizeAndInjectAdScript(adContainerRef.current, adScriptCode);
+    // Small delay to let DOM settle after cleanup (important for 2nd ad)
+    setTimeout(() => {
+      if (!adContainerRef.current) return;
+      sanitizeAndInjectAdScript(adContainerRef.current, adScriptCode);
 
-    // Poll for ad visibility
-    clearAdCheck();
-    const startTime = Date.now();
-    adCheckRef.current = setInterval(() => {
-      if (isAdVisible()) {
-        clearAdCheck();
-        setAdVerified(true);
-        setAdLoading(false);
-        setAdBlocked(false);
-        // Ad is confirmed visible — NOW start the timer
-        startTimer();
-      } else if (Date.now() - startTime > AD_VERIFY_TIMEOUT) {
-        // Timed out — ad is blocked or failed
-        clearAdCheck();
-        setAdVerified(false);
-        setAdLoading(false);
-        setAdBlocked(true);
-      }
-    }, AD_VERIFY_INTERVAL);
+      // Poll for ad visibility
+      clearAdCheck();
+      const startTime = Date.now();
+      adCheckRef.current = setInterval(() => {
+        if (isAdVisible()) {
+          clearAdCheck();
+          retryCountRef.current = 0;
+          setAdVerified(true);
+          setAdLoading(false);
+          setAdBlocked(false);
+          startTimer();
+        } else if (Date.now() - startTime > AD_VERIFY_TIMEOUT) {
+          clearAdCheck();
+          // Auto-retry once before showing blocked
+          if (retryCountRef.current < MAX_AD_RETRIES) {
+            retryCountRef.current += 1;
+            console.log(`Ad failed to load, auto-retrying (${retryCountRef.current}/${MAX_AD_RETRIES})...`);
+            // Recursive retry after cleanup
+            loadAdAndVerify();
+          } else {
+            setAdVerified(false);
+            setAdLoading(false);
+            setAdBlocked(true);
+          }
+        }
+      }, AD_VERIFY_INTERVAL);
+    }, 150);
   }, [adScriptCode, clearAdCheck, startTimer]);
 
   // When modal opens, inject ad and wait for verification
@@ -238,14 +279,16 @@ export const AdWatchModal = ({
   const startNextSession = () => {
     const nextSession = currentSessionRef.current + 1;
     currentSessionRef.current = nextSession;
+    retryCountRef.current = 0; // Reset retry count for new session
     setCurrentSession(nextSession);
     setTimeRemaining(sessionDuration);
     setSessionTimerDone(false);
     setAdVerified(false);
     setAdBlocked(false);
     setAdLoading(true);
-    // Re-inject and re-verify for next session
-    setTimeout(() => loadAdAndVerify(), 200);
+    // Clean up old scripts first, then load with delay for smooth transition
+    cleanupInjectedAdScripts();
+    setTimeout(() => loadAdAndVerify(), 400);
   };
 
   const handleClaim = async () => {
