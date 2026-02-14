@@ -92,3 +92,9 @@ verify_jwt = false
 
 [functions.stripe-webhook]
 verify_jwt = false
+
+[functions.auto-service-preview]
+verify_jwt = false
+
+[functions.auto-service-support]
+verify_jwt = false
