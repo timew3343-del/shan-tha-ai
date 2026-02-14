@@ -5,8 +5,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const REFERRAL_REWARD = 5;
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -52,6 +50,21 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Fetch dynamic referral rewards from app_settings
+    const { data: settingsData } = await supabase
+      .from("app_settings")
+      .select("key, value")
+      .in("key", ["referral_inviter_reward", "referral_new_user_reward"]);
+
+    let inviterReward = 5;
+    let newUserReward = 5;
+    if (settingsData) {
+      settingsData.forEach((s: any) => {
+        if (s.key === "referral_inviter_reward") inviterReward = parseInt(s.value, 10) || 5;
+        if (s.key === "referral_new_user_reward") newUserReward = parseInt(s.value, 10) || 5;
+      });
+    }
+
     // Find the referral code
     const { data: refCode, error: refError } = await supabase
       .from("referral_codes")
@@ -91,14 +104,14 @@ Deno.serve(async (req) => {
     }
 
     // Award credits using SECURITY DEFINER function (bypasses protect_credit_balance trigger)
-    await supabase.rpc("add_credits_via_service", { _user_id: new_user_id, _amount: REFERRAL_REWARD });
-    await supabase.rpc("add_credits_via_service", { _user_id: refCode.user_id, _amount: REFERRAL_REWARD });
+    await supabase.rpc("add_credits_via_service", { _user_id: new_user_id, _amount: newUserReward });
+    await supabase.rpc("add_credits_via_service", { _user_id: refCode.user_id, _amount: inviterReward });
 
     // Record the referral use
     await supabase.from("referral_uses").insert({
       code_id: refCode.id,
       used_by_user_id: new_user_id,
-      credits_awarded: REFERRAL_REWARD,
+      credits_awarded: newUserReward,
     });
 
     // Update referral code stats
@@ -106,7 +119,7 @@ Deno.serve(async (req) => {
       .from("referral_codes")
       .update({
         uses_count: refCode.uses_count + 1,
-        credits_earned: refCode.credits_earned + REFERRAL_REWARD,
+        credits_earned: refCode.credits_earned + inviterReward,
       })
       .eq("id", refCode.id);
 
@@ -114,22 +127,22 @@ Deno.serve(async (req) => {
     await supabase.from("credit_audit_log").insert([
       {
         user_id: new_user_id,
-        amount: REFERRAL_REWARD,
+        amount: newUserReward,
         credit_type: "referral_bonus",
         description: `Referral signup bonus from ${referral_code}`,
       },
       {
         user_id: refCode.user_id,
-        amount: REFERRAL_REWARD,
+        amount: inviterReward,
         credit_type: "referral_reward",
         description: `Referral reward: new user signed up with ${referral_code}`,
       },
     ]);
 
-    console.log(`Referral processed: ${referral_code}, new_user: ${new_user_id}, referrer: ${refCode.user_id}`);
+    console.log(`Referral processed: ${referral_code}, new_user: ${new_user_id}, referrer: ${refCode.user_id}, inviterReward: ${inviterReward}, newUserReward: ${newUserReward}`);
 
     return new Response(
-      JSON.stringify({ success: true, credits_awarded: REFERRAL_REWARD }),
+      JSON.stringify({ success: true, inviter_reward: inviterReward, new_user_reward: newUserReward }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {
