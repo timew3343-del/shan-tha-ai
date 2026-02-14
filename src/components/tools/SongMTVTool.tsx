@@ -180,26 +180,41 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
         return;
       }
 
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-song`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            serviceOption,
-            topic: topic.trim(),
-            genre,
-            mood,
-            language,
-            mtvStyle,
-            showSubtitles,
-            audioBase64: serviceOption === "mtv_only" ? audioFile?.split(",")[1] : undefined,
-          }),
+      // 5-minute timeout to accommodate long song generation polling
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 300000);
+
+      let response: Response;
+      try {
+        response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-song`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              serviceOption,
+              topic: topic.trim(),
+              genre,
+              mood,
+              language,
+              mtvStyle,
+              showSubtitles,
+              audioBase64: serviceOption === "mtv_only" ? audioFile?.split(",")[1] : undefined,
+            }),
+            signal: controller.signal,
+          }
+        );
+      } catch (fetchErr: any) {
+        clearTimeout(timeoutId);
+        if (fetchErr.name === "AbortError") {
+          throw new Error("သီချင်းထုတ်ရန် အချိန်ကြာလွန်းပါသည်။ နောက်တစ်ကြိမ် ထပ်ကြိုးစားပါ။");
         }
-      );
+        throw fetchErr;
+      }
+      clearTimeout(timeoutId);
 
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Generation failed");

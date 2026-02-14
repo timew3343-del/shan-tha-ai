@@ -229,9 +229,10 @@ async function generateSongWithFailover(
 
 async function uploadToStorage(supabaseAdmin: any, url: string, userId: string, ext: string, contentType: string) {
   const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to download file: ${res.status}`);
   const buffer = await res.arrayBuffer();
-  const fileName = `${ext.replace('.', '')}-${userId}-${Date.now()}${ext}`;
-  const { error: uploadErr } = await supabaseAdmin.storage.from("videos").upload(fileName, buffer, { contentType });
+  const fileName = `${userId}/${ext.replace('.', '')}-${Date.now()}${ext}`;
+  const { error: uploadErr } = await supabaseAdmin.storage.from("videos").upload(fileName, buffer, { contentType, upsert: true });
   if (uploadErr) throw new Error(`Upload failed: ${uploadErr.message}`);
   const { data: signedData, error: signedErr } = await supabaseAdmin.storage.from("videos").createSignedUrl(fileName, 86400 * 7);
   if (signedErr) throw new Error(`Signed URL failed: ${signedErr.message}`);
