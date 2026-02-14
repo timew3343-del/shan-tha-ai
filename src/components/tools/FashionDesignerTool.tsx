@@ -173,7 +173,7 @@ export const FashionDesignerTool = ({ userId, onBack }: FashionDesignerToolProps
     <div className="space-y-4 p-4 pb-24">
       <ToolHeader
         title="AI Fashion Designer PRO"
-        subtitle="ဖက်ရှင်ဒီဇိုင်း Marketing Image + Technical Sketch"
+        subtitle="အဆင့်မြင့် AI အဝတ်အထည် ဒီဇိုင်းဖန်တီးသူ"
         onBack={onBack}
       />
 

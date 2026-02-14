@@ -194,8 +194,8 @@ export const VideoTool = ({ userId, onBack }: VideoToolProps) => {
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4 p-4 pb-24">
       <ToolHeader 
-        title="Image to Video" 
-        subtitle="ပုံ မှ ဗီဒီယို"
+        title="Image to Video & Voiceover & Music" 
+        subtitle="ပုံ မှ ဗီဒီယို၊ စကားပြောအသံ နှင့် နောက်ခံတီးလုံး ထည့်သွင်းခြင်း"
         onBack={onBack} 
       />
 

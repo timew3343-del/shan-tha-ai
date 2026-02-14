@@ -211,8 +211,8 @@ export const LogoDesignTool = ({ userId, onBack }: LogoDesignToolProps) => {
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4 p-4 pb-24">
       <ToolHeader
-        title="Logo နှင့် Graphic Design ဆွဲပေးခြင်း"
-        subtitle="Multi-Platform ဒီဇိုင်းများကို တစ်ပြိုင်နက် ဖန်တီးပါ"
+        title="Logo & Graphic Design Studio"
+        subtitle="လိုဂို နှင့် ဂရပ်ဖစ်ဒီဇိုင်း ဖန်တီးပေးခြင်း"
         onBack={onBack}
       />
 
