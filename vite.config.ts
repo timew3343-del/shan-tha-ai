@@ -14,28 +14,9 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
-    dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
+    dedupe: ["react", "react-dom"],
     alias: {
       "@": path.resolve(__dirname, "./src"),
-    },
-  },
-  optimizeDeps: {
-    include: [
-      "react", 
-      "react-dom", 
-      "react-dom/client",
-      "react/jsx-runtime", 
-      "react/jsx-dev-runtime",
-      "@tanstack/react-query",
-      "react-router-dom",
-      "next-themes",
-    ],
-    force: true,
-    esbuildOptions: {
-      // Ensure single React instance
-      define: {
-        global: 'globalThis',
-      },
     },
   },
 }));
