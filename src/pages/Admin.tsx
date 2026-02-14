@@ -30,6 +30,7 @@ import { KnowledgeBaseTab } from "@/components/admin/KnowledgeBaseTab";
 import { CollaboratorManagementTab } from "@/components/admin/CollaboratorManagementTab";
 import { FinancialDashboardTab } from "@/components/admin/FinancialDashboardTab";
 import { ApiManagementTab } from "@/components/admin/ApiManagementTab";
+import { AutoServiceManagerTab } from "@/components/admin/AutoServiceManagerTab";
 
 interface PendingTransaction {
   id: string;
@@ -926,10 +927,14 @@ export const Admin = () => {
               API
             </TabsTrigger>
           </TabsList>
-          <TabsList className="grid w-full grid-cols-4 mb-6">
+          <TabsList className="grid w-full grid-cols-5 mb-2">
             <TabsTrigger value="content-factory" className="text-xs">
               <Film className="w-4 h-4 mr-1" />
               Content
+            </TabsTrigger>
+            <TabsTrigger value="auto-service" className="text-xs">
+              <Zap className="w-4 h-4 mr-1" />
+              Auto
             </TabsTrigger>
             <TabsTrigger value="system" className="text-xs">
               <Settings className="w-4 h-4 mr-1" />
@@ -1182,6 +1187,11 @@ export const Admin = () => {
           {/* Content Factory Tab */}
           <TabsContent value="content-factory" className="space-y-4">
             <ContentFactoryTab />
+          </TabsContent>
+
+          {/* Auto Service Manager Tab */}
+          <TabsContent value="auto-service" className="space-y-4">
+            <AutoServiceManagerTab />
           </TabsContent>
 
           {/* Users Table Tab */}

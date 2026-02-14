@@ -11,6 +11,7 @@ import { AIToolsTab } from "@/components/AIToolsTab";
 import { AutoServiceTab } from "@/components/AutoServiceTab";
 import { DosDontsTab } from "@/components/DosDontsTab";
 import { CourseTab } from "@/components/CourseTab";
+import { AdminVideoTab } from "@/components/AdminVideoTab";
 import { StoreTab } from "@/components/StoreTab";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { MaintenanceBanner } from "@/components/MaintenanceBanner";
@@ -151,12 +152,13 @@ const Index = () => {
         {activeTab === "ai-tools" && <AIToolsTab userId={user.id} />}
         {activeTab === "auto-service" && <AutoServiceTab userId={user.id} />}
         {activeTab === "store" && <StoreTab userId={user.id} />}
+        {activeTab === "my-videos" && isAdmin && <AdminVideoTab userId={user.id} />}
         {activeTab === "dos-donts" && <DosDontsTab />}
         {activeTab === "course" && <CourseTab userId={user.id} />}
       </main>
       
       <ScrollToTop />
-      <BottomNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+      <BottomNavigation activeTab={activeTab} onTabChange={setActiveTab} isAdmin={isAdmin} />
     </div>
   );
 };

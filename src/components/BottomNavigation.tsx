@@ -1,20 +1,22 @@
 import { forwardRef } from "react";
-import { Wand2, BookCheck, GraduationCap, Package, Zap } from "lucide-react";
+import { Wand2, BookCheck, GraduationCap, Package, Zap, Film } from "lucide-react";
 import { useLanguage } from "@/i18n/LanguageContext";
 
 interface BottomNavigationProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  isAdmin?: boolean;
 }
 
 export const BottomNavigation = forwardRef<HTMLElement, BottomNavigationProps>(
-  ({ activeTab, onTabChange }, ref) => {
+  ({ activeTab, onTabChange, isAdmin }, ref) => {
     const { t } = useLanguage();
 
     const tabs = [
       { id: "ai-tools", label: t('nav.aiTools'), icon: Wand2 },
       { id: "auto-service", label: "Auto", icon: Zap },
       { id: "store", label: t('nav.store'), icon: Package },
+      ...(isAdmin ? [{ id: "my-videos", label: "My Videos", icon: Film }] : []),
       { id: "dos-donts", label: t('nav.guide'), icon: BookCheck },
       { id: "course", label: t('nav.course'), icon: GraduationCap },
     ];
@@ -30,14 +32,14 @@ export const BottomNavigation = forwardRef<HTMLElement, BottomNavigationProps>(
               <button
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
-                className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all duration-300 ${
+                className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all duration-300 ${
                   isActive 
                     ? "text-primary bg-primary/10 shadow-glow-gold" 
                     : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
                 }`}
               >
-                <Icon className={`w-6 h-6 transition-transform duration-300 ${isActive ? "scale-110" : ""}`} />
-                <span className="text-xs font-medium">{tab.label}</span>
+                <Icon className={`w-5 h-5 transition-transform duration-300 ${isActive ? "scale-110" : ""}`} />
+                <span className="text-[10px] font-medium">{tab.label}</span>
               </button>
             );
           })}
