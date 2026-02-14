@@ -85,12 +85,12 @@ const TOOL_CONFIGS: Record<string, ToolConfig> = {
   },
 };
 
-// Priority-ordered model list for sequential failover
+// Priority-ordered model list for sequential failover (OpenAI primary when enabled)
 const MODEL_PRIORITY = [
+  "openai/gpt-5-mini",
   "google/gemini-3-flash-preview",
   "google/gemini-2.5-flash",
   "google/gemini-2.5-flash-lite",
-  "openai/gpt-5-mini",
   "openai/gpt-5-nano",
 ];
 

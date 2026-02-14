@@ -17,6 +17,14 @@ interface ApiKeyConfig {
 
 const API_KEYS: ApiKeyConfig[] = [
   {
+    key: "openai",
+    label: "OpenAI",
+    description: "GPT-5, AI Caption, Translator, Agentic AI (Primary Provider)",
+    settingKey: "openai_api_key",
+    toggleKey: "api_enabled_openai",
+    tasks: ["AI Caption", "Translator", "Agentic AI", "Text Generation", "Complex Reasoning"],
+  },
+  {
     key: "gemini",
     label: "Google Gemini",
     description: "Text, Audio, Complex Reasoning",
@@ -241,8 +249,9 @@ export const ApiSwitchingTab = () => {
         <p className="text-xs text-muted-foreground flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 text-primary shrink-0" />
           <span>
-            Gemini OFF ဖြစ်ပါက Text/Audio tasks များကို Replicate (Llama 3) သို့ auto-route လုပ်ပါမည်။
-            ပြန်ဖွင့်လိုက်သည်နှင့် Gemini ကို priority ပေးပါမည်။
+            OpenAI Primary ဖြစ်ပါက Gemini OFF ဖြစ်ပါက Text/Audio tasks များကို OpenAI (GPT-5) သို့ auto-route လုပ်ပါမည်။
+            OpenAI fail ဖြစ်ပါက Replicate (Llama 3) သို့ fallback လုပ်ပါမည်။
+            ⚠️ OpenAI fail ဖြစ်ပါက billing စစ်ဆေးပါ။
           </span>
         </p>
       </div>
