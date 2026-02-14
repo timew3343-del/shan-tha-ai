@@ -373,7 +373,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                 // Show grouped sections when viewing "all" without search
                 <div className="space-y-4">
                   {[
-                    { key: "premium" as ToolCategory, label: "👑 Premium Tools", icon: Crown },
+                    { key: "premium" as ToolCategory, label: "👑 Premium Tools", icon: Crown, subtitle: "သုံးသလောက်ကျသင့်သည့် Tools များ" },
                     { key: "image" as ToolCategory, label: "📷 ပုံ Tools", icon: Image },
                     { key: "video" as ToolCategory, label: "🎬 ဗီဒီယို Tools", icon: Video },
                     { key: "audio" as ToolCategory, label: "🎤 အသံနှင့်စာ Tools", icon: Mic },
@@ -391,9 +391,14 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                     if (sectionTools.length === 0) return null;
                     return (
                       <div key={section.key}>
-                        <div className="flex items-center gap-2 mb-2 px-1">
-                          <span className="text-sm font-bold text-primary font-myanmar">{section.label}</span>
-                          <div className="flex-1 h-px bg-primary/20" />
+                        <div className="flex flex-col gap-0.5 mb-2 px-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-primary font-myanmar">{section.label}</span>
+                            <div className="flex-1 h-px bg-primary/20" />
+                          </div>
+                          {('subtitle' in section) && (
+                            <span className="text-[10px] text-muted-foreground font-myanmar">{(section as any).subtitle}</span>
+                          )}
                         </div>
                         <motion.div layout className="grid grid-cols-2 gap-2">
                           <AnimatePresence mode="popLayout">
@@ -412,7 +417,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                                   description={(tool.descKey ? t(tool.descKey) : "") || tool.fallbackDesc}
                                   gradient={tool.gradient}
                                   onClick={() => setActiveTool(tool.id)}
-                                  credits={tool.credits}
+                                  credits={section.key === "premium" ? 0 : tool.credits}
                                   size={tool.size}
                                   badge={tool.badge}
                                   badgeTooltip={tool.badgeTooltip}
