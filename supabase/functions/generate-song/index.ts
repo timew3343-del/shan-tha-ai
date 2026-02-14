@@ -114,8 +114,8 @@ async function generateSongWithFailover(
           const status = data.data?.status;
           console.log(`SunoAPI poll ${i}: ${status}`);
 
-          // Try to extract songs from FIRST_SUCCESS or SUCCESS
-          if (status === "FIRST_SUCCESS" || status === "SUCCESS") {
+          // Try to extract songs from TEXT_SUCCESS, FIRST_SUCCESS or SUCCESS
+          if (status === "TEXT_SUCCESS" || status === "FIRST_SUCCESS" || status === "SUCCESS") {
             // Songs can be in data.data.data (array) or data.data.response.sunoData
             const songs = data.data?.data || data.data?.response?.sunoData || [];
             const songArr = Array.isArray(songs) ? songs : [];
@@ -138,7 +138,7 @@ async function generateSongWithFailover(
             if (status === "SUCCESS") {
               throw new Error(`SunoAPI: no audio found in SUCCESS response`);
             }
-            // On FIRST_SUCCESS, songs might not have URLs yet - keep polling
+            // On TEXT_SUCCESS or FIRST_SUCCESS, songs might not have URLs yet - keep polling
           }
           if (["CREATE_TASK_FAILED", "GENERATE_AUDIO_FAILED", "CALLBACK_EXCEPTION"].includes(status)) {
             throw new Error(data.data?.errorMessage || `SunoAPI failed: ${status}`);

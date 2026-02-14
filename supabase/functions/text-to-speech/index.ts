@@ -129,9 +129,12 @@ serve(async (req) => {
     };
 
     if (openaiKey && openaiEnabled) {
-      console.log("Using OpenAI TTS for voice:", voice);
+      console.log("Using OpenAI TTS-1-HD for voice:", voice);
       
       const openaiVoice = openaiVoiceMap[voice] || "nova";
+      
+      // Normalize Burmese/Unicode text for proper pronunciation
+      const normalizedText = text.trim().normalize("NFC");
       
       try {
         const ttsResponse = await fetch("https://api.openai.com/v1/audio/speech", {
@@ -141,8 +144,8 @@ serve(async (req) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "tts-1",
-            input: text.trim(),
+            model: "tts-1-hd",
+            input: normalizedText,
             voice: openaiVoice,
             response_format: "mp3",
           }),
@@ -158,7 +161,7 @@ serve(async (req) => {
         const { data: deductResult, error: deductError } = await supabaseAdmin.rpc("deduct_user_credits", {
           _user_id: userId,
           _amount: creditCost,
-          _action: "Text-to-speech (OpenAI TTS)"
+          _action: "Text-to-speech (OpenAI TTS-1-HD)"
         });
 
         if (deductError) {
@@ -170,7 +173,15 @@ serve(async (req) => {
         }
 
         const audioBuffer = await ttsResponse.arrayBuffer();
-        const base64Audio = btoa(String.fromCharCode(...new Uint8Array(audioBuffer)));
+        // Chunked base64 encoding to prevent stack overflow on large audio
+        const bytes = new Uint8Array(audioBuffer);
+        const CHUNK_SIZE = 8192;
+        let base64Audio = "";
+        for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+          const chunk = bytes.subarray(i, Math.min(i + CHUNK_SIZE, bytes.length));
+          base64Audio += String.fromCharCode(...chunk);
+        }
+        base64Audio = btoa(base64Audio);
         const newBalance = deductResult?.new_balance ?? (profile.credit_balance - creditCost);
 
         return new Response(
