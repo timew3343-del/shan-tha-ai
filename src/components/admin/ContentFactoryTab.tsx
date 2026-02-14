@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Film, Power, Clock, Copy, TrendingUp, Loader2, Play, RefreshCw, Edit3, Save, AlertTriangle } from "lucide-react";
+import { Film, Power, Clock, Copy, TrendingUp, Loader2, Play, RefreshCw, Edit3, Save, AlertTriangle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -440,6 +440,27 @@ export const ContentFactoryTab = () => {
                     </Button>
                   </div>
                 )}
+
+                {/* Delete Button */}
+                <div className="mt-2 flex justify-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-destructive hover:text-destructive"
+                    onClick={async () => {
+                      try {
+                        const { error } = await supabase.from("daily_content_videos").delete().eq("id", video.id);
+                        if (error) throw error;
+                        setVideos(prev => prev.filter(v => v.id !== video.id));
+                        toast({ title: "ဖျက်ပြီးပါပြီ" });
+                      } catch (e: any) {
+                        toast({ title: "Error", description: e.message, variant: "destructive" });
+                      }
+                    }}
+                  >
+                    <Trash2 className="w-3 h-3 mr-1" /> ဖျက်မည်
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
