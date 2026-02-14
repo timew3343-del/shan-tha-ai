@@ -6,7 +6,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Platform features to rotate through for tutorials
 const PLATFORM_FEATURES = [
   "AI ပုံထုပ်ရန် (Image Generation)",
   "AI ဗီဒီယို ထုတ်ရန် (Video Generation)",
@@ -41,6 +40,9 @@ const MARKETING_TOPICS = [
   "AI Face Swap & Virtual Try-On - ဖက်ရှင်ကို AI နဲ့",
 ];
 
+// Background colors for slides
+const SLIDE_COLORS = ["#1a1a2e", "#16213e", "#0f3460", "#533483", "#e94560", "#1b1b2f", "#162447", "#1f4068"];
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -54,14 +56,27 @@ serve(async (req) => {
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
-      console.error("LOVABLE_API_KEY not configured");
       return new Response(JSON.stringify({ error: "AI API not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Load configs including custom topics
+    // Get Shotstack API key from app_settings
+    const { data: shotstackSetting } = await supabaseAdmin
+      .from("app_settings")
+      .select("value")
+      .eq("key", "shotstack_api_key")
+      .single();
+
+    const SHOTSTACK_API_KEY = shotstackSetting?.value || Deno.env.get("SHOTSTACK_API_KEY");
+    if (!SHOTSTACK_API_KEY) {
+      console.error("Shotstack API key not found");
+      return new Response(JSON.stringify({ error: "Shotstack API not configured" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Load configs
     const { data: settings } = await supabaseAdmin
       .from("app_settings")
       .select("key, value")
@@ -84,14 +99,16 @@ serve(async (req) => {
     const burmeseEnabled = configMap["content_factory_burmese_tutorial_enabled"] !== "false";
     const englishEnabled = configMap["content_factory_english_tutorial_enabled"] !== "false";
 
-    // Custom topics from admin (if set, use them; otherwise auto-rotate)
     const customMarketingTopic = configMap["content_factory_marketing_topic"] || "";
     const customBurmeseTopic = configMap["content_factory_burmese_topic"] || "";
     const customEnglishTopic = configMap["content_factory_english_topic"] || "";
 
+    const marketingDuration = parseInt(configMap["content_factory_marketing_duration"] || "60");
+    const burmeseDuration = parseInt(configMap["content_factory_burmese_duration"] || "120");
+    const englishDuration = parseInt(configMap["content_factory_english_duration"] || "120");
+
     const today = new Date().toISOString().split("T")[0];
 
-    // Check what's already generated today
     const { data: existingToday } = await supabaseAdmin
       .from("daily_content_videos")
       .select("video_type")
@@ -100,7 +117,6 @@ serve(async (req) => {
     const existingTypes = new Set(existingToday?.map((v: any) => v.video_type) || []);
     const results: any[] = [];
 
-    // Determine which feature to teach today (rotate by day of year)
     const dayOfYear = Math.floor(
       (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000
     );
@@ -108,78 +124,71 @@ serve(async (req) => {
     const todayFeature = PLATFORM_FEATURES[featureIndex];
     const defaultMarketingTopic = MARKETING_TOPICS[dayOfYear % MARKETING_TOPICS.length];
 
-    // Use custom topic if admin set one; otherwise auto-rotate
     const marketingTopic = customMarketingTopic || defaultMarketingTopic;
     const burmeseTopic = customBurmeseTopic || `${todayFeature} - မြန်မာဘာသာ Tutorial`;
     const englishTopic = customEnglishTopic || `${todayFeature} - English Tutorial`;
 
-    // Generate Marketing Ad
-    if (marketingEnabled && !existingTypes.has("marketing")) {
+    const videoConfigs = [
+      { type: "marketing", enabled: marketingEnabled, topic: marketingTopic, duration: marketingDuration, published: false },
+      { type: "burmese_tutorial", enabled: burmeseEnabled, topic: burmeseTopic, duration: burmeseDuration, published: true },
+      { type: "english_tutorial", enabled: englishEnabled, topic: englishTopic, duration: englishDuration, published: true },
+    ];
+
+    for (const vc of videoConfigs) {
+      if (!vc.enabled || existingTypes.has(vc.type)) continue;
+
       try {
-        const scriptResult = await generateScript(LOVABLE_API_KEY, "marketing", marketingTopic);
-        const record = await supabaseAdmin.from("daily_content_videos").insert({
-          video_type: "marketing",
+        console.log(`Generating ${vc.type} script...`);
+        const scriptResult = await generateScript(LOVABLE_API_KEY, vc.type, vc.topic);
+
+        // Insert record first (pending video)
+        const { data: record, error: insertErr } = await supabaseAdmin.from("daily_content_videos").insert({
+          video_type: vc.type,
           title: scriptResult.title,
           description: scriptResult.description,
           facebook_caption: scriptResult.facebookCaption,
           hashtags: scriptResult.hashtags,
           generated_date: today,
+          duration_seconds: vc.duration,
           api_cost_credits: 2,
-          is_published: false,
+          is_published: vc.published,
         }).select().single();
-        results.push({ type: "marketing", success: true, id: record.data?.id });
-        console.log("Marketing ad script generated successfully");
+
+        if (insertErr) throw insertErr;
+
+        // Now render video with Shotstack
+        console.log(`Rendering ${vc.type} video with Shotstack...`);
+        try {
+          const videoUrl = await renderWithShotstack(
+            SHOTSTACK_API_KEY,
+            scriptResult,
+            vc.duration,
+            vc.type
+          );
+
+          if (videoUrl) {
+            // Update record with video URL
+            await supabaseAdmin.from("daily_content_videos")
+              .update({ video_url: videoUrl, api_cost_credits: 4 })
+              .eq("id", record.id);
+
+            console.log(`${vc.type} video rendered: ${videoUrl}`);
+            results.push({ type: vc.type, success: true, id: record.id, video_url: videoUrl });
+          } else {
+            console.warn(`${vc.type} video rendering returned no URL`);
+            results.push({ type: vc.type, success: true, id: record.id, video_url: null, note: "Script saved, video pending" });
+          }
+        } catch (renderErr) {
+          console.error(`Shotstack render failed for ${vc.type}:`, renderErr);
+          results.push({ type: vc.type, success: true, id: record.id, video_url: null, note: `Script saved, render failed: ${renderErr}` });
+        }
       } catch (e) {
-        console.error("Marketing generation failed:", e);
-        results.push({ type: "marketing", success: false, error: String(e) });
+        console.error(`${vc.type} generation failed:`, e);
+        results.push({ type: vc.type, success: false, error: String(e) });
       }
     }
 
-    // Generate Burmese Tutorial
-    if (burmeseEnabled && !existingTypes.has("burmese_tutorial")) {
-      try {
-        const scriptResult = await generateScript(LOVABLE_API_KEY, "burmese_tutorial", burmeseTopic);
-        const record = await supabaseAdmin.from("daily_content_videos").insert({
-          video_type: "burmese_tutorial",
-          title: scriptResult.title,
-          description: scriptResult.description,
-          facebook_caption: scriptResult.facebookCaption,
-          hashtags: scriptResult.hashtags,
-          generated_date: today,
-          api_cost_credits: 2,
-          is_published: true,
-        }).select().single();
-        results.push({ type: "burmese_tutorial", success: true, id: record.data?.id });
-        console.log("Burmese tutorial script generated successfully");
-      } catch (e) {
-        console.error("Burmese tutorial generation failed:", e);
-        results.push({ type: "burmese_tutorial", success: false, error: String(e) });
-      }
-    }
-
-    // Generate English Tutorial
-    if (englishEnabled && !existingTypes.has("english_tutorial")) {
-      try {
-        const scriptResult = await generateScript(LOVABLE_API_KEY, "english_tutorial", englishTopic);
-        const record = await supabaseAdmin.from("daily_content_videos").insert({
-          video_type: "english_tutorial",
-          title: scriptResult.title,
-          description: scriptResult.description,
-          facebook_caption: scriptResult.facebookCaption,
-          hashtags: scriptResult.hashtags,
-          generated_date: today,
-          api_cost_credits: 2,
-          is_published: true,
-        }).select().single();
-        results.push({ type: "english_tutorial", success: true, id: record.data?.id });
-        console.log("English tutorial script generated successfully");
-      } catch (e) {
-        console.error("English tutorial generation failed:", e);
-        results.push({ type: "english_tutorial", success: false, error: String(e) });
-      }
-    }
-
-    // Clear custom topics after use (one-day only)
+    // Clear custom topics after use
     const topicsToClean = [
       { key: "content_factory_marketing_topic", hadCustom: !!customMarketingTopic },
       { key: "content_factory_burmese_topic", hadCustom: !!customBurmeseTopic },
@@ -207,16 +216,171 @@ serve(async (req) => {
   }
 });
 
-async function generateScript(
+// ==================== SHOTSTACK VIDEO RENDERING ====================
+
+async function renderWithShotstack(
   apiKey: string,
-  videoType: string,
-  topic: string
-): Promise<{
+  script: ScriptResult,
+  durationSec: number,
+  videoType: string
+): Promise<string | null> {
+  // Build a text-slide video using Shotstack Edit API
+  const slides = buildSlides(script, durationSec, videoType);
+  
+  const timeline = {
+    background: "#000000",
+    fonts: [
+      { src: "https://templates.shotstack.io/basic/asset/font/opensans-regular.ttf" },
+    ],
+    tracks: slides,
+  };
+
+  const editPayload = {
+    timeline,
+    output: {
+      format: "mp4",
+      resolution: "sd",
+      fps: 25,
+    },
+  };
+
+  console.log("Submitting Shotstack render...");
+
+  // Submit render
+  const renderRes = await fetch("https://api.shotstack.io/edit/stage/render", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+    },
+    body: JSON.stringify(editPayload),
+  });
+
+  if (!renderRes.ok) {
+    const errText = await renderRes.text();
+    throw new Error(`Shotstack render submit failed: ${renderRes.status} - ${errText}`);
+  }
+
+  const renderData = await renderRes.json();
+  const renderId = renderData?.response?.id;
+  if (!renderId) throw new Error("No render ID returned from Shotstack");
+
+  console.log(`Shotstack render submitted: ${renderId}`);
+
+  // Poll for completion (max 5 minutes)
+  const maxWait = 300000;
+  const pollInterval = 10000;
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < maxWait) {
+    await new Promise(r => setTimeout(r, pollInterval));
+
+    const statusRes = await fetch(`https://api.shotstack.io/edit/stage/render/${renderId}`, {
+      headers: { "x-api-key": apiKey },
+    });
+
+    if (!statusRes.ok) {
+      const errText = await statusRes.text();
+      console.warn(`Shotstack status check failed: ${statusRes.status} - ${errText}`);
+      continue;
+    }
+
+    const statusData = await statusRes.json();
+    const status = statusData?.response?.status;
+    console.log(`Shotstack render status: ${status}`);
+
+    if (status === "done") {
+      return statusData.response.url;
+    } else if (status === "failed") {
+      throw new Error(`Shotstack render failed: ${JSON.stringify(statusData.response.error)}`);
+    }
+    // Otherwise keep polling (queued, fetching, rendering, saving)
+  }
+
+  console.warn("Shotstack render timed out after 5 minutes");
+  return null;
+}
+
+function buildSlides(script: ScriptResult, totalDuration: number, videoType: string) {
+  // Split description into paragraphs for slides
+  const paragraphs = script.description
+    .split(/\n+/)
+    .map(p => p.trim())
+    .filter(p => p.length > 0);
+
+  // Create slides: title slide + content slides
+  const slideCount = Math.min(paragraphs.length + 1, 8); // max 8 slides
+  const slideDuration = Math.max(totalDuration / slideCount, 3);
+
+  const titleColor = videoType === "marketing" ? "#e94560" : videoType === "burmese_tutorial" ? "#533483" : "#0f3460";
+
+  const clips: any[] = [];
+
+  // Title slide
+  clips.push({
+    asset: {
+      type: "html",
+      html: `<div style="font-family: 'Open Sans'; text-align: center; padding: 40px; color: white;">
+        <h1 style="font-size: 42px; margin-bottom: 20px; color: ${titleColor};">${escapeHtml(script.title)}</h1>
+        <p style="font-size: 20px; opacity: 0.8;">Shan Tha AI</p>
+      </div>`,
+      width: 1024,
+      height: 576,
+      background: SLIDE_COLORS[0],
+    },
+    start: 0,
+    length: slideDuration,
+    transition: { in: "fade", out: "fade" },
+  });
+
+  // Content slides
+  const contentParagraphs = paragraphs.slice(0, 7);
+  contentParagraphs.forEach((text, i) => {
+    const truncatedText = text.length > 200 ? text.substring(0, 197) + "..." : text;
+    const bgColor = SLIDE_COLORS[(i + 1) % SLIDE_COLORS.length];
+
+    clips.push({
+      asset: {
+        type: "html",
+        html: `<div style="font-family: 'Open Sans'; text-align: center; padding: 40px; color: white;">
+          <p style="font-size: 26px; line-height: 1.6;">${escapeHtml(truncatedText)}</p>
+        </div>`,
+        width: 1024,
+        height: 576,
+        background: bgColor,
+      },
+      start: slideDuration * (i + 1),
+      length: slideDuration,
+      transition: { in: "fade", out: "fade" },
+    });
+  });
+
+  return [{ clips }];
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// ==================== AI SCRIPT GENERATION ====================
+
+interface ScriptResult {
   title: string;
   description: string;
   facebookCaption: string;
   hashtags: string[];
-}> {
+}
+
+async function generateScript(
+  apiKey: string,
+  videoType: string,
+  topic: string
+): Promise<ScriptResult> {
   const systemPrompt =
     videoType === "marketing"
       ? `You are a marketing copywriter for an AI tools platform called "Shan Tha AI". 
@@ -237,7 +401,7 @@ async function generateScript(
 
 Return a JSON object with these fields:
 - title: Short title (max 60 chars)
-- description: Detailed video script/description (300-600 words) with step-by-step instructions suitable for a video tutorial. Include timestamps like [0:00] Opening, [0:15] Step 1, etc.
+- description: Detailed video script/description (300-600 words) with step-by-step instructions. Split into short paragraphs (each 1-2 sentences) for video slides. Include clear numbered steps.
 - facebookCaption: Ready-to-post Facebook caption with emojis (100-200 chars)
 - hashtags: Array of 5-8 relevant hashtags (without #)
 
@@ -266,7 +430,6 @@ Return ONLY valid JSON, no markdown.`;
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content || "";
 
-  // Parse JSON from response
   const jsonMatch = content.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     throw new Error("Failed to parse AI response as JSON");
