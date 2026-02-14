@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,7 +18,8 @@ import {
   ChevronDown, Loader2, Download, Play,
   Type, Image, Film, Subtitles, Shield, Mic,
   Square, RectangleHorizontal, RectangleVertical,
-  Upload, HelpCircle, CheckCircle, XCircle, RefreshCw, Clock
+  Upload, HelpCircle, CheckCircle, XCircle, RefreshCw, Clock,
+  Settings, Eye, HeadphonesIcon, Save, Hash
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -124,10 +126,15 @@ const LOGO_POSITIONS = [
   { id: "bottom-right", label: "Bottom-Right" },
 ];
 
+const DAILY_QUANTITIES = [1, 2, 3, 5];
+
 export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
   const { toast } = useToast();
   const { credits, refetch: refetchCredits } = useCredits(userId);
   const { costs } = useCreditCosts();
+
+  // Top-level tab
+  const [activeTab, setActiveTab] = useState("manage");
 
   // Mode: template vs custom
   const [mode, setMode] = useState<"template" | "custom">("template");
@@ -135,6 +142,8 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
   // Shared settings
   const [selectedLanguage, setSelectedLanguage] = useState("Myanmar");
   const [durationMinutes, setDurationMinutes] = useState(1);
+  const [dailyQuantity, setDailyQuantity] = useState(1);
+  const [scheduledTime, setScheduledTime] = useState("08:00");
 
   // Template mode
   const [selectedTemplate, setSelectedTemplate] = useState("motivational");
@@ -166,19 +175,30 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
 
   // Output
   const [videos, setVideos] = useState<any[]>([]);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Preview
+  const [previewContent, setPreviewContent] = useState("");
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 
   // Support
   const [supportMessage, setSupportMessage] = useState("");
   const [supportChat, setSupportChat] = useState<{ role: string; content: string }[]>([]);
   const [isSendingSupport, setIsSendingSupport] = useState(false);
 
+  // Saved settings tracking (for upgrade logic)
+  const [savedDuration, setSavedDuration] = useState(0);
+  const [savedQuantity, setSavedQuantity] = useState(0);
+
   const logoInputRef = useRef<HTMLInputElement>(null);
   const introInputRef = useRef<HTMLInputElement>(null);
   const outroInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (userId) fetchVideos();
+    if (userId) {
+      fetchVideos();
+      loadSavedSettings();
+    }
   }, [userId]);
 
   const fetchVideos = async () => {
@@ -192,66 +212,107 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
     if (data) setVideos(data);
   };
 
-  // Dynamic credit calculation
-  const calculateCredits = () => {
-    const baseCostPerMin = costs.video_generation || 10;
-    let total = baseCostPerMin * durationMinutes;
-    if (voiceEnabled) total += (costs.text_to_speech || 3) * durationMinutes;
-    if (subtitlesEnabled) total += (costs.caption_per_minute || 8) * durationMinutes;
-    if (copyrightEnabled) total += costs.copyright_check || 4;
-    if (logoEnabled) total += 2;
-    if (watermarkEnabled) total += 1;
-    if (introOutroEnabled) total += 5;
-    // 20% discount for auto-service
-    total = Math.ceil(total * 0.8);
-    return total;
+  const loadSavedSettings = async () => {
+    if (!userId) return;
+    const { data } = await supabase
+      .from("auto_service_subscriptions")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (data) {
+      setSavedDuration(data.credits_paid > 0 ? 1 : 0); // We'll use credits_paid as a proxy
+      setSavedQuantity(1);
+    }
   };
 
-  const totalCredits = calculateCredits();
+  // Monthly credit calculation: ((Base per min × dailyQuantity) × 30) × 0.8
+  const calculateMonthlyCredits = () => {
+    const baseCostPerMin = costs.video_generation || 10;
+    let perVideoCost = baseCostPerMin * durationMinutes;
+    if (voiceEnabled) perVideoCost += (costs.text_to_speech || 3) * durationMinutes;
+    if (subtitlesEnabled) perVideoCost += (costs.caption_per_minute || 8) * durationMinutes;
+    if (copyrightEnabled) perVideoCost += costs.copyright_check || 4;
+    if (logoEnabled) perVideoCost += 2;
+    if (watermarkEnabled) perVideoCost += 1;
+    if (introOutroEnabled) perVideoCost += 5;
 
-  const handleGenerate = async () => {
+    // Daily total = perVideoCost × dailyQuantity
+    const dailyTotal = perVideoCost * dailyQuantity;
+    // Monthly total = dailyTotal × 30
+    const monthlyTotal = dailyTotal * 30;
+    // 20% discount
+    const discounted = Math.ceil(monthlyTotal * 0.8);
+    return { perVideoCost, dailyTotal, monthlyTotal, discounted };
+  };
+
+  const creditCalc = calculateMonthlyCredits();
+
+  // Check if upgrading (higher duration or quantity than saved)
+  const isUpgrade = durationMinutes > savedDuration || dailyQuantity > savedQuantity;
+  const isFreeUpdate = savedDuration > 0 && !isUpgrade;
+
+  const handleSaveSettings = async () => {
     if (!userId) return;
     if (mode === "custom" && !customPrompt.trim()) {
       toast({ title: "Prompt ထည့်ပါ", description: "ဗီဒီယို အကြောင်းအရာ ရေးပါ", variant: "destructive" });
       return;
     }
-    if (credits < totalCredits) {
-      toast({ title: "Credits မလုံလောက်ပါ", description: `${totalCredits} Credits လိုအပ်ပါသည်`, variant: "destructive" });
+
+    const chargeAmount = isFreeUpdate ? 0 : creditCalc.discounted;
+    if (chargeAmount > 0 && credits < chargeAmount) {
+      toast({ title: "Credits မလုံလောက်ပါ", description: `${chargeAmount} Credits လိုအပ်ပါသည်`, variant: "destructive" });
       return;
     }
 
-    setIsGenerating(true);
+    setIsSaving(true);
     try {
-      // Deduct credits
-      const { data: deductResult, error: deductError } = await supabase.rpc("deduct_user_credits", {
-        _user_id: userId, _amount: totalCredits, _action: "auto_service_video",
-      });
-      if (deductError) throw deductError;
-      const result = deductResult as any;
-      if (!result?.success) throw new Error(result?.error || "Credit deduction failed");
+      // Deduct credits if not free update
+      if (chargeAmount > 0) {
+        const { data: deductResult, error: deductError } = await supabase.rpc("deduct_user_credits", {
+          _user_id: userId, _amount: chargeAmount, _action: "auto_service_monthly",
+        });
+        if (deductError) throw deductError;
+        const result = deductResult as any;
+        if (!result?.success) throw new Error(result?.error || "Credit deduction failed");
+      }
 
-      // Save video record
-      const templateObj = TEMPLATE_CATEGORIES.find(t => t.id === selectedTemplate);
-      const title = mode === "template"
-        ? `${templateObj?.name || selectedTemplate} - ${new Date().toLocaleDateString()}`
-        : `Custom Video - ${new Date().toLocaleDateString()}`;
+      // Expire existing active subscriptions
+      await supabase
+        .from("auto_service_subscriptions")
+        .update({ status: "expired" })
+        .eq("user_id", userId)
+        .eq("status", "active");
 
-      await supabase.from("auto_service_videos").insert({
+      // Create new subscription
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 30);
+
+      await supabase.from("auto_service_subscriptions").insert({
         user_id: userId,
-        title,
         template_category: mode === "template" ? selectedTemplate : "custom",
         target_language: selectedLanguage,
-        generation_status: "pending",
-        description: mode === "custom" ? customPrompt : undefined,
+        credits_paid: chargeAmount,
+        status: "active",
+        expires_at: expiresAt.toISOString(),
       });
 
-      toast({ title: "🎬 ဗီဒီယို ဖန်တီးနေပါသည်", description: `${totalCredits} Credits သုံးစွဲပါပြီ` });
+      setSavedDuration(durationMinutes);
+      setSavedQuantity(dailyQuantity);
+
+      toast({
+        title: "✅ Settings Saved!",
+        description: isFreeUpdate
+          ? "Settings အခမဲ့ ပြင်ဆင်ပြီးပါပြီ"
+          : `${chargeAmount} Credits ပေးချေပြီး 30 ရက် Auto Service စတင်ပါပြီ`,
+      });
       refetchCredits();
-      fetchVideos();
     } catch (e: any) {
       toast({ title: "Failed", description: e.message, variant: "destructive" });
     } finally {
-      setIsGenerating(false);
+      setIsSaving(false);
     }
   };
 
@@ -266,10 +327,8 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
     try {
       const { data, error } = await supabase.functions.invoke("auto-service-preview", {
         body: {
-          userId,
           language: selectedLanguage,
           templateCategory: "custom",
-          customPrompt: `User wants help writing a video prompt. Their message: "${userMsg}". Help them write a clear, specific video prompt. Explain what kind of video would result. If the prompt is good, say they can copy it. Respond in Myanmar language.`,
         },
       });
       if (error) throw error;
@@ -278,6 +337,25 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
       setPromptChat(prev => [...prev, { role: "assistant", content: "ဆာဗာ ချိတ်ဆက်မှု မအောင်မြင်ပါ" }]);
     } finally {
       setIsPromptChatting(false);
+    }
+  };
+
+  // Preview
+  const handlePreview = async () => {
+    setIsLoadingPreview(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("auto-service-preview", {
+        body: {
+          language: selectedLanguage,
+          templateCategory: mode === "template" ? selectedTemplate : "custom",
+        },
+      });
+      if (error) throw error;
+      setPreviewContent(data?.preview || "Preview မရနိုင်ပါ");
+    } catch {
+      setPreviewContent("Preview ရယူရာတွင် ပြဿနာရှိပါသည်");
+    } finally {
+      setIsLoadingPreview(false);
     }
   };
 
@@ -305,8 +383,6 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
     }
   };
 
-  const selectedTemplateObj = TEMPLATE_CATEGORIES.find(t => t.id === selectedTemplate);
-
   return (
     <div className="flex flex-col gap-4 p-4 pb-24">
       {/* Header */}
@@ -320,495 +396,566 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
         </p>
       </div>
 
-      {/* Language Selection */}
-      <Card className="p-3 border-border/50 bg-card/60">
-        <div className="flex items-center gap-2 mb-2">
-          <Globe className="w-4 h-4 text-primary" />
-          <span className="text-sm font-bold">Target Language</span>
-        </div>
-        <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent className="max-h-60">
-            {LANGUAGES.map(lang => <SelectItem key={lang} value={lang}>{lang}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </Card>
+      {/* Top Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="w-full grid grid-cols-4 h-10">
+          <TabsTrigger value="manage" className="text-[10px] gap-1 px-1">
+            <Settings className="w-3.5 h-3.5" />စီမံမည်
+          </TabsTrigger>
+          <TabsTrigger value="videos" className="text-[10px] gap-1 px-1">
+            <Video className="w-3.5 h-3.5" />ဗီဒီယို
+          </TabsTrigger>
+          <TabsTrigger value="preview" className="text-[10px] gap-1 px-1">
+            <Eye className="w-3.5 h-3.5" />Preview
+          </TabsTrigger>
+          <TabsTrigger value="support" className="text-[10px] gap-1 px-1">
+            <HeadphonesIcon className="w-3.5 h-3.5" />Support
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Mode Toggle */}
-      <Card className="p-3 border-border/50 bg-card/60">
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => setMode("template")}
-            className={`p-3 rounded-xl text-center transition-all border ${
-              mode === "template"
-                ? "border-primary bg-primary/10 shadow-sm"
-                : "border-border/30 bg-secondary/20 hover:bg-secondary/40"
-            }`}
-          >
-            <Sparkles className="w-5 h-5 mx-auto mb-1 text-primary" />
-            <p className="text-xs font-bold">Template သုံးမည်</p>
-            <p className="text-[9px] text-muted-foreground">Daily Themes</p>
-          </button>
-          <button
-            onClick={() => setMode("custom")}
-            className={`p-3 rounded-xl text-center transition-all border ${
-              mode === "custom"
-                ? "border-primary bg-primary/10 shadow-sm"
-                : "border-border/30 bg-secondary/20 hover:bg-secondary/40"
-            }`}
-          >
-            <Type className="w-5 h-5 mx-auto mb-1 text-primary" />
-            <p className="text-xs font-bold">ကိုယ်တိုင် Input</p>
-            <p className="text-[9px] text-muted-foreground">ထည့်မည်</p>
-          </button>
-        </div>
-      </Card>
+        {/* ===== MANAGE TAB ===== */}
+        <TabsContent value="manage" className="space-y-3 mt-3">
+          {/* Language Selection */}
+          <Card className="p-3 border-border/50 bg-card/60">
+            <div className="flex items-center gap-2 mb-2">
+              <Globe className="w-4 h-4 text-primary" />
+              <span className="text-sm font-bold">Target Language</span>
+            </div>
+            <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent className="max-h-60">
+                {LANGUAGES.map(lang => <SelectItem key={lang} value={lang}>{lang}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </Card>
 
-      {/* Template Mode */}
-      <AnimatePresence mode="wait">
-        {mode === "template" && (
-          <motion.div key="template" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-            <Card className="p-3 border-border/50 bg-card/60">
-              <div className="flex items-center gap-2 mb-2">
-                <Sparkles className="w-4 h-4 text-primary" />
-                <span className="text-sm font-bold">Daily Theme</span>
-                <span className="text-[10px] text-muted-foreground font-myanmar">နေ့စဉ် အကြောင်းအရာ</span>
+          {/* Mode Toggle */}
+          <Card className="p-3 border-border/50 bg-card/60">
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setMode("template")}
+                className={`p-3 rounded-xl text-center transition-all border ${
+                  mode === "template" ? "border-primary bg-primary/10 shadow-sm" : "border-border/30 bg-secondary/20 hover:bg-secondary/40"
+                }`}>
+                <Sparkles className="w-5 h-5 mx-auto mb-1 text-primary" />
+                <p className="text-xs font-bold">Template သုံးမည်</p>
+                <p className="text-[9px] text-muted-foreground">Daily Themes</p>
+              </button>
+              <button onClick={() => setMode("custom")}
+                className={`p-3 rounded-xl text-center transition-all border ${
+                  mode === "custom" ? "border-primary bg-primary/10 shadow-sm" : "border-border/30 bg-secondary/20 hover:bg-secondary/40"
+                }`}>
+                <Type className="w-5 h-5 mx-auto mb-1 text-primary" />
+                <p className="text-xs font-bold">ကိုယ်တိုင် Input</p>
+                <p className="text-[9px] text-muted-foreground">ထည့်မည်</p>
+              </button>
+            </div>
+          </Card>
+
+          {/* Template Mode */}
+          <AnimatePresence mode="wait">
+            {mode === "template" && (
+              <motion.div key="template" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+                <Card className="p-3 border-border/50 bg-card/60">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sparkles className="w-4 h-4 text-primary" />
+                    <span className="text-sm font-bold">Daily Theme</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                    {TEMPLATE_CATEGORIES.map(cat => (
+                      <button key={cat.id} onClick={() => setSelectedTemplate(cat.id)}
+                        className={`flex items-start gap-1.5 p-2 rounded-lg text-left transition-all border ${
+                          selectedTemplate === cat.id ? "border-primary bg-primary/10" : "border-border/20 hover:bg-secondary/30"
+                        }`}>
+                        <span className="text-sm">{cat.icon}</span>
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-semibold truncate">{cat.name}</p>
+                          <p className="text-[8px] text-muted-foreground font-myanmar truncate">{cat.nameMyanmar}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </Card>
+              </motion.div>
+            )}
+
+            {/* Custom Input Mode */}
+            {mode === "custom" && (
+              <motion.div key="custom" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-3">
+                <Card className="p-3 border-border/50 bg-card/60">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-bold">Prompt Box</span>
+                    <Button variant="ghost" size="sm" className="text-[10px] h-7 gap-1" onClick={() => setShowPromptHelper(!showPromptHelper)}>
+                      <HelpCircle className="w-3 h-3" />ရေးနည်းမသိလျှင်
+                    </Button>
+                  </div>
+                  <Textarea placeholder="ဗီဒီယို အကြောင်းအရာကို ဤနေရာတွင် ရေးပါ..."
+                    value={customPrompt} onChange={e => setCustomPrompt(e.target.value)}
+                    className="text-xs min-h-[80px] resize-none" />
+                </Card>
+
+                {/* Prompt Helper Chatbot */}
+                <AnimatePresence>
+                  {showPromptHelper && (
+                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
+                      <Card className="p-3 border-primary/30 bg-primary/5">
+                        <div className="flex items-center gap-2 mb-2">
+                          <MessageCircle className="w-3.5 h-3.5 text-primary" />
+                          <span className="text-xs font-bold">Smart Prompt Assistant</span>
+                        </div>
+                        <div className="max-h-40 overflow-y-auto space-y-1.5 mb-2">
+                          {promptChat.length === 0 && (
+                            <p className="text-[9px] text-muted-foreground text-center py-3 font-myanmar">
+                              ဘယ်လို ဗီဒီယို ဖန်တီးချင်သလဲ ပြောပြပါ။ AI က Prompt ရေးပေးပါမည်။
+                            </p>
+                          )}
+                          {promptChat.map((msg, i) => (
+                            <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                              <div className={`max-w-[85%] rounded-lg px-2.5 py-1.5 text-[10px] ${
+                                msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"
+                              }`}>
+                                <p className="font-myanmar whitespace-pre-wrap">{msg.content}</p>
+                              </div>
+                            </div>
+                          ))}
+                          {isPromptChatting && (
+                            <div className="flex justify-start">
+                              <div className="bg-secondary rounded-lg px-2.5 py-1.5"><Loader2 className="w-3 h-3 animate-spin" /></div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-1.5">
+                          <Input placeholder="ဘယ်လို ဗီဒီယို လိုချင်လဲ..."
+                            value={promptChatInput} onChange={e => setPromptChatInput(e.target.value)}
+                            className="text-[10px] h-8"
+                            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handlePromptChat(); } }} />
+                          <Button size="icon" className="h-8 w-8 shrink-0" onClick={handlePromptChat} disabled={isPromptChatting || !promptChatInput.trim()}>
+                            <Send className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </Card>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Duration Slider */}
+          <Card className="p-3 border-border/50 bg-card/60">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-primary" />
+                <span className="text-sm font-bold">Duration</span>
               </div>
-              <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
-                {TEMPLATE_CATEGORIES.map(cat => (
-                  <button key={cat.id} onClick={() => setSelectedTemplate(cat.id)}
-                    className={`flex items-start gap-1.5 p-2 rounded-lg text-left transition-all border ${
-                      selectedTemplate === cat.id
-                        ? "border-primary bg-primary/10"
-                        : "border-border/20 hover:bg-secondary/30"
-                    }`}>
-                    <span className="text-sm">{cat.icon}</span>
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-semibold truncate">{cat.name}</p>
-                      <p className="text-[8px] text-muted-foreground font-myanmar truncate">{cat.nameMyanmar}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </Card>
-          </motion.div>
-        )}
+              <Badge variant="secondary" className="text-xs">{durationMinutes} min</Badge>
+            </div>
+            <Slider value={[durationMinutes]} onValueChange={v => setDurationMinutes(v[0])} min={1} max={30} step={1} />
+            <div className="flex justify-between text-[9px] text-muted-foreground mt-1">
+              <span>1 min</span><span>15 min</span><span>30 min</span>
+            </div>
+          </Card>
 
-        {/* Custom Input Mode */}
-        {mode === "custom" && (
-          <motion.div key="custom" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-3">
+          {/* Daily Quantity & Time */}
+          <Card className="p-3 border-border/50 bg-card/60">
+            <div className="flex items-center gap-2 mb-3">
+              <Hash className="w-4 h-4 text-primary" />
+              <span className="text-sm font-bold font-myanmar">တစ်ရက်လျှင် ဗီဒီယိုအရေအတွက်</span>
+            </div>
+            <div className="grid grid-cols-4 gap-2 mb-3">
+              {DAILY_QUANTITIES.map(qty => (
+                <button key={qty} onClick={() => setDailyQuantity(qty)}
+                  className={`py-2.5 rounded-xl text-center transition-all border font-bold ${
+                    dailyQuantity === qty
+                      ? "border-primary bg-primary/10 text-primary shadow-sm"
+                      : "border-border/30 hover:bg-secondary/30 text-foreground"
+                  }`}>
+                  <p className="text-lg">{qty}</p>
+                  <p className="text-[8px] text-muted-foreground">video{qty > 1 ? "s" : ""}</p>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-primary" />
+              <span className="text-xs font-bold font-myanmar">ဗီဒီယိုထုတ်မည့်အချိန်</span>
+            </div>
+            <Input type="time" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)}
+              className="mt-2 text-sm h-10" />
+            <p className="text-[8px] text-muted-foreground mt-1 font-myanmar">
+              ⏰ သတ်မှတ်ထားသော အချိန်တွင် AI က {dailyQuantity} ခု မတူညီသော ဗီဒီယို ဖန်တီးပေးမည်
+            </p>
+          </Card>
+
+          {/* Advanced Feature Toggles */}
+          <div className="space-y-2">
+            <p className="text-xs font-bold text-muted-foreground px-1">Advanced Features</p>
+
+            {/* Platform Size */}
+            <Collapsible open={showPlatformSize} onOpenChange={setShowPlatformSize}>
+              <Card className="border-border/50 bg-card/60 overflow-hidden">
+                <CollapsibleTrigger className="flex items-center justify-between w-full p-3">
+                  <div className="flex items-center gap-2">
+                    <RectangleHorizontal className="w-4 h-4 text-primary" />
+                    <span className="text-xs font-bold">Platform Size</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[9px]">{platformSize}</Badge>
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showPlatformSize ? "rotate-180" : ""}`} />
+                  </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="px-3 pb-3 flex gap-2">
+                    {(["16:9", "9:16", "1:1"] as const).map(size => (
+                      <button key={size} onClick={() => setPlatformSize(size)}
+                        className={`flex-1 p-2 rounded-lg border text-center transition-all ${
+                          platformSize === size ? "border-primary bg-primary/10" : "border-border/30 hover:bg-secondary/30"
+                        }`}>
+                        <div className="flex justify-center mb-1">
+                          {size === "16:9" && <RectangleHorizontal className="w-5 h-3 text-primary" />}
+                          {size === "9:16" && <RectangleVertical className="w-3 h-5 text-primary" />}
+                          {size === "1:1" && <Square className="w-4 h-4 text-primary" />}
+                        </div>
+                        <p className="text-[10px] font-bold">{size}</p>
+                      </button>
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+
+            {/* Voice & Style */}
             <Card className="p-3 border-border/50 bg-card/60">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-bold">Prompt Box</span>
-                <Button variant="ghost" size="sm" className="text-[10px] h-7 gap-1" onClick={() => setShowPromptHelper(!showPromptHelper)}>
-                  <HelpCircle className="w-3 h-3" />
-                  ရေးနည်းမသိလျှင်
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Mic className="w-4 h-4 text-primary" />
+                  <span className="text-xs font-bold">Voice & Style</span>
+                  <span className="text-[9px] text-muted-foreground">+{costs.text_to_speech || 3}/min</span>
+                </div>
+                <Switch checked={voiceEnabled} onCheckedChange={setVoiceEnabled} />
               </div>
-              <Textarea
-                placeholder="ဗီဒီယို အကြောင်းအရာကို ဤနေရာတွင် ရေးပါ..."
-                value={customPrompt}
-                onChange={e => setCustomPrompt(e.target.value)}
-                className="text-xs min-h-[80px] resize-none"
-              />
-            </Card>
-
-            {/* Prompt Helper Chatbot */}
-            <AnimatePresence>
-              {showPromptHelper && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
-                  <Card className="p-3 border-primary/30 bg-primary/5">
-                    <div className="flex items-center gap-2 mb-2">
-                      <MessageCircle className="w-3.5 h-3.5 text-primary" />
-                      <span className="text-xs font-bold">Smart Prompt Assistant</span>
-                    </div>
-                    <div className="max-h-40 overflow-y-auto space-y-1.5 mb-2">
-                      {promptChat.length === 0 && (
-                        <p className="text-[9px] text-muted-foreground text-center py-3 font-myanmar">
-                          ဘယ်လို ဗီဒီယို ဖန်တီးချင်သလဲ ပြောပြပါ။ AI က Prompt ရေးပေးပါမည်။
-                        </p>
-                      )}
-                      {promptChat.map((msg, i) => (
-                        <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                          <div className={`max-w-[85%] rounded-lg px-2.5 py-1.5 text-[10px] ${
-                            msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"
-                          }`}>
-                            <p className="font-myanmar whitespace-pre-wrap">{msg.content}</p>
-                          </div>
-                        </div>
-                      ))}
-                      {isPromptChatting && (
-                        <div className="flex justify-start">
-                          <div className="bg-secondary rounded-lg px-2.5 py-1.5">
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex gap-1.5">
-                      <Input placeholder="ဘယ်လို ဗီဒီယို လိုချင်လဲ..."
-                        value={promptChatInput} onChange={e => setPromptChatInput(e.target.value)}
-                        className="text-[10px] h-8"
-                        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handlePromptChat(); } }}
-                      />
-                      <Button size="icon" className="h-8 w-8 shrink-0" onClick={handlePromptChat} disabled={isPromptChatting || !promptChatInput.trim()}>
-                        <Send className="w-3 h-3" />
-                      </Button>
-                    </div>
-                  </Card>
+              {voiceEnabled && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[9px] text-muted-foreground mb-1 block">Voice Style</label>
+                    <Select value={voiceStyle} onValueChange={setVoiceStyle}>
+                      <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
+                      <SelectContent className="max-h-48">
+                        {VOICE_STYLES.map(s => <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-muted-foreground mb-1 block">Tone</label>
+                    <Select value={voiceTone} onValueChange={setVoiceTone}>
+                      <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
+                      <SelectContent className="max-h-48">
+                        {VOICE_TONES.map(t => <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </motion.div>
               )}
-            </AnimatePresence>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </Card>
 
-      {/* Duration Slider */}
-      <Card className="p-3 border-border/50 bg-card/60">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-primary" />
-            <span className="text-sm font-bold">Duration</span>
-          </div>
-          <Badge variant="secondary" className="text-xs">{durationMinutes} min</Badge>
-        </div>
-        <Slider
-          value={[durationMinutes]}
-          onValueChange={v => setDurationMinutes(v[0])}
-          min={1} max={30} step={1}
-        />
-        <div className="flex justify-between text-[9px] text-muted-foreground mt-1">
-          <span>1 min</span><span>15 min</span><span>30 min</span>
-        </div>
-      </Card>
-
-      {/* Advanced Feature Toggles */}
-      <div className="space-y-2">
-        <p className="text-xs font-bold text-muted-foreground px-1">Advanced Features</p>
-
-        {/* Platform Size */}
-        <Collapsible open={showPlatformSize} onOpenChange={setShowPlatformSize}>
-          <Card className="border-border/50 bg-card/60 overflow-hidden">
-            <CollapsibleTrigger className="flex items-center justify-between w-full p-3">
-              <div className="flex items-center gap-2">
-                <RectangleHorizontal className="w-4 h-4 text-primary" />
-                <span className="text-xs font-bold">Platform Size</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-[9px]">{platformSize}</Badge>
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showPlatformSize ? "rotate-180" : ""}`} />
-              </div>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="px-3 pb-3 flex gap-2">
-                {(["16:9", "9:16", "1:1"] as const).map(size => (
-                  <button key={size} onClick={() => setPlatformSize(size)}
-                    className={`flex-1 p-2 rounded-lg border text-center transition-all ${
-                      platformSize === size ? "border-primary bg-primary/10" : "border-border/30 hover:bg-secondary/30"
-                    }`}>
-                    <div className="flex justify-center mb-1">
-                      {size === "16:9" && <RectangleHorizontal className="w-5 h-3 text-primary" />}
-                      {size === "9:16" && <RectangleVertical className="w-3 h-5 text-primary" />}
-                      {size === "1:1" && <Square className="w-4 h-4 text-primary" />}
-                    </div>
-                    <p className="text-[10px] font-bold">{size}</p>
-                  </button>
-                ))}
-              </div>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
-
-        {/* Voice & Style */}
-        <Card className="p-3 border-border/50 bg-card/60">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Mic className="w-4 h-4 text-primary" />
-              <span className="text-xs font-bold">Voice & Style</span>
-              <span className="text-[9px] text-muted-foreground">+{costs.text_to_speech || 3}/min</span>
-            </div>
-            <Switch checked={voiceEnabled} onCheckedChange={setVoiceEnabled} />
-          </div>
-          {voiceEnabled && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[9px] text-muted-foreground mb-1 block">Voice Style</label>
-                <Select value={voiceStyle} onValueChange={setVoiceStyle}>
-                  <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
-                  <SelectContent className="max-h-48">
-                    {VOICE_STYLES.map(s => <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-[9px] text-muted-foreground mb-1 block">Tone</label>
-                <Select value={voiceTone} onValueChange={setVoiceTone}>
-                  <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
-                  <SelectContent className="max-h-48">
-                    {VOICE_TONES.map(t => <SelectItem key={t} value={t} className="text-xs">{t}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </motion.div>
-          )}
-        </Card>
-
-        {/* Copyright Protection */}
-        <Card className="p-3 border-border/50 bg-card/60">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Shield className="w-4 h-4 text-primary" />
-              <span className="text-xs font-bold">Copyright Protection</span>
-              <span className="text-[9px] text-muted-foreground">+{costs.copyright_check || 4}</span>
-            </div>
-            <Switch checked={copyrightEnabled} onCheckedChange={setCopyrightEnabled} />
-          </div>
-        </Card>
-
-        {/* Watermark Text */}
-        <Card className="p-3 border-border/50 bg-card/60">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Type className="w-4 h-4 text-primary" />
-              <span className="text-xs font-bold">Watermark Text</span>
-              <span className="text-[9px] text-muted-foreground">+1</span>
-            </div>
-            <Switch checked={watermarkEnabled} onCheckedChange={setWatermarkEnabled} />
-          </div>
-          {watermarkEnabled && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <Input placeholder="Watermark text ထည့်ပါ..." value={watermarkText}
-                onChange={e => setWatermarkText(e.target.value)} className="text-xs h-8" />
-            </motion.div>
-          )}
-        </Card>
-
-        {/* Image Logo */}
-        <Card className="p-3 border-border/50 bg-card/60">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Image className="w-4 h-4 text-primary" />
-              <span className="text-xs font-bold">Image Logo</span>
-              <span className="text-[9px] text-muted-foreground">+2</span>
-            </div>
-            <Switch checked={logoEnabled} onCheckedChange={setLogoEnabled} />
-          </div>
-          {logoEnabled && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2">
-              <input ref={logoInputRef} type="file" accept="image/*" className="hidden"
-                onChange={e => setLogoFile(e.target.files?.[0] || null)} />
-              <Button variant="outline" size="sm" className="w-full text-[10px] h-8" onClick={() => logoInputRef.current?.click()}>
-                <Upload className="w-3 h-3 mr-1" />
-                {logoFile ? logoFile.name : "Logo Upload"}
-              </Button>
-              <div className="grid grid-cols-4 gap-1">
-                {LOGO_POSITIONS.map(pos => (
-                  <button key={pos.id} onClick={() => setLogoPosition(pos.id)}
-                    className={`py-1.5 rounded text-[9px] border transition-all ${
-                      logoPosition === pos.id ? "border-primary bg-primary/10 font-bold" : "border-border/30"
-                    }`}>{pos.label}</button>
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </Card>
-
-        {/* Intro/Outro */}
-        <Card className="p-3 border-border/50 bg-card/60">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Film className="w-4 h-4 text-primary" />
-              <span className="text-xs font-bold">Intro / Outro</span>
-              <span className="text-[9px] text-muted-foreground">+5</span>
-            </div>
-            <Switch checked={introOutroEnabled} onCheckedChange={setIntroOutroEnabled} />
-          </div>
-          {introOutroEnabled && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-2 gap-2">
-              <div>
-                <input ref={introInputRef} type="file" accept="video/*" className="hidden"
-                  onChange={e => setIntroFile(e.target.files?.[0] || null)} />
-                <Button variant="outline" size="sm" className="w-full text-[9px] h-8" onClick={() => introInputRef.current?.click()}>
-                  <Upload className="w-3 h-3 mr-1" />
-                  {introFile ? "✅ Intro" : "Intro Upload"}
-                </Button>
-              </div>
-              <div>
-                <input ref={outroInputRef} type="file" accept="video/*" className="hidden"
-                  onChange={e => setOutroFile(e.target.files?.[0] || null)} />
-                <Button variant="outline" size="sm" className="w-full text-[9px] h-8" onClick={() => outroInputRef.current?.click()}>
-                  <Upload className="w-3 h-3 mr-1" />
-                  {outroFile ? "✅ Outro" : "Outro Upload"}
-                </Button>
-              </div>
-            </motion.div>
-          )}
-        </Card>
-
-        {/* Subtitles */}
-        <Card className="p-3 border-border/50 bg-card/60">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Subtitles className="w-4 h-4 text-primary" />
-              <span className="text-xs font-bold">Subtitles</span>
-              <span className="text-[9px] text-muted-foreground">+{costs.caption_per_minute || 8}/min</span>
-            </div>
-            <Switch checked={subtitlesEnabled} onCheckedChange={setSubtitlesEnabled} />
-          </div>
-          {subtitlesEnabled && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <Select value={subtitleLanguage} onValueChange={setSubtitleLanguage}>
-                <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
-                <SelectContent className="max-h-48">
-                  {LANGUAGES.map(l => <SelectItem key={l} value={l} className="text-xs">{l}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <p className="text-[8px] text-muted-foreground mt-1 font-myanmar">
-                ⚠️ သတ်ပုံ 100% စစ်ဆေးထားပါသည် (AI Spellcheck)
-              </p>
-            </motion.div>
-          )}
-        </Card>
-      </div>
-
-      {/* Credit Summary & Generate */}
-      <Card className="p-4 border-primary/30 bg-primary/5">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <p className="text-xs font-bold">Total Credits</p>
-            <p className="text-[9px] text-muted-foreground font-myanmar">20% Auto Service discount ပါဝင်ပါသည်</p>
-          </div>
-          <div className="text-right">
-            <p className="text-xl font-bold text-primary">{totalCredits}</p>
-            <p className="text-[9px] text-muted-foreground">Your balance: {credits}</p>
-          </div>
-        </div>
-
-        {/* Cost breakdown */}
-        <div className="space-y-1 mb-3 text-[9px] text-muted-foreground border-t border-border/30 pt-2">
-          <div className="flex justify-between"><span>Base ({durationMinutes}min)</span><span>{(costs.video_generation || 10) * durationMinutes}</span></div>
-          {voiceEnabled && <div className="flex justify-between"><span>Voice ({durationMinutes}min)</span><span>+{(costs.text_to_speech || 3) * durationMinutes}</span></div>}
-          {subtitlesEnabled && <div className="flex justify-between"><span>Subtitles ({durationMinutes}min)</span><span>+{(costs.caption_per_minute || 8) * durationMinutes}</span></div>}
-          {copyrightEnabled && <div className="flex justify-between"><span>Copyright</span><span>+{costs.copyright_check || 4}</span></div>}
-          {logoEnabled && <div className="flex justify-between"><span>Logo</span><span>+2</span></div>}
-          {watermarkEnabled && <div className="flex justify-between"><span>Watermark</span><span>+1</span></div>}
-          {introOutroEnabled && <div className="flex justify-between"><span>Intro/Outro</span><span>+5</span></div>}
-          <div className="flex justify-between font-bold text-primary border-t border-border/30 pt-1">
-            <span>After 20% discount</span><span>{totalCredits}</span>
-          </div>
-        </div>
-
-        <Button className="w-full" size="lg" onClick={handleGenerate}
-          disabled={isGenerating || credits < totalCredits}>
-          {isGenerating ? (
-            <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Generating...</>
-          ) : credits < totalCredits ? (
-            "Credits မလုံလောက်ပါ"
-          ) : (
-            <><Zap className="w-4 h-4 mr-2" /> Generate Video ({totalCredits} Credits)</>
-          )}
-        </Button>
-      </Card>
-
-      {/* Output Gallery */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-bold font-myanmar">📺 Auto Service Gallery</p>
-          <Button variant="ghost" size="sm" onClick={fetchVideos} className="h-7">
-            <RefreshCw className="w-3 h-3" />
-          </Button>
-        </div>
-
-        {videos.length === 0 ? (
-          <Card className="p-6 border-border/50 bg-card/60 text-center">
-            <Video className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-40" />
-            <p className="text-xs text-muted-foreground font-myanmar">ဗီဒီယို မရှိသေးပါ</p>
-          </Card>
-        ) : (
-          videos.map(video => (
-            <Card key={video.id} className="p-3 border-border/50 bg-card/60">
-              <div className="flex items-start gap-3">
-                <div className="w-14 h-14 rounded-lg bg-secondary/50 flex items-center justify-center shrink-0">
-                  {video.thumbnail_url ? (
-                    <img src={video.thumbnail_url} alt="" className="w-full h-full rounded-lg object-cover" />
-                  ) : (
-                    <Video className="w-5 h-5 text-muted-foreground" />
-                  )}
+            {/* Copyright Protection */}
+            <Card className="p-3 border-border/50 bg-card/60">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-primary" />
+                  <span className="text-xs font-bold">Copyright Protection</span>
+                  <span className="text-[9px] text-muted-foreground">+{costs.copyright_check || 4}</span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[11px] font-bold truncate">{video.title}</p>
-                  <p className="text-[9px] text-muted-foreground">{video.generated_date} • {video.target_language}</p>
-                  <div className="flex items-center gap-1 mt-1">
-                    {video.generation_status === "completed" ? (
-                      <Badge variant="secondary" className="text-[8px] bg-green-500/10 text-green-500">
-                        <CheckCircle className="w-2.5 h-2.5 mr-0.5" /> Done
-                      </Badge>
-                    ) : video.generation_status === "failed" ? (
-                      <Badge variant="destructive" className="text-[8px]">
-                        <XCircle className="w-2.5 h-2.5 mr-0.5" /> Failed
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary" className="text-[8px]">
-                        <Loader2 className="w-2.5 h-2.5 mr-0.5 animate-spin" /> Processing
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-                {video.video_url && (
-                  <div className="flex gap-1 shrink-0">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
-                      <a href={video.video_url} target="_blank" rel="noopener noreferrer"><Play className="w-3.5 h-3.5" /></a>
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
-                      <a href={video.video_url} download><Download className="w-3.5 h-3.5" /></a>
-                    </Button>
-                  </div>
-                )}
+                <Switch checked={copyrightEnabled} onCheckedChange={setCopyrightEnabled} />
               </div>
             </Card>
-          ))
-        )}
-      </div>
 
-      {/* Support Chat */}
-      <Card className="p-3 border-border/50 bg-card/60">
-        <div className="flex items-center gap-2 mb-2">
-          <MessageCircle className="w-4 h-4 text-primary" />
-          <span className="text-xs font-bold">Support Chat</span>
-        </div>
-        <div className="max-h-40 overflow-y-auto space-y-1.5 mb-2">
-          {supportChat.length === 0 && (
-            <p className="text-[9px] text-muted-foreground text-center py-3 font-myanmar">
-              Auto Service ပြဿနာ ရှိပါက မေးမြန်းနိုင်ပါသည်
-            </p>
-          )}
-          {supportChat.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[80%] rounded-lg px-2.5 py-1.5 text-[10px] ${
-                msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"
-              }`}>
-                <p className="font-myanmar whitespace-pre-wrap">{msg.content}</p>
+            {/* Watermark Text */}
+            <Card className="p-3 border-border/50 bg-card/60">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Type className="w-4 h-4 text-primary" />
+                  <span className="text-xs font-bold">Watermark Text</span>
+                  <span className="text-[9px] text-muted-foreground">+1</span>
+                </div>
+                <Switch checked={watermarkEnabled} onCheckedChange={setWatermarkEnabled} />
+              </div>
+              {watermarkEnabled && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                  <Input placeholder="Watermark text ထည့်ပါ..." value={watermarkText}
+                    onChange={e => setWatermarkText(e.target.value)} className="text-xs h-8" />
+                </motion.div>
+              )}
+            </Card>
+
+            {/* Image Logo */}
+            <Card className="p-3 border-border/50 bg-card/60">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Image className="w-4 h-4 text-primary" />
+                  <span className="text-xs font-bold">Image Logo</span>
+                  <span className="text-[9px] text-muted-foreground">+2</span>
+                </div>
+                <Switch checked={logoEnabled} onCheckedChange={setLogoEnabled} />
+              </div>
+              {logoEnabled && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2">
+                  <input ref={logoInputRef} type="file" accept="image/*" className="hidden"
+                    onChange={e => setLogoFile(e.target.files?.[0] || null)} />
+                  <Button variant="outline" size="sm" className="w-full text-[10px] h-8" onClick={() => logoInputRef.current?.click()}>
+                    <Upload className="w-3 h-3 mr-1" />{logoFile ? logoFile.name : "Logo Upload"}
+                  </Button>
+                  <div className="grid grid-cols-4 gap-1">
+                    {LOGO_POSITIONS.map(pos => (
+                      <button key={pos.id} onClick={() => setLogoPosition(pos.id)}
+                        className={`py-1.5 rounded text-[9px] border transition-all ${
+                          logoPosition === pos.id ? "border-primary bg-primary/10 font-bold" : "border-border/30"
+                        }`}>{pos.label}</button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </Card>
+
+            {/* Intro/Outro */}
+            <Card className="p-3 border-border/50 bg-card/60">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Film className="w-4 h-4 text-primary" />
+                  <span className="text-xs font-bold">Intro / Outro</span>
+                  <span className="text-[9px] text-muted-foreground">+5</span>
+                </div>
+                <Switch checked={introOutroEnabled} onCheckedChange={setIntroOutroEnabled} />
+              </div>
+              {introOutroEnabled && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-2 gap-2">
+                  <div>
+                    <input ref={introInputRef} type="file" accept="video/*" className="hidden"
+                      onChange={e => setIntroFile(e.target.files?.[0] || null)} />
+                    <Button variant="outline" size="sm" className="w-full text-[9px] h-8" onClick={() => introInputRef.current?.click()}>
+                      <Upload className="w-3 h-3 mr-1" />{introFile ? "✅ Intro" : "Intro Upload"}
+                    </Button>
+                  </div>
+                  <div>
+                    <input ref={outroInputRef} type="file" accept="video/*" className="hidden"
+                      onChange={e => setOutroFile(e.target.files?.[0] || null)} />
+                    <Button variant="outline" size="sm" className="w-full text-[9px] h-8" onClick={() => outroInputRef.current?.click()}>
+                      <Upload className="w-3 h-3 mr-1" />{outroFile ? "✅ Outro" : "Outro Upload"}
+                    </Button>
+                  </div>
+                </motion.div>
+              )}
+            </Card>
+
+            {/* Subtitles */}
+            <Card className="p-3 border-border/50 bg-card/60">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Subtitles className="w-4 h-4 text-primary" />
+                  <span className="text-xs font-bold">Subtitles</span>
+                  <span className="text-[9px] text-muted-foreground">+{costs.caption_per_minute || 8}/min</span>
+                </div>
+                <Switch checked={subtitlesEnabled} onCheckedChange={setSubtitlesEnabled} />
+              </div>
+              {subtitlesEnabled && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                  <Select value={subtitleLanguage} onValueChange={setSubtitleLanguage}>
+                    <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
+                    <SelectContent className="max-h-48">
+                      {LANGUAGES.map(l => <SelectItem key={l} value={l} className="text-xs">{l}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[8px] text-muted-foreground mt-1 font-myanmar">
+                    ⚠️ သတ်ပုံ 100% စစ်ဆေးထားပါသည် (AI Spellcheck)
+                  </p>
+                </motion.div>
+              )}
+            </Card>
+          </div>
+
+          {/* Monthly Credit Summary & Save */}
+          <Card className="p-4 border-primary/30 bg-primary/5">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-xs font-bold font-myanmar">💎 Monthly Package (30 ရက်)</p>
+                <p className="text-[9px] text-muted-foreground font-myanmar">20% Auto Service discount ပါဝင်ပါသည်</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xl font-bold text-primary">{creditCalc.discounted}</p>
+                <p className="text-[9px] text-muted-foreground">Credits | Balance: {credits}</p>
               </div>
             </div>
-          ))}
-          {isSendingSupport && (
-            <div className="flex justify-start">
-              <div className="bg-secondary rounded-lg px-2.5 py-1.5"><Loader2 className="w-3 h-3 animate-spin" /></div>
+
+            {/* Cost breakdown */}
+            <div className="space-y-1 mb-3 text-[9px] text-muted-foreground border-t border-border/30 pt-2">
+              <div className="flex justify-between">
+                <span>Per video ({durationMinutes}min)</span>
+                <span>{creditCalc.perVideoCost}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Daily ({dailyQuantity} video{dailyQuantity > 1 ? "s" : ""}/day)</span>
+                <span>{creditCalc.dailyTotal}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Monthly (×30 days)</span>
+                <span>{creditCalc.monthlyTotal}</span>
+              </div>
+              {voiceEnabled && <div className="flex justify-between"><span>  ↳ Voice included</span><span>✓</span></div>}
+              {subtitlesEnabled && <div className="flex justify-between"><span>  ↳ Subtitles included</span><span>✓</span></div>}
+              {copyrightEnabled && <div className="flex justify-between"><span>  ↳ Copyright included</span><span>✓</span></div>}
+              {logoEnabled && <div className="flex justify-between"><span>  ↳ Logo included</span><span>✓</span></div>}
+              {watermarkEnabled && <div className="flex justify-between"><span>  ↳ Watermark included</span><span>✓</span></div>}
+              {introOutroEnabled && <div className="flex justify-between"><span>  ↳ Intro/Outro included</span><span>✓</span></div>}
+              <div className="flex justify-between font-bold text-primary border-t border-border/30 pt-1">
+                <span>After 20% discount</span>
+                <span>{creditCalc.discounted} Credits</span>
+              </div>
+              {isFreeUpdate && (
+                <p className="text-green-500 text-[9px] font-bold font-myanmar">✅ Duration/Quantity တူ/လျော့ပါက အခမဲ့ ပြင်ဆင်နိုင်ပါသည်</p>
+              )}
             </div>
+
+            <Button className="w-full" size="lg" onClick={handleSaveSettings}
+              disabled={isSaving || (!isFreeUpdate && credits < creditCalc.discounted)}>
+              {isSaving ? (
+                <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Saving...</>
+              ) : !isFreeUpdate && credits < creditCalc.discounted ? (
+                "Credits မလုံလောက်ပါ"
+              ) : isFreeUpdate ? (
+                <><Save className="w-4 h-4 mr-2" /> Settings Update (FREE)</>
+              ) : (
+                <><Save className="w-4 h-4 mr-2" /> Save & Start ({creditCalc.discounted} Credits / 30 Days)</>
+              )}
+            </Button>
+          </Card>
+        </TabsContent>
+
+        {/* ===== VIDEOS TAB ===== */}
+        <TabsContent value="videos" className="space-y-3 mt-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold font-myanmar">📺 Auto Service Gallery</p>
+            <Button variant="ghost" size="sm" onClick={fetchVideos} className="h-7">
+              <RefreshCw className="w-3 h-3" />
+            </Button>
+          </div>
+
+          {videos.length === 0 ? (
+            <Card className="p-6 border-border/50 bg-card/60 text-center">
+              <Video className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-40" />
+              <p className="text-xs text-muted-foreground font-myanmar">ဗီဒီယို မရှိသေးပါ</p>
+            </Card>
+          ) : (
+            videos.map(video => (
+              <Card key={video.id} className="p-3 border-border/50 bg-card/60">
+                <div className="flex items-start gap-3">
+                  <div className="w-14 h-14 rounded-lg bg-secondary/50 flex items-center justify-center shrink-0">
+                    {video.thumbnail_url ? (
+                      <img src={video.thumbnail_url} alt="" className="w-full h-full rounded-lg object-cover" />
+                    ) : (
+                      <Video className="w-5 h-5 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-bold truncate">{video.title}</p>
+                    <p className="text-[9px] text-muted-foreground">{video.generated_date} • {video.target_language}</p>
+                    <div className="flex items-center gap-1 mt-1">
+                      {video.generation_status === "completed" ? (
+                        <Badge variant="secondary" className="text-[8px] bg-green-500/10 text-green-500">
+                          <CheckCircle className="w-2.5 h-2.5 mr-0.5" /> Done
+                        </Badge>
+                      ) : video.generation_status === "failed" ? (
+                        <Badge variant="destructive" className="text-[8px]">
+                          <XCircle className="w-2.5 h-2.5 mr-0.5" /> Failed
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-[8px]">
+                          <Loader2 className="w-2.5 h-2.5 mr-0.5 animate-spin" /> Processing
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  {video.video_url && (
+                    <div className="flex gap-1 shrink-0">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                        <a href={video.video_url} target="_blank" rel="noopener noreferrer"><Play className="w-3.5 h-3.5" /></a>
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                        <a href={video.video_url} download><Download className="w-3.5 h-3.5" /></a>
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            ))
           )}
-        </div>
-        <div className="flex gap-1.5">
-          <Textarea placeholder="မေးခွန်းထည့်ပါ..." value={supportMessage}
-            onChange={e => setSupportMessage(e.target.value)}
-            className="text-[10px] min-h-[36px] max-h-16 resize-none"
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSupportChat(); } }}
-          />
-          <Button size="icon" className="h-9 w-9 shrink-0" onClick={handleSupportChat}
-            disabled={isSendingSupport || !supportMessage.trim()}>
-            <Send className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-      </Card>
+        </TabsContent>
+
+        {/* ===== PREVIEW TAB ===== */}
+        <TabsContent value="preview" className="space-y-3 mt-3">
+          <Card className="p-4 border-border/50 bg-card/60 text-center">
+            <Eye className="w-8 h-8 text-primary mx-auto mb-2" />
+            <h3 className="text-sm font-bold mb-1 font-myanmar">10 စက္ကန့် AI Preview</h3>
+            <p className="text-[9px] text-muted-foreground font-myanmar mb-3">
+              သင့် Settings အတိုင်း AI က ဗီဒီယို Style ကို Preview ပြပေးမည်
+            </p>
+            <Button onClick={handlePreview} disabled={isLoadingPreview} className="mb-3">
+              {isLoadingPreview ? (
+                <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading...</>
+              ) : (
+                <><Eye className="w-4 h-4 mr-2" /> Preview ကြည့်မည်</>
+              )}
+            </Button>
+
+            {previewContent && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                className="text-left bg-secondary/30 rounded-xl p-3 mt-2">
+                <p className="text-[10px] font-myanmar whitespace-pre-wrap leading-relaxed">{previewContent}</p>
+              </motion.div>
+            )}
+          </Card>
+        </TabsContent>
+
+        {/* ===== SUPPORT TAB ===== */}
+        <TabsContent value="support" className="space-y-3 mt-3">
+          <Card className="p-3 border-border/50 bg-card/60">
+            <div className="flex items-center gap-2 mb-2">
+              <HeadphonesIcon className="w-4 h-4 text-primary" />
+              <span className="text-xs font-bold">AI Support Chat</span>
+            </div>
+            <div className="max-h-60 overflow-y-auto space-y-1.5 mb-2">
+              {supportChat.length === 0 && (
+                <p className="text-[9px] text-muted-foreground text-center py-6 font-myanmar">
+                  Auto Service ပြဿနာ ရှိပါက မေးမြန်းနိုင်ပါသည်။<br />
+                  Technical ပြဿနာများကို Owner ဆီသို့ အလိုအလျောက် ပေးပို့ပါမည်။
+                </p>
+              )}
+              {supportChat.map((msg, i) => (
+                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[80%] rounded-lg px-2.5 py-1.5 text-[10px] ${
+                    msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"
+                  }`}>
+                    <p className="font-myanmar whitespace-pre-wrap">{msg.content}</p>
+                  </div>
+                </div>
+              ))}
+              {isSendingSupport && (
+                <div className="flex justify-start">
+                  <div className="bg-secondary rounded-lg px-2.5 py-1.5"><Loader2 className="w-3 h-3 animate-spin" /></div>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-1.5">
+              <Textarea placeholder="မေးခွန်းထည့်ပါ..." value={supportMessage}
+                onChange={e => setSupportMessage(e.target.value)}
+                className="text-[10px] min-h-[36px] max-h-16 resize-none"
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSupportChat(); } }} />
+              <Button size="icon" className="h-9 w-9 shrink-0" onClick={handleSupportChat}
+                disabled={isSendingSupport || !supportMessage.trim()}>
+                <Send className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
