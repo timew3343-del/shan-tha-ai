@@ -193,6 +193,7 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
   const logoInputRef = useRef<HTMLInputElement>(null);
   const introInputRef = useRef<HTMLInputElement>(null);
   const outroInputRef = useRef<HTMLInputElement>(null);
+  const supportChatRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (userId) {
@@ -914,46 +915,105 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
           </Card>
         </TabsContent>
 
-        {/* ===== SUPPORT TAB ===== */}
-        <TabsContent value="support" className="space-y-3 mt-3">
-          <Card className="p-3 border-border/50 bg-card/60">
-            <div className="flex items-center gap-2 mb-2">
-              <HeadphonesIcon className="w-4 h-4 text-primary" />
-              <span className="text-xs font-bold">AI Support Chat</span>
+        {/* ===== SUPPORT TAB (Full-Screen Gemini Style) ===== */}
+        <TabsContent value="support" className="mt-0">
+          <div className="fixed inset-0 z-40 bg-background flex flex-col" style={{ top: 0 }}>
+            {/* Support Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 bg-card/80 backdrop-blur-sm">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                  <HeadphonesIcon className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold">AI Support Agent</p>
+                  <p className="text-[9px] text-muted-foreground">Auto Daily Video Service</p>
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setActiveTab("manage")} className="text-xs h-8 gap-1">
+                <Settings className="w-3.5 h-3.5" />Back
+              </Button>
             </div>
-            <div className="max-h-60 overflow-y-auto space-y-1.5 mb-2">
+
+            {/* Tab Navigation (always visible) */}
+            <div className="flex border-b border-border/30 bg-card/60 px-2">
+              {[
+                { id: "manage", icon: <Settings className="w-3 h-3" />, label: "စီမံမည်" },
+                { id: "videos", icon: <Video className="w-3 h-3" />, label: "ဗီဒီယို" },
+                { id: "preview", icon: <Eye className="w-3 h-3" />, label: "Preview" },
+                { id: "support", icon: <HeadphonesIcon className="w-3 h-3" />, label: "Support" },
+              ].map(tab => (
+                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                  className={`flex-1 flex items-center justify-center gap-1 py-2 text-[9px] font-bold border-b-2 transition-all ${
+                    activeTab === tab.id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}>
+                  {tab.icon}{tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Chat Messages (full-screen scrollable) */}
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3" ref={supportChatRef}>
               {supportChat.length === 0 && (
-                <p className="text-[9px] text-muted-foreground text-center py-6 font-myanmar">
-                  Auto Service ပြဿနာ ရှိပါက မေးမြန်းနိုင်ပါသည်။<br />
-                  Technical ပြဿနာများကို Owner ဆီသို့ အလိုအလျောက် ပေးပို့ပါမည်။
-                </p>
+                <div className="flex flex-col items-center justify-center h-full text-center px-4">
+                  <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+                    <HeadphonesIcon className="w-8 h-8 text-primary" />
+                  </div>
+                  <h3 className="text-base font-bold mb-2 font-myanmar">AI Support Agent</h3>
+                  <p className="text-xs text-muted-foreground font-myanmar leading-relaxed max-w-xs mb-4">
+                    Auto Daily Video Service နှင့် ပတ်သက်ပြီး မေးမြန်းနိုင်ပါသည်။
+                    Settings ထည့်နည်း၊ Credit Policy၊ ဗီဒီယို Delivery အကြောင်း ရှင်းပြပေးပါမည်။
+                  </p>
+                  <div className="grid grid-cols-1 gap-2 w-full max-w-xs">
+                    {[
+                      "Settings ထည့်နည်း ရှင်းပြပါ",
+                      "Credit Policy ကို ရှင်းပြပါ",
+                      "ဗီဒီယို ဘယ်အချိန် ရမလဲ",
+                    ].map((q, i) => (
+                      <button key={i} onClick={() => { setSupportMessage(q); }}
+                        className="text-left px-3 py-2 rounded-xl border border-border/50 bg-secondary/20 hover:bg-secondary/40 text-[10px] font-myanmar transition-all">
+                        💬 {q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
+
               {supportChat.map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[80%] rounded-lg px-2.5 py-1.5 text-[10px] ${
-                    msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"
+                  <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-xs leading-relaxed ${
+                    msg.role === "user"
+                      ? "bg-primary text-primary-foreground rounded-br-md"
+                      : "bg-secondary/70 text-foreground rounded-bl-md"
                   }`}>
                     <p className="font-myanmar whitespace-pre-wrap">{msg.content}</p>
                   </div>
                 </div>
               ))}
+
               {isSendingSupport && (
                 <div className="flex justify-start">
-                  <div className="bg-secondary rounded-lg px-2.5 py-1.5"><Loader2 className="w-3 h-3 animate-spin" /></div>
+                  <div className="bg-secondary/70 rounded-2xl rounded-bl-md px-4 py-3 flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                    <span className="text-xs text-muted-foreground font-myanmar">စဉ်းစားနေသည်...</span>
+                  </div>
                 </div>
               )}
             </div>
-            <div className="flex gap-1.5">
-              <Textarea placeholder="မေးခွန်းထည့်ပါ..." value={supportMessage}
-                onChange={e => setSupportMessage(e.target.value)}
-                className="text-[10px] min-h-[36px] max-h-16 resize-none"
-                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSupportChat(); } }} />
-              <Button size="icon" className="h-9 w-9 shrink-0" onClick={handleSupportChat}
-                disabled={isSendingSupport || !supportMessage.trim()}>
-                <Send className="w-3.5 h-3.5" />
-              </Button>
+
+            {/* Input Area (bottom fixed) */}
+            <div className="border-t border-border/50 bg-card/80 backdrop-blur-sm p-3">
+              <div className="flex gap-2 max-w-lg mx-auto">
+                <Textarea placeholder="မေးခွန်းထည့်ပါ..." value={supportMessage}
+                  onChange={e => setSupportMessage(e.target.value)}
+                  className="text-xs min-h-[40px] max-h-24 resize-none rounded-xl"
+                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSupportChat(); } }} />
+                <Button size="icon" className="h-10 w-10 shrink-0 rounded-xl" onClick={handleSupportChat}
+                  disabled={isSendingSupport || !supportMessage.trim()}>
+                  <Send className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
-          </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

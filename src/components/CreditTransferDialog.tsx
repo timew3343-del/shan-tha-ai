@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowRightLeft, Copy, Check, Loader2, AlertCircle } from "lucide-react";
+import { ArrowRightLeft, Copy, Check, Loader2, AlertCircle, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
@@ -31,12 +32,51 @@ export const CreditTransferDialog = ({
   const [amount, setAmount] = useState("");
   const [isTransferring, setIsTransferring] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [receiverProfile, setReceiverProfile] = useState<{ full_name: string | null; avatar_url: string | null } | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verifyError, setVerifyError] = useState("");
   const { toast } = useToast();
 
   const parsedAmount = parseInt(amount, 10);
   const isInsufficientBalance = !isNaN(parsedAmount) && parsedAmount > currentBalance;
   const isSelfTransfer = receiverId.trim() === userId;
-  const isValid = receiverId.trim().length === 36 && !isNaN(parsedAmount) && parsedAmount > 0 && !isInsufficientBalance && !isSelfTransfer;
+  const isValidUuid = receiverId.trim().length === 36;
+  const isValid = isValidUuid && !isNaN(parsedAmount) && parsedAmount > 0 && !isInsufficientBalance && !isSelfTransfer && receiverProfile !== null;
+
+  // Real-time receiver verification when UUID changes
+  useEffect(() => {
+    setReceiverProfile(null);
+    setVerifyError("");
+
+    if (!isValidUuid || isSelfTransfer) return;
+
+    const timer = setTimeout(async () => {
+      setIsVerifying(true);
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("full_name, avatar_url")
+          .eq("user_id", receiverId.trim())
+          .maybeSingle();
+
+        if (error) throw error;
+        if (!data) {
+          setVerifyError("User မရှိပါ။ UUID ကို ပြန်စစ်ပါ။");
+          setReceiverProfile(null);
+        } else {
+          setReceiverProfile(data);
+          setVerifyError("");
+        }
+      } catch {
+        setVerifyError("စစ်ဆေး၍ မရပါ");
+        setReceiverProfile(null);
+      } finally {
+        setIsVerifying(false);
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [receiverId, isSelfTransfer, isValidUuid]);
 
   const handleCopyId = async () => {
     await navigator.clipboard.writeText(userId);
@@ -68,6 +108,7 @@ export const CreditTransferDialog = ({
 
       setReceiverId("");
       setAmount("");
+      setReceiverProfile(null);
       setOpen(false);
       onTransferComplete?.();
     } catch (error: any) {
@@ -135,7 +176,38 @@ export const CreditTransferDialog = ({
                 သင့်ကိုယ်သင် လွှဲပြောင်း၍ မရပါ
               </p>
             )}
+            {verifyError && (
+              <p className="text-xs text-destructive flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                {verifyError}
+              </p>
+            )}
+            {isVerifying && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                စစ်ဆေးနေသည်...
+              </p>
+            )}
           </div>
+
+          {/* Receiver Profile Preview */}
+          {receiverProfile && (
+            <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/30 flex items-center gap-3">
+              <Avatar className="w-10 h-10">
+                <AvatarImage src={receiverProfile.avatar_url || undefined} />
+                <AvatarFallback className="bg-primary/10 text-primary text-sm font-bold">
+                  {(receiverProfile.full_name || "U").charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1">
+                  <UserCheck className="w-3.5 h-3.5 text-green-500" />
+                  <span className="text-xs font-bold text-green-600 dark:text-green-400">Verified</span>
+                </div>
+                <p className="text-sm font-semibold truncate">{receiverProfile.full_name || "Unknown User"}</p>
+              </div>
+            </div>
+          )}
 
           {/* Amount */}
           <div className="space-y-1.5">
