@@ -31,6 +31,14 @@ interface ApiBalance {
 // ─── API Definitions ─────────────────────────────────────────
 const API_KEYS: ApiKeyConfig[] = [
   {
+    key: "openai",
+    label: "OpenAI",
+    description: "GPT-5, AI Caption, Translator, Agentic AI",
+    settingKey: "openai_api_key",
+    toggleKey: "api_enabled_openai",
+    tasks: ["AI Caption", "Translator", "Agentic AI", "Text Generation", "Complex Reasoning"],
+  },
+  {
     key: "gemini",
     label: "Google Gemini",
     description: "Text, Audio, Complex Reasoning",
