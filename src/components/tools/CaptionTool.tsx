@@ -295,7 +295,7 @@ export const CaptionTool = ({ userId, onBack }: CaptionToolProps) => {
       className="space-y-4 p-4 pb-24"
     >
       <ToolHeader
-        title="AI Caption and Translator/Speaker"
+        title="AI Caption & Translator/Speaker"
         subtitle="စာတန်းထိုး နှင့် ဘာသာစကားပြောင်းလဲပြောဆိုသူ"
         onBack={onBack}
       />

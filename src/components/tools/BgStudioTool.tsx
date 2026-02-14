@@ -268,7 +268,7 @@ export const BgStudioTool = ({ userId, onBack }: BgStudioToolProps) => {
 
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4 p-4 pb-24">
-      <ToolHeader title="AI Background Studio" subtitle="ပစ္စည်းပုံကို Professional နောက်ခံတွင် ထားပေးခြင်း" onBack={onBack} />
+      <ToolHeader title="AI Background Studio" subtitle="ပစ္စည်းပုံများအတွက် အလန်းစား နောက်ခံစတူဒီယို" onBack={onBack} />
       <FirstOutputGuide toolName="Background Studio" show={showGuide} steps={["ပစ္စည်းပုံ တင်ပါ", "နောက်ခံ ရွေးပါ", "နောက်ခံပြောင်း နှိပ်ပါ"]} />
 
       {/* Image Upload */}

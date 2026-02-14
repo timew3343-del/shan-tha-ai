@@ -102,7 +102,7 @@ export const PhotoRestoreTool = ({ userId, onBack }: Props) => {
 
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4 p-4 pb-24">
-      <ToolHeader title="AI ဓာတ်ပုံဟောင်း ပြုပြင်သူ" subtitle={`ပုံဟောင်းများကို အများဆုံး ${MAX_IMAGES} ပုံ တစ်ပြိုင်နက် ပြုပြင်ပေးခြင်း`} onBack={onBack} />
+      <ToolHeader title="AI Photo Restore & Enhancement" subtitle="ဓာတ်ပုံဟောင်းများ ပြုပြင်ခြင်းနှင့် ကြည်လင်အောင်လုပ်ခြင်း" onBack={onBack} />
       <FirstOutputGuide toolName="Photo Restore" show={showGuide} steps={["ပုံဟောင်းများ တင်ပါ", "ပြုပြင်မည် နှိပ်ပါ"]} onDismiss={markAsLearned} />
 
       {/* Upload Area */}
