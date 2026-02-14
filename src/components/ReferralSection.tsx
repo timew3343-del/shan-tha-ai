@@ -16,13 +16,26 @@ export const ReferralSection = ({ userId }: ReferralSectionProps) => {
   const [creditsEarned, setCreditsEarned] = useState(0);
   const [copied, setCopied] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [promoText, setPromoText] = useState("သင့်လင့်ခ်မှတစ်ဆင့် အသစ်ဝင်လာသူတိုင်း နှစ်ဦးစလုံး Credits စီရရှိမည်။");
 
   useEffect(() => {
     const fetchOrCreateReferralCode = async () => {
       if (!userId) return;
 
       try {
-        // Fetch existing codes - use limit 1 + order to get first created
+        // Fetch dynamic promo text from admin settings
+        const { data: settingsData } = await supabase
+          .from("app_settings")
+          .select("key, value")
+          .in("key", ["referral_promo_text"]);
+        
+        if (settingsData) {
+          settingsData.forEach(s => {
+            if (s.key === "referral_promo_text" && s.value) setPromoText(s.value);
+          });
+        }
+
+        // Fetch existing codes
         const { data: existingCodes } = await supabase
           .from("referral_codes")
           .select("*")
@@ -36,7 +49,6 @@ export const ReferralSection = ({ userId }: ReferralSectionProps) => {
           setUsesCount(existing.uses_count);
           setCreditsEarned(existing.credits_earned);
         } else {
-          // Generate new code only if none exists
           const code = `MAI${userId.substring(0, 6).toUpperCase()}${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
           const { data: newCode, error } = await supabase
             .from("referral_codes")
@@ -63,10 +75,7 @@ export const ReferralSection = ({ userId }: ReferralSectionProps) => {
     const link = `${window.location.origin}/auth?ref=${referralCode}`;
     await navigator.clipboard.writeText(link);
     setCopied(true);
-    toast({
-      title: "ကူးယူပြီးပါပြီ",
-      description: "Referral link ကို ကူးယူပြီးပါပြီ",
-    });
+    toast({ title: "ကူးယူပြီးပါပြီ", description: "Referral link ကို ကူးယူပြီးပါပြီ" });
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -77,10 +86,7 @@ export const ReferralSection = ({ userId }: ReferralSectionProps) => {
 
     if (navigator.share) {
       try {
-        await navigator.share({
-          title: "Myanmar AI",
-          text: message,
-        });
+        await navigator.share({ title: "Myanmar AI", text: message });
       } catch (e) {
         handleCopy();
       }
@@ -109,7 +115,7 @@ export const ReferralSection = ({ userId }: ReferralSectionProps) => {
       </div>
 
       <p className="text-xs text-muted-foreground mb-3 font-myanmar">
-        သင့်လင့်ခ်မှတစ်ဆင့် အသစ်ဝင်လာသူတိုင်း နှစ်ဦးစလုံး 5 Credits စီရရှိမည်။
+        {promoText}
       </p>
 
       <div className="bg-secondary/50 rounded-xl p-3 mb-3">
@@ -117,27 +123,14 @@ export const ReferralSection = ({ userId }: ReferralSectionProps) => {
           <code className="text-xs text-primary font-mono truncate">
             {referralCode || "Loading..."}
           </code>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleCopy}
-            className="shrink-0 h-8 w-8 p-0"
-          >
-            {copied ? (
-              <Check className="w-4 h-4 text-green-500" />
-            ) : (
-              <Copy className="w-4 h-4" />
-            )}
+          <Button size="sm" variant="ghost" onClick={handleCopy} className="shrink-0 h-8 w-8 p-0">
+            {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
           </Button>
         </div>
       </div>
 
       <div className="flex gap-2 mb-3">
-        <Button
-          onClick={handleShare}
-          size="sm"
-          className="flex-1 bg-primary text-primary-foreground"
-        >
+        <Button onClick={handleShare} size="sm" className="flex-1 bg-primary text-primary-foreground">
           <Share2 className="w-4 h-4 mr-1" />
           <span className="font-myanmar">မျှဝေမည်</span>
         </Button>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, Download, RefreshCw, Sparkles, Palette, Check } from "lucide-react";
+import { Loader2, Download, Sparkles, Palette, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,8 +28,12 @@ const PLATFORMS = [
 const DESIGN_STYLES = [
   { value: "modern", label: "ခေတ်မီ Minimalist" },
   { value: "3d_minimalist", label: "3D Minimalist" },
+  { value: "3d_gold", label: "3D Gold Embossed" },
+  { value: "3d_metallic", label: "3D Metallic Chrome" },
   { value: "luxury_gold", label: "Luxury Gold" },
+  { value: "luxury_diamond", label: "Luxury Diamond" },
   { value: "retro", label: "Retro / Vintage" },
+  { value: "vintage_stamp", label: "Vintage Stamp / Badge" },
   { value: "cyberpunk", label: "Cyberpunk" },
   { value: "corporate", label: "Professional Corporate" },
   { value: "playful", label: "Playful / Fun" },
@@ -37,17 +41,42 @@ const DESIGN_STYLES = [
   { value: "bold", label: "Bold & Strong" },
   { value: "nature", label: "Nature / Organic" },
   { value: "tech", label: "Tech / Digital" },
-  { value: "hand_drawn", label: "Hand-Drawn" },
+  { value: "hand_drawn", label: "Hand-Drawn / Sketch" },
   { value: "geometric", label: "Geometric" },
   { value: "gradient", label: "Gradient Modern" },
   { value: "flat", label: "Flat Design" },
   { value: "art_deco", label: "Art Deco" },
   { value: "neon", label: "Neon Glow" },
+  { value: "neon_sign", label: "Neon Sign on Wall" },
   { value: "watercolor", label: "Watercolor" },
   { value: "myanmar_traditional", label: "Myanmar Traditional" },
   { value: "abstract", label: "Abstract" },
   { value: "monochrome", label: "Monochrome" },
   { value: "pastel", label: "Pastel Soft" },
+  { value: "grunge", label: "Grunge / Distressed" },
+  { value: "line_art", label: "Minimalist Line Art" },
+  { value: "calligraphy", label: "Calligraphy / Script" },
+  { value: "emblem", label: "Emblem / Crest" },
+  { value: "mascot", label: "Mascot Character" },
+  { value: "pixel_art", label: "Pixel Art / 8-Bit" },
+  { value: "isometric", label: "Isometric 3D" },
+  { value: "sticker", label: "Sticker / Die-Cut" },
+  { value: "lettermark", label: "Lettermark / Monogram" },
+  { value: "wordmark", label: "Wordmark Typography" },
+  { value: "negative_space", label: "Negative Space" },
+  { value: "bauhaus", label: "Bauhaus" },
+  { value: "swiss", label: "Swiss / International" },
+  { value: "japanese", label: "Japanese Minimal" },
+  { value: "chinese_ink", label: "Chinese Ink Brush" },
+  { value: "pop_art", label: "Pop Art" },
+  { value: "glass_morphism", label: "Glassmorphism" },
+  { value: "neumorphism", label: "Neumorphism" },
+  { value: "luxury_floral", label: "Luxury Floral" },
+  { value: "gothic", label: "Gothic / Dark" },
+  { value: "sci_fi", label: "Sci-Fi Futuristic" },
+  { value: "cartoon", label: "Cartoon / Comic" },
+  { value: "woodcut", label: "Woodcut / Engraving" },
+  { value: "foil_stamp", label: "Gold Foil Stamp" },
 ];
 
 const ASPECT_RATIOS: Record<string, { w: number; h: number }> = {
@@ -68,6 +97,7 @@ export const LogoDesignTool = ({ userId, onBack }: LogoDesignToolProps) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<{ platform: string; url: string; aspect: string }[]>([]);
   const [generationProgress, setGenerationProgress] = useState({ done: 0, total: 0 });
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const { showGuide, markAsLearned, saveOutput } = useToolOutput("logo-design", "Logo Design");
 
   const baseCostPerImage = costs.logo_design || 5;
@@ -95,6 +125,7 @@ export const LogoDesignTool = ({ userId, onBack }: LogoDesignToolProps) => {
 
     setIsGenerating(true);
     setGeneratedImages([]);
+    setGenerationError(null);
     setGenerationProgress({ done: 0, total: selectedPlatforms.length });
 
     const styleLabel = DESIGN_STYLES.find(s => s.value === designStyle)?.label || designStyle;
@@ -110,13 +141,13 @@ export const LogoDesignTool = ({ userId, onBack }: LogoDesignToolProps) => {
         if (!platform) continue;
 
         const dimensions = ASPECT_RATIOS[platform.aspect] || ASPECT_RATIOS["1:1"];
-        const prompt = `Professional ${platform.label} design for "${businessName}" (${businessType || "business"}). Style: ${styleLabel}. Clean, high-quality, commercial-ready design. ${
-          platformKey === "logo" ? "Minimal, scalable vector-style logo on a clean background." :
-          platformKey === "fb_cover" ? "Wide banner format, eye-catching, brand-focused." :
-          platformKey === "business_card" ? "Elegant business card layout with contact info area." :
-          platformKey === "youtube_banner" ? "Dynamic YouTube channel banner with branding." :
-          platformKey === "instagram_post" ? "Square format, Instagram-optimized, visually striking." :
-          "Vertical TikTok background with bold branding."
+        const prompt = `Professional ${platform.label} design for "${businessName}" (${businessType || "business"}). Style: ${styleLabel}. IMPORTANT: The text "${businessName}" MUST be clearly visible and legible as the main text in the design. Clean, high-quality, commercial-ready design. ${
+          platformKey === "logo" ? `Minimal, scalable logo with "${businessName}" as prominent text on a clean background.` :
+          platformKey === "fb_cover" ? `Wide banner format with "${businessName}" prominently displayed, eye-catching, brand-focused.` :
+          platformKey === "business_card" ? `Elegant business card layout with "${businessName}" as the main heading and contact info area.` :
+          platformKey === "youtube_banner" ? `Dynamic YouTube channel banner with "${businessName}" branding.` :
+          platformKey === "instagram_post" ? `Square format with "${businessName}" text, Instagram-optimized, visually striking.` :
+          `Vertical TikTok background with "${businessName}" bold branding.`
         } Brand identity: consistent colors and design language.`;
 
         const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`, {
@@ -128,15 +159,23 @@ export const LogoDesignTool = ({ userId, onBack }: LogoDesignToolProps) => {
         if (!response.ok) {
           const err = await response.json();
           console.error(`Failed for ${platform.label}:`, err);
+          setGenerationError(`${platform.label} ဒီဇိုင်း ဖန်တီးရာတွင် အမှားရှိပါသည်: ${err.error || 'Unknown error'}`);
           continue;
         }
 
         const data = await response.json();
-        if (data.imageUrl) {
-          results.push({ platform: platform.label, url: data.imageUrl, aspect: platform.aspect });
+        if (data.imageUrl || data.image) {
+          results.push({ platform: platform.label, url: data.imageUrl || data.image, aspect: platform.aspect });
           setGeneratedImages([...results]);
+        } else {
+          setGenerationError(`${platform.label} အတွက် ပုံမထွက်ပါ - API response empty`);
         }
         setGenerationProgress({ done: results.length, total: selectedPlatforms.length });
+      }
+
+      if (results.length === 0) {
+        setGenerationError("ဒီဇိုင်း တစ်ခုမှ ဖန်တီးမရပါ။ ကျေးဇူးပြု၍ ထပ်ကြိုးစားပါ။");
+        return;
       }
 
       // Deduct credits
@@ -151,6 +190,7 @@ export const LogoDesignTool = ({ userId, onBack }: LogoDesignToolProps) => {
       toast({ title: "ဖန်တီးပြီးပါပြီ!", description: `${results.length} ဒီဇိုင်း ဖန်တီးပြီးပါပြီ` });
     } catch (error: any) {
       console.error("Logo design error:", error);
+      setGenerationError(error.message || "ဒီဇိုင်းဖန်တီးရာတွင် ပြဿနာရှိပါသည်");
       toast({ title: "အမှားရှိပါသည်", description: error.message, variant: "destructive" });
     } finally {
       setIsGenerating(false);
@@ -215,9 +255,9 @@ export const LogoDesignTool = ({ userId, onBack }: LogoDesignToolProps) => {
           </div>
         </div>
 
-        {/* Design Style - 20+ options */}
+        {/* Design Style - 50+ options */}
         <div className="space-y-1.5">
-          <Label className="text-xs font-myanmar">ဒီဇိုင်း Style (20+ ရွေးချယ်စရာ)</Label>
+          <Label className="text-xs font-myanmar">ဒီဇိုင်း Style ({DESIGN_STYLES.length}+ ရွေးချယ်စရာ)</Label>
           <Select value={designStyle} onValueChange={setDesignStyle}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent className="max-h-60">
@@ -248,6 +288,16 @@ export const LogoDesignTool = ({ userId, onBack }: LogoDesignToolProps) => {
           )}
         </Button>
       </div>
+
+      {/* Error Display */}
+      {generationError && !isGenerating && generatedImages.length === 0 && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 rounded-xl bg-destructive/10 border border-destructive/30">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0" />
+            <p className="text-sm text-destructive font-myanmar">{generationError}</p>
+          </div>
+        </motion.div>
+      )}
 
       {/* Output Gallery */}
       <AnimatePresence>

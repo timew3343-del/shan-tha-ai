@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Mail, Lock, Eye, EyeOff, Loader2, Crown, ArrowRight, ArrowLeft, Play } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, Loader2, Crown, ArrowRight, ArrowLeft, Play, UserPlus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -28,8 +28,6 @@ interface GuideVideo {
   description: string | null;
 }
 
-const REFERRAL_REWARD = 5;
-
 const Auth = () => {
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
@@ -41,6 +39,8 @@ const Auth = () => {
   const [showVerification, setShowVerification] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState("");
   const [guideVideos, setGuideVideos] = useState<GuideVideo[]>([]);
+  const [manualReferralCode, setManualReferralCode] = useState("");
+  const [referralReward, setReferralReward] = useState(5);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
@@ -57,11 +57,12 @@ const Auth = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return;
       if (session?.user && event === 'SIGNED_IN') {
-        // Process referral code if present
-        if (referralCode) {
+        // Process referral code if present (from URL or manual input)
+        const codeToUse = referralCode || manualReferralCode.trim();
+        if (codeToUse) {
           try {
             await supabase.functions.invoke("process-referral", {
-              body: { referral_code: referralCode, new_user_id: session.user.id },
+              body: { referral_code: codeToUse, new_user_id: session.user.id },
             });
           } catch (e) {
             console.error("Referral processing error:", e);
@@ -88,6 +89,21 @@ const Auth = () => {
       .limit(3)
       .then(({ data }) => {
         if (data) setGuideVideos(data as GuideVideo[]);
+      });
+
+    // Fetch referral reward amount
+    supabase
+      .from("app_settings")
+      .select("key, value")
+      .in("key", ["referral_new_user_reward"])
+      .then(({ data }) => {
+        if (data) {
+          data.forEach(s => {
+            if (s.key === "referral_new_user_reward" && s.value) {
+              setReferralReward(parseInt(s.value, 10) || 5);
+            }
+          });
+        }
       });
 
     return () => {
@@ -166,14 +182,12 @@ const Auth = () => {
       if (mode === "login") {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) {
-          // Check if the error is about email not confirmed
           if (error.message.includes("Email not confirmed")) {
             toast({
               title: "အီးမေးလ် အတည်မပြုရသေးပါ",
               description: "ကျေးဇူးပြု၍ Gmail တွင် အရင်ဆုံး အတည်ပြုပေးပါ။",
               variant: "destructive",
             });
-            // Show the verification screen so they can resend
             setVerificationEmail(email);
             setShowVerification(true);
             return;
@@ -191,7 +205,6 @@ const Auth = () => {
         }
         toast({ title: "အောင်မြင်ပါသည်", description: "အကောင့်ဝင်ရောက်မှု အောင်မြင်ပါသည်" });
       } else {
-        // Sign up flow
         const redirectUrl = `${window.location.origin}/`;
         const { data, error } = await supabase.auth.signUp({
           email,
@@ -211,15 +224,12 @@ const Auth = () => {
           return;
         }
 
-        // Check if email confirmation is required
-        // When email confirmation is ON, user will exist but session will be null
         if (data.user && !data.session) {
           setVerificationEmail(email);
           setShowVerification(true);
           return;
         }
 
-        // If auto-confirm is on, user is logged in immediately
         toast({ title: "အောင်မြင်ပါသည်", description: "အကောင့်ဖွင့်မှု အောင်မြင်ပါသည်" });
       }
     } catch (error) {
@@ -229,7 +239,6 @@ const Auth = () => {
     }
   };
 
-  // Show verification screen
   if (showVerification) {
     return (
       <EmailVerificationScreen
@@ -300,6 +309,26 @@ const Auth = () => {
                 </button>
               </div>
               {errors.password && <p className="text-xs text-destructive">{errors.password}</p>}
+            </div>
+          )}
+
+          {/* Referral Code Input (only in signup mode, only if no URL referral) */}
+          {mode === "signup" && !referralCode && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-primary font-myanmar flex items-center gap-1.5">
+                <UserPlus className="w-4 h-4" />
+                Referral Code (Optional)
+              </label>
+              <Input
+                type="text"
+                placeholder="ဖိတ်ခေါ်သူ့ Code ထည့်ပါ (ရှိပါက)"
+                value={manualReferralCode}
+                onChange={(e) => setManualReferralCode(e.target.value.toUpperCase())}
+                className="bg-background/50 border-primary/30 focus:border-primary focus:ring-primary/50 rounded-xl h-12 font-mono"
+              />
+              <p className="text-[10px] text-muted-foreground font-myanmar">
+                Referral Code ထည့်ပါက နှစ်ဦးစလုံး {referralReward} Credits စီ ရရှိပါမည်
+              </p>
             </div>
           )}
 
@@ -379,13 +408,7 @@ const Auth = () => {
           {guideVideos.map((video) => (
             <div key={video.id} className="gradient-card rounded-2xl overflow-hidden border border-primary/20">
               {video.video_url ? (
-                <video
-                  src={video.video_url}
-                  controls
-                  playsInline
-                  className="w-full aspect-video"
-                  poster=""
-                />
+                <video src={video.video_url} controls playsInline className="w-full aspect-video" poster="" />
               ) : (
                 <div className="w-full aspect-video bg-secondary flex items-center justify-center">
                   <Play className="w-8 h-8 text-muted-foreground" />
@@ -409,7 +432,7 @@ const Auth = () => {
             🎉 Referral Link ဖြင့် အကောင့်ဖွင့်ပါ
           </p>
           <p className="text-xs text-muted-foreground">
-            အကောင့်ဖွင့်လိုက်ရင် {REFERRAL_REWARD} Credits အခမဲ့ ရရှိပါမယ်!
+            အကောင့်ဖွင့်လိုက်ရင် {referralReward} Credits အခမဲ့ ရရှိပါမယ်!
           </p>
         </div>
       )}
