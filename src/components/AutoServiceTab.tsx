@@ -892,13 +892,40 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
 
         {/* ===== PREVIEW TAB ===== */}
         <TabsContent value="preview" className="space-y-3 mt-3">
-          <Card className="p-4 border-border/50 bg-card/60 text-center">
-            <Eye className="w-8 h-8 text-primary mx-auto mb-2" />
-            <h3 className="text-sm font-bold mb-1 font-myanmar">10 စက္ကန့် AI Preview</h3>
-            <p className="text-[9px] text-muted-foreground font-myanmar mb-3">
-              သင့် Settings အတိုင်း AI က ဗီဒီယို Style ကို Preview ပြပေးမည်
-            </p>
-            <Button onClick={handlePreview} disabled={isLoadingPreview} className="mb-3">
+          <Card className="p-4 border-border/50 bg-card/60">
+            <div className="text-center mb-4">
+              <Eye className="w-8 h-8 text-primary mx-auto mb-2" />
+              <h3 className="text-sm font-bold mb-1 font-myanmar">10 စက္ကန့် AI Preview</h3>
+              <p className="text-[9px] text-muted-foreground font-myanmar">
+                သင့် Settings အတိုင်း AI က ဗီဒီယို Style ကို Preview ပြပေးမည်
+              </p>
+            </div>
+
+            {/* Current Settings Summary */}
+            <div className="bg-secondary/30 rounded-xl p-3 mb-3 text-[10px] space-y-1 font-myanmar">
+              <p className="font-bold text-xs text-primary mb-1">📋 လက်ရှိ Settings:</p>
+              <div className="flex justify-between"><span>Mode:</span><span className="font-medium">{mode === "template" ? TEMPLATE_CATEGORIES.find(t => t.id === selectedTemplate)?.nameMyanmar : "ကိုယ်တိုင် Input"}</span></div>
+              <div className="flex justify-between"><span>Language:</span><span className="font-medium">{selectedLanguage}</span></div>
+              <div className="flex justify-between"><span>Duration:</span><span className="font-medium">{durationMinutes} min</span></div>
+              <div className="flex justify-between"><span>Daily Qty:</span><span className="font-medium">{dailyQuantity} videos</span></div>
+              {voiceEnabled && <div className="flex justify-between"><span>Voice:</span><span className="font-medium">{voiceStyle} / {voiceTone}</span></div>}
+            </div>
+
+            {/* Credit Cost Display */}
+            <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 mb-3 text-center">
+              <p className="text-[10px] text-muted-foreground font-myanmar mb-1">Monthly Cost</p>
+              <p className="text-lg font-bold text-primary">{creditCalc.discounted} Credits</p>
+              <p className="text-[9px] text-muted-foreground font-myanmar">
+                (30 ရက် × {dailyQuantity} ဗီဒီယို/ရက် × {durationMinutes} min) - 20% Discount
+              </p>
+              {credits < creditCalc.discounted && (
+                <p className="text-[10px] text-destructive font-bold mt-1 font-myanmar">
+                  ⚠️ Credits မလုံလောက်ပါ (လက်ကျန်: {credits})
+                </p>
+              )}
+            </div>
+
+            <Button onClick={handlePreview} disabled={isLoadingPreview} className="w-full mb-3">
               {isLoadingPreview ? (
                 <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading...</>
               ) : (
@@ -906,11 +933,18 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
               )}
             </Button>
 
-            {previewContent && (
+            {previewContent ? (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                className="text-left bg-secondary/30 rounded-xl p-3 mt-2">
+                className="text-left bg-secondary/30 rounded-xl p-3">
+                <p className="text-[9px] font-bold text-primary mb-2 font-myanmar">🎬 AI Generated Preview Script:</p>
                 <p className="text-[10px] font-myanmar whitespace-pre-wrap leading-relaxed">{previewContent}</p>
               </motion.div>
+            ) : (
+              <div className="text-center py-4 bg-secondary/20 rounded-xl">
+                <p className="text-[10px] text-muted-foreground font-myanmar">
+                  ⏳ Settings ထည့်ပြီး "Preview ကြည့်မည်" ကို နှိပ်ပါ
+                </p>
+              </div>
             )}
           </Card>
         </TabsContent>

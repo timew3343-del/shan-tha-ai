@@ -27,16 +27,12 @@ interface SpeechToolProps {
 }
 
 const VOICES = [
-  { id: "roger", name: "Roger", gender: "male", style: "professional", description: "Professional ကျယ်ကျယ်" },
-  { id: "george", name: "George", gender: "male", style: "casual", description: "သဘာဝကျသော အသံ" },
-  { id: "brian", name: "Brian", gender: "male", style: "storytelling", description: "ပုံပြင်ပြော အသံ" },
-  { id: "daniel", name: "Daniel", gender: "male", style: "professional", description: "News Anchor အသံ" },
-  { id: "liam", name: "Liam", gender: "male", style: "casual", description: "ပျော်ရွှင်သော အသံ" },
-  { id: "sarah", name: "Sarah", gender: "female", style: "professional", description: "Professional မိန်းကလေး" },
-  { id: "laura", name: "Laura", gender: "female", style: "casual", description: "ချိုမြိန်သော အသံ" },
-  { id: "jessica", name: "Jessica", gender: "female", style: "storytelling", description: "ပုံပြင်ပြော အသံ" },
-  { id: "lily", name: "Lily", gender: "female", style: "professional", description: "သတင်းပြော အသံ" },
-  { id: "alice", name: "Alice", gender: "female", style: "casual", description: "ဖော်ရွေသော အသံ" },
+  { id: "alloy", name: "Alloy", gender: "female", style: "professional", description: "ဘက်စုံ Professional အသံ" },
+  { id: "echo", name: "Echo", gender: "male", style: "casual", description: "သဘာဝကျသော အမျိုးသားအသံ" },
+  { id: "fable", name: "Fable", gender: "male", style: "storytelling", description: "ပုံပြင်ပြော အသံ" },
+  { id: "onyx", name: "Onyx", gender: "male", style: "professional", description: "ခိုင်မာသော အမျိုးသားအသံ" },
+  { id: "nova", name: "Nova", gender: "female", style: "casual", description: "ချိုမြိန်သော မိန်းကလေးအသံ" },
+  { id: "shimmer", name: "Shimmer", gender: "female", style: "professional", description: "ကြည်လင်သော မိန်းကလေးအသံ" },
 ];
 
 const LANGUAGES = [
@@ -69,7 +65,7 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
   
   // TTS state
   const [ttsText, setTtsText] = useState("");
-  const [selectedVoice, setSelectedVoice] = useState("sarah");
+  const [selectedVoice, setSelectedVoice] = useState("nova");
   const [ttsLanguage, setTtsLanguage] = useState("my");
   const [generatedAudio, setGeneratedAudio] = useState<string | null>(null);
   const [isGeneratingTTS, setIsGeneratingTTS] = useState(false);
@@ -175,7 +171,33 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
         }
         return;
       }
-      if (data?.useWebSpeech) {
+      
+      if (data?.audioBase64 && !data.useWebSpeech) {
+        // OpenAI TTS - play the returned audio
+        const audioBlob = new Blob(
+          [Uint8Array.from(atob(data.audioBase64), c => c.charCodeAt(0))],
+          { type: "audio/mp3" }
+        );
+        const audioUrl = URL.createObjectURL(audioBlob);
+        setGeneratedAudio(audioUrl);
+        
+        // Auto-play
+        if (audioRef.current) {
+          audioRef.current.src = audioUrl;
+          audioRef.current.play();
+          setIsPlaying(true);
+        } else {
+          const audio = new Audio(audioUrl);
+          audioRef.current = audio;
+          audio.onended = () => setIsPlaying(false);
+          audio.play();
+          setIsPlaying(true);
+        }
+        
+        refetchCredits();
+        saveOutput("audio", ttsText);
+        toast({ title: "အောင်မြင်ပါသည်", description: `OpenAI TTS အသံထုတ်ပြီးပါပြီ (${data.creditsUsed} Credits)` });
+      } else if (data?.useWebSpeech) {
         speakText(ttsText);
         setGeneratedAudio("web-speech");
         refetchCredits();
@@ -191,10 +213,17 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
 
   const handlePlayPause = () => {
     if (isPlaying) {
-      window.speechSynthesis.pause();
+      if (audioRef.current && generatedAudio && generatedAudio !== "web-speech") {
+        audioRef.current.pause();
+      } else {
+        window.speechSynthesis.pause();
+      }
       setIsPlaying(false);
     } else {
-      if (window.speechSynthesis.paused) {
+      if (audioRef.current && generatedAudio && generatedAudio !== "web-speech") {
+        audioRef.current.play();
+        setIsPlaying(true);
+      } else if (window.speechSynthesis.paused) {
         window.speechSynthesis.resume();
         setIsPlaying(true);
       } else {
@@ -204,6 +233,10 @@ export const SpeechTool = ({ userId, onBack }: SpeechToolProps) => {
   };
 
   const handleStopSpeech = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
     window.speechSynthesis.cancel();
     setIsPlaying(false);
   };

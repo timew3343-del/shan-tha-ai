@@ -12,28 +12,8 @@ interface TTSRequest {
   language: string;
 }
 
-// Helper function to refund credits
-async function refundCredits(supabaseAdmin: any, userId: string, amount: number, reason: string) {
-  try {
-    const { error } = await supabaseAdmin.rpc("add_user_credits", {
-      _user_id: userId,
-      _amount: amount,
-    });
-    if (error) {
-      console.error("Failed to refund credits:", error);
-    } else {
-      console.log(`Refunded ${amount} credits to user ${userId} - Reason: ${reason}`);
-    }
-  } catch (e) {
-    console.error("Refund error:", e);
-  }
-}
-
 serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
     // Require authentication
@@ -45,7 +25,6 @@ serve(async (req) => {
       );
     }
 
-    // Create admin client to bypass RLS
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -56,7 +35,6 @@ serve(async (req) => {
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     
     if (userError || !user) {
-      console.error("Auth error:", userError);
       return new Response(
         JSON.stringify({ error: "Invalid or expired token" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -64,9 +42,8 @@ serve(async (req) => {
     }
 
     const userId = user.id;
-    console.log(`User ${userId} requesting text-to-speech`);
 
-    // Parse and validate request body
+    // Parse request body
     let body: TTSRequest;
     try {
       body = await req.json();
@@ -100,7 +77,6 @@ serve(async (req) => {
       .single();
 
     if (profileError || !profile) {
-      console.error("Profile error:", profileError);
       return new Response(
         JSON.stringify({ error: "User profile not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -115,26 +91,107 @@ serve(async (req) => {
       .maybeSingle();
     
     const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
-    const BASE_COST = 2; // Base API cost for text-to-speech
+    const BASE_COST = 2;
     const creditCost = Math.ceil(BASE_COST * (1 + profitMargin / 100));
     
     if (profile.credit_balance < creditCost) {
       return new Response(
-        JSON.stringify({ 
-          error: "Insufficient credits", 
-          required: creditCost,
-          balance: profile.credit_balance 
-        }),
+        JSON.stringify({ error: "Insufficient credits", required: creditCost, balance: profile.credit_balance }),
         { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`Generating TTS for text: "${text.substring(0, 50)}..." with voice: ${voice}`);
+    // Try OpenAI TTS first, then fall back to Web Speech
+    const { data: openaiKeySetting } = await supabaseAdmin
+      .from("app_settings")
+      .select("value")
+      .eq("key", "openai_api_key")
+      .maybeSingle();
 
-    // Use Web Speech API on client - deduct credits ONLY after confirming success
-    // The actual audio generation happens client-side with Web Speech API
-    
-    // Deduct credits using secure RPC
+    const { data: openaiEnabledSetting } = await supabaseAdmin
+      .from("app_settings")
+      .select("value")
+      .eq("key", "api_enabled_openai")
+      .maybeSingle();
+
+    const openaiKey = openaiKeySetting?.value;
+    const openaiEnabled = openaiEnabledSetting?.value !== "false";
+
+    // Map voice names to OpenAI voices
+    const openaiVoiceMap: Record<string, string> = {
+      roger: "onyx", george: "echo", brian: "fable",
+      daniel: "onyx", liam: "echo", sarah: "nova",
+      laura: "shimmer", jessica: "fable", lily: "nova",
+      alice: "alloy",
+      // Direct OpenAI voice names
+      alloy: "alloy", echo: "echo", fable: "fable",
+      onyx: "onyx", nova: "nova", shimmer: "shimmer",
+    };
+
+    if (openaiKey && openaiEnabled) {
+      console.log("Using OpenAI TTS for voice:", voice);
+      
+      const openaiVoice = openaiVoiceMap[voice] || "nova";
+      
+      try {
+        const ttsResponse = await fetch("https://api.openai.com/v1/audio/speech", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${openaiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "tts-1",
+            input: text.trim(),
+            voice: openaiVoice,
+            response_format: "mp3",
+          }),
+        });
+
+        if (!ttsResponse.ok) {
+          const errText = await ttsResponse.text();
+          console.error("OpenAI TTS error:", ttsResponse.status, errText);
+          throw new Error(`OpenAI TTS failed: ${ttsResponse.status}`);
+        }
+
+        // Successfully generated audio - now deduct credits
+        const { data: deductResult, error: deductError } = await supabaseAdmin.rpc("deduct_user_credits", {
+          _user_id: userId,
+          _amount: creditCost,
+          _action: "Text-to-speech (OpenAI TTS)"
+        });
+
+        if (deductError) {
+          console.error("Credit deduction error:", deductError);
+          return new Response(
+            JSON.stringify({ error: "Credit deduction failed" }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const audioBuffer = await ttsResponse.arrayBuffer();
+        const base64Audio = btoa(String.fromCharCode(...new Uint8Array(audioBuffer)));
+        const newBalance = deductResult?.new_balance ?? (profile.credit_balance - creditCost);
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            audioBase64: base64Audio,
+            audioFormat: "mp3",
+            useWebSpeech: false,
+            creditsUsed: creditCost,
+            newBalance: newBalance,
+            engine: "openai-tts-1",
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch (openaiError) {
+        console.error("OpenAI TTS failed, falling back to Web Speech:", openaiError);
+        // Fall through to Web Speech fallback
+      }
+    }
+
+    // Fallback: Web Speech API (client-side) - deduct credits
     const { data: deductResult, error: deductError } = await supabaseAdmin.rpc("deduct_user_credits", {
       _user_id: userId,
       _amount: creditCost,
@@ -142,7 +199,6 @@ serve(async (req) => {
     });
 
     if (deductError) {
-      console.error("Credit deduction error:", deductError);
       return new Response(
         JSON.stringify({ error: "Credit deduction failed" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -162,10 +218,7 @@ serve(async (req) => {
         creditsUsed: creditCost,
         newBalance: newBalance,
       }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: any) {
     console.error("TTS error:", error);

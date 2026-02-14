@@ -110,15 +110,20 @@ export const useCredits = (userId: string | undefined) => {
     if (!userId) return false;
     
     try {
-      const newBalance = credits + amount;
-      const { error } = await supabase
-        .from("profiles")
-        .update({ credit_balance: newBalance })
-        .eq("user_id", userId);
+      // Use secure server-side RPC to add credits (admin-only)
+      const { data, error } = await supabase.rpc("add_user_credits", {
+        _user_id: userId,
+        _amount: amount,
+      });
 
       if (error) throw error;
       
-      setCredits(newBalance);
+      const result = data as any;
+      if (!result?.success) {
+        throw new Error(result?.error || "Failed to add credits");
+      }
+      
+      setCredits(result.new_balance);
       toast({
         title: "အောင်မြင်ပါသည်",
         description: `သင့်အကောင့်ထဲသို့ ${amount} Credits ထည့်သွင်းပြီးပါပြီ။`,
