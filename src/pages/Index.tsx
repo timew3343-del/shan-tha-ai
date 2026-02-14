@@ -8,6 +8,7 @@ import { PromoBanner } from "@/components/PromoBanner";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { CreditDisplay } from "@/components/CreditDisplay";
 import { AIToolsTab } from "@/components/AIToolsTab";
+import { AutoServiceTab } from "@/components/AutoServiceTab";
 import { DosDontsTab } from "@/components/DosDontsTab";
 import { CourseTab } from "@/components/CourseTab";
 import { StoreTab } from "@/components/StoreTab";
@@ -148,6 +149,7 @@ const Index = () => {
       <main id="main-content" className="max-w-lg mx-auto" role="main">
         <MaintenanceBanner className="mx-4 mt-4" />
         {activeTab === "ai-tools" && <AIToolsTab userId={user.id} />}
+        {activeTab === "auto-service" && <AutoServiceTab userId={user.id} />}
         {activeTab === "store" && <StoreTab userId={user.id} />}
         {activeTab === "dos-donts" && <DosDontsTab />}
         {activeTab === "course" && <CourseTab userId={user.id} />}
