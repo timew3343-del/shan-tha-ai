@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { useCredits } from "@/hooks/useCredits";
+import { useUserRole } from "@/hooks/useUserRole";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import {
   Zap, Globe, Sparkles, Video, Send, MessageCircle,
@@ -132,6 +133,7 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
   const { toast } = useToast();
   const { credits, refetch: refetchCredits } = useCredits(userId);
   const { costs } = useCreditCosts();
+  const { isAdmin } = useUserRole(userId);
 
   // Top-level tab
   const [activeTab, setActiveTab] = useState("manage");
@@ -150,6 +152,7 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
 
   // Custom mode
   const [customPrompt, setCustomPrompt] = useState("");
+  const [topicInputs, setTopicInputs] = useState<string[]>([""]);
   const [promptChat, setPromptChat] = useState<{ role: string; content: string }[]>([]);
   const [promptChatInput, setPromptChatInput] = useState("");
   const [isPromptChatting, setIsPromptChatting] = useState(false);
@@ -262,7 +265,7 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
       return;
     }
 
-    const chargeAmount = isFreeUpdate ? 0 : creditCalc.discounted;
+    const chargeAmount = isAdmin ? 0 : (isFreeUpdate ? 0 : creditCalc.discounted);
     if (chargeAmount > 0 && credits < chargeAmount) {
       toast({ title: "Credits မလုံလောက်ပါ", description: `${chargeAmount} Credits လိုအပ်ပါသည်`, variant: "destructive" });
       return;
@@ -564,7 +567,14 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
             </div>
             <div className="grid grid-cols-4 gap-2 mb-3">
               {DAILY_QUANTITIES.map(qty => (
-                <button key={qty} onClick={() => setDailyQuantity(qty)}
+                <button key={qty} onClick={() => {
+                  setDailyQuantity(qty);
+                  setTopicInputs(prev => {
+                    const newInputs = [...prev];
+                    while (newInputs.length < qty) newInputs.push("");
+                    return newInputs.slice(0, qty);
+                  });
+                }}
                   className={`py-2.5 rounded-xl text-center transition-all border font-bold ${
                     dailyQuantity === qty
                       ? "border-primary bg-primary/10 text-primary shadow-sm"
@@ -573,6 +583,27 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
                   <p className="text-lg">{qty}</p>
                   <p className="text-[8px] text-muted-foreground">video{qty > 1 ? "s" : ""}</p>
                 </button>
+              ))}
+            </div>
+
+            {/* Dynamic Topic Inputs */}
+            <div className="space-y-2 mb-3">
+              {Array.from({ length: dailyQuantity }).map((_, i) => (
+                <div key={i}>
+                  <label className="text-[10px] font-bold text-muted-foreground font-myanmar mb-1 block">
+                    ဗီဒီယို ({"\u1040\u1041\u1042\u1043\u1044\u1045\u1046\u1047\u1048\u1049"[i] || i + 1}) အတွက် အကြောင်းအရာ
+                  </label>
+                  <Textarea
+                    placeholder={`ဗီဒီယို ${i + 1} အတွက် အကြောင်းအရာ ထည့်ပါ...`}
+                    value={topicInputs[i] || ""}
+                    onChange={e => {
+                      const newInputs = [...topicInputs];
+                      newInputs[i] = e.target.value;
+                      setTopicInputs(newInputs);
+                    }}
+                    className="text-xs min-h-[50px] resize-none"
+                  />
+                </div>
               ))}
             </div>
 
@@ -808,17 +839,22 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
               {introOutroEnabled && <div className="flex justify-between"><span>  ↳ Intro/Outro included</span><span>✓</span></div>}
               <div className="flex justify-between font-bold text-primary border-t border-border/30 pt-1">
                 <span>After 20% discount</span>
-                <span>{creditCalc.discounted} Credits</span>
+                <span>{isAdmin ? "Admin Free Access" : `${creditCalc.discounted} Credits`}</span>
               </div>
-              {isFreeUpdate && (
+              {isAdmin && (
+                <p className="text-primary text-[9px] font-bold font-myanmar">🛡️ Admin Free Access - Credit ကုန်ကျစရိတ် မရှိပါ</p>
+              )}
+              {!isAdmin && isFreeUpdate && (
                 <p className="text-green-500 text-[9px] font-bold font-myanmar">✅ Duration/Quantity တူ/လျော့ပါက အခမဲ့ ပြင်ဆင်နိုင်ပါသည်</p>
               )}
             </div>
 
             <Button className="w-full" size="lg" onClick={handleSaveSettings}
-              disabled={isSaving || (!isFreeUpdate && credits < creditCalc.discounted)}>
+              disabled={isSaving || (!isAdmin && !isFreeUpdate && credits < creditCalc.discounted)}>
               {isSaving ? (
                 <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Saving...</>
+              ) : isAdmin ? (
+                <><Save className="w-4 h-4 mr-2" /> Save & Start (Admin Free Access)</>
               ) : !isFreeUpdate && credits < creditCalc.discounted ? (
                 "Credits မလုံလောက်ပါ"
               ) : isFreeUpdate ? (

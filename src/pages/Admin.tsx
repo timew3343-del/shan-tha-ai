@@ -23,7 +23,7 @@ import { GlobalMarginTab } from "@/components/admin/GlobalMarginTab"; // kept fo
 import { HybridProfitTab } from "@/components/admin/HybridProfitTab";
 import { PromoCodesTab } from "@/components/admin/PromoCodesTab";
 import { UserFeedbackTab } from "@/components/admin/UserFeedbackTab";
-import { ContentFactoryTab } from "@/components/admin/ContentFactoryTab";
+
 import { AdminUserTable } from "@/components/admin/AdminUserTable";
 import { AdsterraConfigTab } from "@/components/admin/AdsterraConfigTab";
 import { KnowledgeBaseTab } from "@/components/admin/KnowledgeBaseTab";
@@ -927,11 +927,7 @@ export const Admin = () => {
               API
             </TabsTrigger>
           </TabsList>
-          <TabsList className="grid w-full grid-cols-5 mb-2">
-            <TabsTrigger value="content-factory" className="text-xs">
-              <Film className="w-4 h-4 mr-1" />
-              Content
-            </TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4 mb-2">
             <TabsTrigger value="auto-service" className="text-xs">
               <Zap className="w-4 h-4 mr-1" />
               Auto
@@ -1184,10 +1180,6 @@ export const Admin = () => {
             <ApiManagementTab />
           </TabsContent>
 
-          {/* Content Factory Tab */}
-          <TabsContent value="content-factory" className="space-y-4">
-            <ContentFactoryTab />
-          </TabsContent>
 
           {/* Auto Service Manager Tab */}
           <TabsContent value="auto-service" className="space-y-4">
