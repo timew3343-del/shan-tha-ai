@@ -92,6 +92,208 @@ export type Database = {
         }
         Relationships: []
       }
+      auto_service_plans: {
+        Row: {
+          created_at: string
+          daily_video_count: number
+          description: string | null
+          discount_percent: number
+          duration_days: number
+          id: string
+          is_active: boolean | null
+          name: string
+          price_credits: number
+          price_mmk: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          daily_video_count?: number
+          description?: string | null
+          discount_percent?: number
+          duration_days?: number
+          id?: string
+          is_active?: boolean | null
+          name: string
+          price_credits?: number
+          price_mmk?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          daily_video_count?: number
+          description?: string | null
+          discount_percent?: number
+          duration_days?: number
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          price_credits?: number
+          price_mmk?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      auto_service_subscriptions: {
+        Row: {
+          created_at: string
+          credits_paid: number
+          expires_at: string
+          id: string
+          plan_id: string | null
+          referral_code_used: string | null
+          referred_by_user_id: string | null
+          starts_at: string
+          status: string
+          target_language: string
+          template_category: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          credits_paid?: number
+          expires_at: string
+          id?: string
+          plan_id?: string | null
+          referral_code_used?: string | null
+          referred_by_user_id?: string | null
+          starts_at?: string
+          status?: string
+          target_language?: string
+          template_category?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          credits_paid?: number
+          expires_at?: string
+          id?: string
+          plan_id?: string | null
+          referral_code_used?: string | null
+          referred_by_user_id?: string | null
+          starts_at?: string
+          status?: string
+          target_language?: string
+          template_category?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "auto_service_subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "auto_service_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      auto_service_support: {
+        Row: {
+          admin_response: string | null
+          ai_response: string | null
+          created_at: string
+          id: string
+          is_escalated: boolean | null
+          issue_type: string
+          message: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          admin_response?: string | null
+          ai_response?: string | null
+          created_at?: string
+          id?: string
+          is_escalated?: boolean | null
+          issue_type?: string
+          message: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          admin_response?: string | null
+          ai_response?: string | null
+          created_at?: string
+          id?: string
+          is_escalated?: boolean | null
+          issue_type?: string
+          message?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      auto_service_videos: {
+        Row: {
+          api_used: string | null
+          created_at: string
+          credits_refunded: number | null
+          description: string | null
+          error_message: string | null
+          generated_date: string
+          generation_status: string
+          id: string
+          subscription_id: string | null
+          target_language: string
+          template_category: string
+          thumbnail_url: string | null
+          title: string
+          updated_at: string
+          user_id: string
+          video_url: string | null
+        }
+        Insert: {
+          api_used?: string | null
+          created_at?: string
+          credits_refunded?: number | null
+          description?: string | null
+          error_message?: string | null
+          generated_date?: string
+          generation_status?: string
+          id?: string
+          subscription_id?: string | null
+          target_language: string
+          template_category: string
+          thumbnail_url?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+          video_url?: string | null
+        }
+        Update: {
+          api_used?: string | null
+          created_at?: string
+          credits_refunded?: number | null
+          description?: string | null
+          error_message?: string | null
+          generated_date?: string
+          generation_status?: string
+          id?: string
+          subscription_id?: string | null
+          target_language?: string
+          template_category?: string
+          thumbnail_url?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+          video_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "auto_service_videos_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "auto_service_subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaigns: {
         Row: {
           admin_notes: string | null
