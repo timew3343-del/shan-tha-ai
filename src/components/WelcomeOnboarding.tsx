@@ -13,16 +13,16 @@ export const WelcomeOnboarding = ({ userId }: WelcomeOnboardingProps) => {
 
   useEffect(() => {
     if (!userId) return;
-    // Show only once per browser session
-    const sessionKey = `welcome_shown_${userId}`;
-    if (!sessionStorage.getItem(sessionKey)) {
+    // Show only for FIRST-TIME users, never again (localStorage persists)
+    const storageKey = `welcome_dismissed_${userId}`;
+    if (!localStorage.getItem(storageKey)) {
       setShowWelcome(true);
     }
   }, [userId]);
 
   const dismissWelcome = () => {
     setShowWelcome(false);
-    sessionStorage.setItem(`welcome_shown_${userId}`, "true");
+    localStorage.setItem(`welcome_dismissed_${userId}`, "true");
   };
 
   const STEPS = [
