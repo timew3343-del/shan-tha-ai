@@ -172,14 +172,7 @@ export const AutoAdTool = ({ userId, onBack }: AutoAdToolProps) => {
       setResultVideos(result.videos || []);
       setProgress(100);
       refetchCredits();
-      if (result.videos?.length) {
-        result.videos.forEach((vid: { platform: string; url: string }) => {
-          if (vid.url) {
-            const platformLabel = PLATFORM_OPTIONS.find(p => p.id === vid.platform)?.label || vid.platform;
-            saveOutput("video", `Auto ကြော်ငြာ - ${platformLabel}`, undefined, vid.url);
-          }
-        });
-      }
+      // Server already saves to user_outputs - no need for client-side save
 
       toast({ title: "အောင်မြင်ပါသည် 🎬", description: `${result.creditsUsed} Credits အသုံးပြုပြီးပါပြီ` });
     } catch (error: any) {

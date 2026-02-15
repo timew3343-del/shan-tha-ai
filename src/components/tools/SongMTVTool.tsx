@@ -224,16 +224,8 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
       if (result.lyrics) setResultLyrics(result.lyrics);
       setProgress(100);
       refetchCredits();
-      // Save to Store - save each output type separately
-      if (result.audio) {
-        saveOutput("audio", result.lyrics || "Song generated", undefined, result.audio);
-      }
-      if (result.video) {
-        saveOutput("video", result.lyrics || "MTV Video", undefined, result.video);
-      }
-      if (!result.audio && !result.video && result.lyrics) {
-        saveOutput("text", result.lyrics);
-      }
+      // Server already saves to user_outputs - just refetch store
+      // No need to call saveOutput to avoid duplicates
 
       toast({ title: "အောင်မြင်ပါသည် 🎵", description: `${result.creditsUsed} Credits အသုံးပြုပြီးပါပြီ` });
     } catch (error: any) {

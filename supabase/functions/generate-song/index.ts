@@ -374,7 +374,8 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
     }
 
     // ===== STEP 3: Generate MTV Video via Shotstack =====
-    if (serviceOption === "mtv_only" || (serviceOption === "full_auto" && !videoUrl)) {
+    // For full_auto, always generate MTV video (Suno's video is just a visualizer, not a real MTV)
+    if (serviceOption === "mtv_only" || serviceOption === "full_auto") {
       console.log("Step 3: Generating MTV video via Shotstack...");
 
       if (serviceOption === "mtv_only" && audioBase64) {
@@ -561,6 +562,30 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
       newBalance = profile?.credit_balance ?? 0;
     }
 
+    // ===== Save outputs to user_outputs (server-side, so Store always has them) =====
+    if (audioUrl) {
+      await supabaseAdmin.from("user_outputs").insert({
+        user_id: userId,
+        tool_id: "song_mtv",
+        tool_name: "Song & MTV",
+        output_type: "audio",
+        content: cleanLyrics || lyrics || "Song generated",
+        file_url: audioUrl,
+      });
+      console.log("Audio output saved to user_outputs");
+    }
+    if (videoUrl) {
+      await supabaseAdmin.from("user_outputs").insert({
+        user_id: userId,
+        tool_id: "song_mtv",
+        tool_name: "Song & MTV",
+        output_type: "video",
+        content: cleanLyrics || lyrics || "MTV Video",
+        file_url: videoUrl,
+      });
+      console.log("Video output saved to user_outputs");
+    }
+
     console.log("Song/MTV completed successfully");
 
     return respond({
@@ -570,6 +595,7 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
       cleanLyrics,
       creditsUsed: userIsAdmin ? 0 : creditCost,
       newBalance,
+      savedToStore: true,
     });
 
   } catch (error: unknown) {
