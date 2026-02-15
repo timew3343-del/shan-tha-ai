@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { Music, Video, Sparkles, Download, Loader2, Upload, X, Mic2 } from "lucide-react";
+import { downloadVideo, downloadAudio } from "@/lib/downloadHelper";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
@@ -468,7 +469,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
             <div className="gradient-card rounded-2xl p-4 border border-primary/30">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-primary font-myanmar">🎵 သီချင်း</h3>
-                <Button onClick={() => { const a = document.createElement("a"); a.href = resultAudio; a.download = `song-${Date.now()}.mp3`; a.click(); }} size="sm" variant="outline" className="text-xs">
+                <Button onClick={() => downloadAudio(resultAudio, "song")} size="sm" variant="outline" className="text-xs">
                   <Download className="w-3 h-3 mr-1" />Download
                 </Button>
               </div>
@@ -480,7 +481,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
             <div className="gradient-card rounded-2xl p-4 border border-primary/30">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-primary font-myanmar">🎬 MTV Video</h3>
-                <Button onClick={() => { const a = document.createElement("a"); a.href = resultVideo; a.download = `mtv-${Date.now()}.mp4`; a.click(); }} size="sm" variant="outline" className="text-xs">
+                <Button onClick={() => downloadVideo(resultVideo, "mtv")} size="sm" variant="outline" className="text-xs">
                   <Download className="w-3 h-3 mr-1" />Download
                 </Button>
               </div>

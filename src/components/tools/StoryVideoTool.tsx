@@ -14,6 +14,7 @@ import {
   BookOpen, Loader2, Download, Sparkles, Monitor,
   Smartphone, Square, Image, Film, Palette
 } from "lucide-react";
+import { downloadImage } from "@/lib/downloadHelper";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -157,10 +158,7 @@ export const StoryVideoTool = ({ userId, onBack }: StoryVideoToolProps) => {
 
   const downloadScene = (scene: GeneratedScene) => {
     if (!scene.image) return;
-    const link = document.createElement("a");
-    link.href = scene.image;
-    link.download = `story-scene-${scene.sceneNumber}.png`;
-    link.click();
+    downloadImage(scene.image, `story-scene-${scene.sceneNumber}`);
   };
 
   const downloadAll = () => {

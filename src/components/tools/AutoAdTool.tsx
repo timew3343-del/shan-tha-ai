@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { Upload, Sparkles, Download, Loader2, X, Globe, Film } from "lucide-react";
+import { downloadVideo } from "@/lib/downloadHelper";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
@@ -353,7 +354,7 @@ export const AutoAdTool = ({ userId, onBack }: AutoAdToolProps) => {
                 <h3 className="text-sm font-semibold text-primary font-myanmar">
                   🎬 {PLATFORM_OPTIONS.find(p => p.id === vid.platform)?.label || vid.platform}
                 </h3>
-                <Button onClick={() => { const a = document.createElement("a"); a.href = vid.url; a.download = `auto-ad-${vid.platform}-${Date.now()}.mp4`; a.click(); }} size="sm" variant="outline" className="text-xs">
+                <Button onClick={() => downloadVideo(vid.url, `auto-ad-${vid.platform}`)} size="sm" variant="outline" className="text-xs">
                   <Download className="w-3 h-3 mr-1" />Download
                 </Button>
               </div>
