@@ -15,11 +15,11 @@ import { useCredits } from "@/hooks/useCredits";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import {
-  Zap, Globe, Sparkles, Video, Send, MessageCircle,
+  Zap, Globe, Sparkles, Video, Send,
   ChevronDown, Loader2, Download, Play,
   Type, Image, Film, Subtitles, Shield, Mic,
   Square, RectangleHorizontal, RectangleVertical,
-  Upload, HelpCircle, CheckCircle, XCircle, RefreshCw, Clock,
+  Upload, CheckCircle, XCircle, RefreshCw, Clock,
   Settings, Eye, HeadphonesIcon, Save, Hash
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -153,10 +153,7 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
   // Custom mode
   const [customPrompt, setCustomPrompt] = useState("");
   const [topicInputs, setTopicInputs] = useState<string[]>([""]);
-  const [promptChat, setPromptChat] = useState<{ role: string; content: string }[]>([]);
-  const [promptChatInput, setPromptChatInput] = useState("");
-  const [isPromptChatting, setIsPromptChatting] = useState(false);
-  const [showPromptHelper, setShowPromptHelper] = useState(false);
+  // Removed old chatbot states - replaced by Smart Prompt Assistant
 
   // Advanced toggles
   const [showPlatformSize, setShowPlatformSize] = useState(false);
@@ -347,27 +344,34 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
     }
   };
 
-  // Prompt helper chatbot
-  const handlePromptChat = async () => {
-    if (!promptChatInput.trim() || !userId) return;
-    const userMsg = promptChatInput.trim();
-    setPromptChat(prev => [...prev, { role: "user", content: userMsg }]);
-    setPromptChatInput("");
-    setIsPromptChatting(true);
+  // Smart Prompt Assistant - improves user's simple idea into professional prompt
+  const [improvingPromptIndex, setImprovingPromptIndex] = useState<number | null>(null);
+  const [improvingCustomPrompt, setImprovingCustomPrompt] = useState(false);
+
+  const handleImprovePrompt = async (text: string, onResult: (improved: string) => void, loadingKey: "custom" | number) => {
+    if (!text.trim()) {
+      toast({ title: "Prompt ထည့်ပါ", description: "တိုးတက်အောင် ပြုလုပ်ရန် စာသားထည့်ပါ", variant: "destructive" });
+      return;
+    }
+    if (loadingKey === "custom") setImprovingCustomPrompt(true);
+    else setImprovingPromptIndex(loadingKey);
 
     try {
-      const { data, error } = await supabase.functions.invoke("auto-service-preview", {
-        body: {
-          language: selectedLanguage,
-          templateCategory: "custom",
-        },
+      const { data, error } = await supabase.functions.invoke("improve-prompt", {
+        body: { userPrompt: text, language: selectedLanguage },
       });
       if (error) throw error;
-      setPromptChat(prev => [...prev, { role: "assistant", content: data?.preview || "ထပ်ကြိုးစားပါ" }]);
-    } catch {
-      setPromptChat(prev => [...prev, { role: "assistant", content: "ဆာဗာ ချိတ်ဆက်မှု မအောင်မြင်ပါ" }]);
+      if (data?.improvedPrompt) {
+        onResult(data.improvedPrompt);
+        toast({ title: "✨ Prompt တိုးတက်ပြီးပါပြီ" });
+      } else if (data?.error) {
+        toast({ title: "Error", description: data.error, variant: "destructive" });
+      }
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message || "Prompt improve မရပါ", variant: "destructive" });
     } finally {
-      setIsPromptChatting(false);
+      if (loadingKey === "custom") setImprovingCustomPrompt(false);
+      else setImprovingPromptIndex(null);
     }
   };
 
@@ -521,58 +525,21 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
                 <Card className="p-3 border-border/50 bg-card/60">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-bold">Prompt Box</span>
-                    <Button variant="ghost" size="sm" className="text-[10px] h-7 gap-1" onClick={() => setShowPromptHelper(!showPromptHelper)}>
-                      <HelpCircle className="w-3 h-3" />ရေးနည်းမသိလျှင်
-                    </Button>
                   </div>
                   <Textarea placeholder="ဗီဒီယို အကြောင်းအရာကို ဤနေရာတွင် ရေးပါ..."
                     value={customPrompt} onChange={e => setCustomPrompt(e.target.value)}
                     className="text-xs min-h-[80px] resize-none" />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 text-[10px] h-7 gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+                    disabled={improvingCustomPrompt || !customPrompt.trim()}
+                    onClick={() => handleImprovePrompt(customPrompt, (improved) => setCustomPrompt(improved), "custom")}
+                  >
+                    {improvingCustomPrompt ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                    ပရွန်ရေးရန် အကူအညီယူမည်
+                  </Button>
                 </Card>
-
-                {/* Prompt Helper Chatbot */}
-                <AnimatePresence>
-                  {showPromptHelper && (
-                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
-                      <Card className="p-3 border-primary/30 bg-primary/5">
-                        <div className="flex items-center gap-2 mb-2">
-                          <MessageCircle className="w-3.5 h-3.5 text-primary" />
-                          <span className="text-xs font-bold">Smart Prompt Assistant</span>
-                        </div>
-                        <div className="max-h-40 overflow-y-auto space-y-1.5 mb-2">
-                          {promptChat.length === 0 && (
-                            <p className="text-[9px] text-muted-foreground text-center py-3 font-myanmar">
-                              ဘယ်လို ဗီဒီယို ဖန်တီးချင်သလဲ ပြောပြပါ။ AI က Prompt ရေးပေးပါမည်။
-                            </p>
-                          )}
-                          {promptChat.map((msg, i) => (
-                            <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                              <div className={`max-w-[85%] rounded-lg px-2.5 py-1.5 text-[10px] ${
-                                msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground"
-                              }`}>
-                                <p className="font-myanmar whitespace-pre-wrap">{msg.content}</p>
-                              </div>
-                            </div>
-                          ))}
-                          {isPromptChatting && (
-                            <div className="flex justify-start">
-                              <div className="bg-secondary rounded-lg px-2.5 py-1.5"><Loader2 className="w-3 h-3 animate-spin" /></div>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex gap-1.5">
-                          <Input placeholder="ဘယ်လို ဗီဒီယို လိုချင်လဲ..."
-                            value={promptChatInput} onChange={e => setPromptChatInput(e.target.value)}
-                            className="text-[10px] h-8"
-                            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handlePromptChat(); } }} />
-                          <Button size="icon" className="h-8 w-8 shrink-0" onClick={handlePromptChat} disabled={isPromptChatting || !promptChatInput.trim()}>
-                            <Send className="w-3 h-3" />
-                          </Button>
-                        </div>
-                      </Card>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </motion.div>
             )}
           </AnimatePresence>
@@ -636,6 +603,20 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
                     }}
                     className="text-xs min-h-[50px] resize-none"
                   />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-1.5 text-[10px] h-6 gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                    disabled={improvingPromptIndex === i || !(topicInputs[i] || "").trim()}
+                    onClick={() => handleImprovePrompt(topicInputs[i] || "", (improved) => {
+                      const newInputs = [...topicInputs];
+                      newInputs[i] = improved;
+                      setTopicInputs(newInputs);
+                    }, i)}
+                  >
+                    {improvingPromptIndex === i ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                    ပရွန်ရေးရန် အကူအညီယူမည်
+                  </Button>
                 </div>
               ))}
             </div>
