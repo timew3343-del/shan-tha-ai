@@ -25,4 +25,4 @@ Allow: /
 User-agent: *
 Allow: /
 
-Sitemap: https://shan-tha-ai.lovable.app/sitemap.xml
+Sitemap: https://myanmaraistudio.com/sitemap.xml

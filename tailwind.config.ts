@@ -14,6 +14,7 @@ export default {
     },
     extend: {
       fontFamily: {
+        sans: ['"Noto Sans Myanmar"', 'system-ui', 'sans-serif'],
         myanmar: ['"Noto Sans Myanmar"', 'system-ui', 'sans-serif'],
       },
       colors: {
