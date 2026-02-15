@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,17 +18,37 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("AI API not configured");
+    // Read OpenAI key from admin settings
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const { data: settings } = await supabaseAdmin
+      .from("app_settings").select("key, value")
+      .in("key", ["openai_api_key", "api_enabled_openai"]);
+
+    const configMap: Record<string, string> = {};
+    settings?.forEach((s: any) => { configMap[s.key] = s.value; });
+
+    const openaiEnabled = configMap["api_enabled_openai"] !== "false";
+    const openaiKey = configMap["openai_api_key"];
+
+    if (!openaiEnabled || !openaiKey) {
+      return new Response(JSON.stringify({ error: "OpenAI API is not enabled or key is missing. Admin settings စစ်ဆေးပါ။" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${openaiKey}`,
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
@@ -55,24 +76,20 @@ Output: "Step-by-step cooking tutorial with clear narration, close-up food shots
           },
         ],
         temperature: 0.7,
+        max_tokens: 500,
       }),
     });
 
     if (!response.ok) {
+      const errText = await response.text();
+      console.error("OpenAI error:", response.status, errText);
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. ခဏစောင့်ပြီး ပြန်ကြိုးစားပါ။" }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits ကုန်သွားပါပြီ။" }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const errText = await response.text();
-      throw new Error(`AI error: ${response.status} ${errText}`);
+      throw new Error(`OpenAI error: ${response.status}`);
     }
 
     const data = await response.json();
