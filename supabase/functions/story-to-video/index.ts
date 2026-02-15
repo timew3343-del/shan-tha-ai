@@ -69,6 +69,16 @@ serve(async (req) => {
 
     const clampedScenes = Math.min(Math.max(sceneCount || 3, 1), 20);
 
+    // Dynamic max duration check
+    const { data: maxDurSetting } = await supabaseAdmin
+      .from("app_settings").select("value").eq("key", "max_video_duration").maybeSingle();
+    const maxVideoDuration = maxDurSetting?.value ? parseInt(maxDurSetting.value, 10) : 180;
+    const totalDuration = clampedScenes * (durationPerScene || 3);
+    if (totalDuration > maxVideoDuration) {
+      return new Response(JSON.stringify({ error: `Video duration exceeds maximum of ${maxVideoDuration} seconds` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     // Get margin and calculate cost
     const { data: marginSetting } = await supabaseAdmin
       .from("app_settings").select("value").eq("key", "profit_margin").maybeSingle();
