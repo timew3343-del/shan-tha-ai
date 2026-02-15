@@ -172,7 +172,14 @@ export const AutoAdTool = ({ userId, onBack }: AutoAdToolProps) => {
       setResultVideos(result.videos || []);
       setProgress(100);
       refetchCredits();
-      if (result.videos?.length) saveOutput("video", result.videos[0].url);
+      if (result.videos?.length) {
+        result.videos.forEach((vid: { platform: string; url: string }) => {
+          if (vid.url) {
+            const platformLabel = PLATFORM_OPTIONS.find(p => p.id === vid.platform)?.label || vid.platform;
+            saveOutput("video", `Auto ကြော်ငြာ - ${platformLabel}`, undefined, vid.url);
+          }
+        });
+      }
 
       toast({ title: "အောင်မြင်ပါသည် 🎬", description: `${result.creditsUsed} Credits အသုံးပြုပြီးပါပြီ` });
     } catch (error: any) {
