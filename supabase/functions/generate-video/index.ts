@@ -75,7 +75,11 @@ serve(async (req) => {
     }
 
     const userId = user.id;
-    console.log(`User ${userId} requesting video generation`);
+
+    // Check if user is admin
+    const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
+    const userIsAdmin = isAdminData === true;
+    console.log(`User ${userId} requesting video generation, isAdmin=${userIsAdmin}`);
 
     // Parse and validate request body
     let body: GenerateVideoRequest;
@@ -137,7 +141,8 @@ serve(async (req) => {
 
     console.log(`User ${userId} has ${profile.credit_balance} credits, needs ${creditCost}`);
     
-    if (profile.credit_balance < creditCost) {
+    // Admin bypass: skip credit check
+    if (!userIsAdmin && profile.credit_balance < creditCost) {
       return new Response(
         JSON.stringify({ 
           error: "ခရက်ဒစ် မလုံလောက်ပါ", 
@@ -279,15 +284,19 @@ serve(async (req) => {
         );
       }
 
-      // Deduct credits AFTER success
-      const { data: deductResult } = await supabaseAdmin
-        .rpc("deduct_user_credits", {
-          _user_id: userId,
-          _amount: creditCost,
-          _action: speechText?.trim() ? "Video with speech generation" : "Video generation"
-        });
-
-      const newBalance = deductResult?.new_balance ?? (profile.credit_balance - creditCost);
+      // Deduct credits AFTER success (skip for admin)
+      let newBalance = profile.credit_balance;
+      if (!userIsAdmin) {
+        const { data: deductResult } = await supabaseAdmin
+          .rpc("deduct_user_credits", {
+            _user_id: userId,
+            _amount: creditCost,
+            _action: speechText?.trim() ? "Video with speech generation" : "Video generation"
+          });
+        newBalance = deductResult?.new_balance ?? (profile.credit_balance - creditCost);
+      } else {
+        console.log("Admin free access - skipping credit deduction for video");
+      }
 
       console.log(`Video generated successfully for user ${userId}, new balance: ${newBalance}`);
 
@@ -295,7 +304,7 @@ serve(async (req) => {
         JSON.stringify({
           success: true,
           video: videoData,
-          creditsUsed: creditCost,
+          creditsUsed: userIsAdmin ? 0 : creditCost,
           newBalance: newBalance,
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }

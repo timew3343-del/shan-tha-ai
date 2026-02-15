@@ -9,6 +9,11 @@ const corsHeaders = {
 const respond = (body: Record<string, unknown>, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
+async function isAdmin(supabaseAdmin: any, userId: string): Promise<boolean> {
+  const { data } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
+  return data === true;
+}
+
 // AI model failover for lyrics generation
 const LYRICS_MODELS = [
   "google/gemini-2.5-flash",
@@ -64,12 +69,13 @@ async function generateSongWithFailover(
   songTags: string,
   songLyrics: string
 ): Promise<{ audioUrl: string; videoUrl: string | null; provider: string }> {
-  // Get all song API keys
   const { data: apiKeys } = await supabaseAdmin.from("app_settings").select("key, value").in("key", [
     "sunoapi_org_key", "goapi_suno_api_key", "api_enabled_sunoapi", "api_enabled_goapi_suno"
   ]);
   const keyMap: Record<string, string> = {};
   apiKeys?.forEach((k: any) => { keyMap[k.key] = k.value || ""; });
+
+  console.log(`Song API keys available: sunoapi=${!!keyMap.sunoapi_org_key}, goapi=${!!keyMap.goapi_suno_api_key}`);
 
   const providers: { name: string; enabled: boolean; generate: () => Promise<{ audioUrl: string; videoUrl: string | null }> }[] = [];
 
@@ -94,6 +100,7 @@ async function generateSongWithFailover(
 
         if (!sunoResponse.ok) {
           const errText = await sunoResponse.text();
+          console.error(`SunoAPI error response: ${errText.substring(0, 500)}`);
           throw new Error(`SunoAPI ${sunoResponse.status}: ${errText.substring(0, 200)}`);
         }
 
@@ -104,7 +111,7 @@ async function generateSongWithFailover(
 
         console.log("SunoAPI task:", taskId);
 
-        // Poll for completion - extract audio from FIRST_SUCCESS or SUCCESS
+        // Poll for completion with 5-minute timeout (60 polls x 5s)
         for (let i = 0; i < 60; i++) {
           await new Promise(r => setTimeout(r, 5000));
           const res = await fetch(`https://api.sunoapi.org/api/v1/generate/record-info?taskId=${taskId}`, {
@@ -114,14 +121,10 @@ async function generateSongWithFailover(
           const status = data.data?.status;
           console.log(`SunoAPI poll ${i}: ${status}`);
 
-          // Try to extract songs from TEXT_SUCCESS, FIRST_SUCCESS or SUCCESS
           if (status === "TEXT_SUCCESS" || status === "FIRST_SUCCESS" || status === "SUCCESS") {
-            // Songs can be in data.data.data (array) or data.data.response.sunoData
             const songs = data.data?.data || data.data?.response?.sunoData || [];
             const songArr = Array.isArray(songs) ? songs : [];
             
-            // Log full response structure on these statuses for debugging
-            console.log(`SunoAPI ${status} response keys:`, JSON.stringify(Object.keys(data.data || {})));
             console.log(`SunoAPI ${status} songs count: ${songArr.length}, raw:`, JSON.stringify(data.data).substring(0, 800));
 
             if (songArr.length > 0) {
@@ -134,17 +137,15 @@ async function generateSongWithFailover(
               }
             }
 
-            // On SUCCESS with empty songs, that's a final failure
             if (status === "SUCCESS") {
               throw new Error(`SunoAPI: no audio found in SUCCESS response`);
             }
-            // On TEXT_SUCCESS or FIRST_SUCCESS, songs might not have URLs yet - keep polling
           }
           if (["CREATE_TASK_FAILED", "GENERATE_AUDIO_FAILED", "CALLBACK_EXCEPTION"].includes(status)) {
             throw new Error(data.data?.errorMessage || `SunoAPI failed: ${status}`);
           }
         }
-        throw new Error("SunoAPI: polling timeout");
+        throw new Error("SunoAPI: polling timeout after 5 minutes");
       },
     });
   }
@@ -168,6 +169,7 @@ async function generateSongWithFailover(
 
         if (!goResponse.ok) {
           const errText = await goResponse.text();
+          console.error(`GoAPI error: ${errText.substring(0, 500)}`);
           throw new Error(`GoAPI ${goResponse.status}: ${errText.substring(0, 200)}`);
         }
 
@@ -177,7 +179,6 @@ async function generateSongWithFailover(
 
         console.log("GoAPI task:", taskId);
 
-        // Poll for completion
         for (let i = 0; i < 60; i++) {
           await new Promise(r => setTimeout(r, 5000));
           const res = await fetch(`https://api.goapi.ai/api/suno/v1/music/${taskId}`, {
@@ -207,7 +208,6 @@ async function generateSongWithFailover(
     });
   }
 
-  // Try enabled providers first, then disabled ones as last resort
   const enabledProviders = providers.filter(p => p.enabled);
   const disabledProviders = providers.filter(p => !p.enabled);
   const orderedProviders = [...enabledProviders, ...disabledProviders];
@@ -228,14 +228,17 @@ async function generateSongWithFailover(
 }
 
 async function uploadToStorage(supabaseAdmin: any, url: string, userId: string, ext: string, contentType: string) {
+  console.log(`Downloading file from: ${url.substring(0, 100)}...`);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to download file: ${res.status}`);
   const buffer = await res.arrayBuffer();
+  console.log(`Downloaded ${buffer.byteLength} bytes, uploading to storage...`);
   const fileName = `${userId}/${ext.replace('.', '')}-${Date.now()}${ext}`;
   const { error: uploadErr } = await supabaseAdmin.storage.from("videos").upload(fileName, buffer, { contentType, upsert: true });
   if (uploadErr) throw new Error(`Upload failed: ${uploadErr.message}`);
   const { data: signedData, error: signedErr } = await supabaseAdmin.storage.from("videos").createSignedUrl(fileName, 86400 * 7);
   if (signedErr) throw new Error(`Signed URL failed: ${signedErr.message}`);
+  console.log(`File uploaded and signed URL created successfully`);
   return signedData.signedUrl;
 }
 
@@ -252,6 +255,8 @@ serve(async (req) => {
     if (userError || !user) return respond({ error: "Invalid token" }, 401);
 
     const userId = user.id;
+    const userIsAdmin = await isAdmin(supabaseAdmin, userId);
+    console.log(`Song/MTV: user=${userId}, isAdmin=${userIsAdmin}`);
 
     let parsedBody: { serviceOption?: string; topic?: string; genre?: string; mood?: string; language?: string; mtvStyle?: string; showSubtitles?: boolean; audioBase64?: string };
     try { parsedBody = await req.json(); } catch { return respond({ error: "Invalid request body" }, 400); }
@@ -262,7 +267,7 @@ serve(async (req) => {
       return respond({ error: "Invalid service option" }, 400);
     }
 
-    console.log(`Song/MTV: user=${userId}, option=${serviceOption}, genre=${genre}, mood=${mood}`);
+    console.log(`Song/MTV: option=${serviceOption}, genre=${genre}, mood=${mood}`);
 
     // Calculate credit cost
     const { data: marginSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "profit_margin").maybeSingle();
@@ -271,10 +276,14 @@ serve(async (req) => {
     const costMultiplier = serviceOption === "song_only" ? 1 : serviceOption === "mtv_only" ? 1.2 : 2;
     const creditCost = Math.ceil(BASE_COST * costMultiplier * (1 + profitMargin / 100));
 
-    // Check balance
-    const { data: profile } = await supabaseAdmin.from("profiles").select("credit_balance").eq("user_id", userId).single();
-    if (!profile || profile.credit_balance < creditCost) {
-      return respond({ error: "ခရက်ဒစ် မလုံလောက်ပါ", required: creditCost }, 402);
+    // Admin bypass: skip credit check entirely
+    if (!userIsAdmin) {
+      const { data: profile } = await supabaseAdmin.from("profiles").select("credit_balance").eq("user_id", userId).single();
+      if (!profile || profile.credit_balance < creditCost) {
+        return respond({ error: "ခရက်ဒစ် မလုံလောက်ပါ", required: creditCost }, 402);
+      }
+    } else {
+      console.log(`Admin free access - skipping credit check (would cost ${creditCost})`);
     }
 
     const STABILITY_API_KEY = Deno.env.get("STABILITY_API_KEY");
@@ -286,9 +295,9 @@ serve(async (req) => {
     let audioUrl: string | null = null;
     let videoUrl: string | null = null;
 
-    // ===== STEP 1: Generate Lyrics with AI Failover =====
+    // ===== STEP 1: Generate Lyrics =====
     if (serviceOption === "song_only" || serviceOption === "full_auto") {
-      console.log("Step 1: Generating lyrics with failover...");
+      console.log("Step 1: Generating lyrics...");
 
       const langName = { my: "Myanmar (Burmese)", en: "English", th: "Thai", ko: "Korean", ja: "Japanese", zh: "Chinese" }[language || "my"] || "Myanmar (Burmese)";
 
@@ -301,9 +310,9 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
       if (!lyrics) lyrics = topic || "Song lyrics";
     }
 
-    // ===== STEP 2: Generate Music with Sequential Failover =====
+    // ===== STEP 2: Generate Music =====
     if (serviceOption === "song_only" || serviceOption === "full_auto") {
-      console.log("Step 2: Generating song with failover (SunoAPI → GoAPI)...");
+      console.log("Step 2: Generating song...");
 
       const songTitle = (topic || "AI Song").substring(0, 80);
       const songTags = `${genre || "pop"}, ${mood || "happy"}`;
@@ -311,9 +320,8 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
 
       const songResult = await generateSongWithFailover(supabaseAdmin, songTitle, songTags, songLyrics);
 
-      console.log(`Song generated via ${songResult.provider}, uploading...`);
+      console.log(`Song generated via ${songResult.provider}, uploading to storage...`);
       audioUrl = await uploadToStorage(supabaseAdmin, songResult.audioUrl, userId, ".mp3", "audio/mpeg");
-      console.log("Audio uploaded successfully");
 
       if (songResult.videoUrl) {
         try {
@@ -325,9 +333,9 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
       }
     }
 
-    // ===== STEP 3: Generate MTV Video (for mtv_only or full_auto without video) =====
+    // ===== STEP 3: Generate MTV Video =====
     if ((serviceOption === "mtv_only" || (serviceOption === "full_auto" && !videoUrl)) && STABILITY_API_KEY) {
-      console.log("Step 3: Generating MTV video with Stability AI...");
+      console.log("Step 3: Generating MTV video...");
 
       if (serviceOption === "mtv_only" && audioBase64) {
         const audioBytes = Uint8Array.from(atob(audioBase64), c => c.charCodeAt(0));
@@ -423,14 +431,23 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
     if (serviceOption === "mtv_only" && !videoUrl) throw new Error("Failed to generate MTV video");
     if (serviceOption === "full_auto" && !audioUrl) throw new Error("Failed to generate music");
 
-    // Deduct credits only after success
-    const { data: deductResult } = await supabaseAdmin.rpc("deduct_user_credits", {
-      _user_id: userId, _amount: creditCost, _action: `song_mtv_${serviceOption}`,
-    });
+    // Deduct credits only after success (skip for admin)
+    let newBalance = 0;
+    if (!userIsAdmin) {
+      const { data: deductResult } = await supabaseAdmin.rpc("deduct_user_credits", {
+        _user_id: userId, _amount: creditCost, _action: `song_mtv_${serviceOption}`,
+      });
+      newBalance = (deductResult as any)?.new_balance ?? 0;
 
-    await supabaseAdmin.from("credit_audit_log").insert({
-      user_id: userId, amount: creditCost, credit_type: "deduction", description: `Song/MTV: ${serviceOption}, ${genre}, ${mood}`,
-    });
+      await supabaseAdmin.from("credit_audit_log").insert({
+        user_id: userId, amount: -creditCost, credit_type: "deduction", description: `Song/MTV: ${serviceOption}, ${genre}, ${mood}`,
+      });
+    } else {
+      console.log("Admin free access - skipping credit deduction for Song/MTV");
+      const { data: profile } = await supabaseAdmin
+        .from("profiles").select("credit_balance").eq("user_id", userId).single();
+      newBalance = profile?.credit_balance ?? 0;
+    }
 
     console.log("Song/MTV completed successfully");
 
@@ -439,8 +456,8 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
       video: videoUrl,
       lyrics,
       cleanLyrics,
-      creditsUsed: creditCost,
-      newBalance: (deductResult as any)?.new_balance,
+      creditsUsed: userIsAdmin ? 0 : creditCost,
+      newBalance,
     });
 
   } catch (error: unknown) {
