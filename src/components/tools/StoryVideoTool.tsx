@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { downloadImage } from "@/lib/downloadHelper";
 import { motion, AnimatePresence } from "framer-motion";
+import { useMaxVideoDuration } from "@/hooks/useMaxVideoDuration";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -62,6 +63,8 @@ export const StoryVideoTool = ({ userId, onBack }: StoryVideoToolProps) => {
   const { credits, refetch: refetchCredits } = useCredits(userId);
   const { showGuide, saveOutput } = useToolOutput("story_video", "Story Video");
 
+  const { maxDuration, maxLabel } = useMaxVideoDuration();
+
   const [story, setStory] = useState("");
   const [sceneCount, setSceneCount] = useState(5);
   const [durationPerScene, setDurationPerScene] = useState(3);
@@ -97,8 +100,8 @@ export const StoryVideoTool = ({ userId, onBack }: StoryVideoToolProps) => {
 
   const handleGenerate = async () => {
     if (!story.trim() || !userId) return;
-    if (totalDuration > 180) {
-      toast({ title: "Maximum limit is 3 minutes", description: "⚠️ အများဆုံး ၃ မိနစ် (စက္ကန့် ၁၈၀) အထိသာ ထုတ်ယူနိုင်ပါသည်။", variant: "destructive" });
+    if (totalDuration > maxDuration) {
+      toast({ title: `Maximum limit is ${Math.floor(maxDuration / 60)} minutes`, description: `⚠️ အများဆုံး ${maxLabel} အထိသာ ထုတ်ယူနိုင်ပါသည်။`, variant: "destructive" });
       return;
     }
     if (credits < creditCost) {
@@ -331,7 +334,7 @@ export const StoryVideoTool = ({ userId, onBack }: StoryVideoToolProps) => {
         <>
           <Button
             onClick={handleGenerate}
-            disabled={isProcessing || !story.trim() || totalDuration > 180}
+            disabled={isProcessing || !story.trim() || totalDuration > maxDuration}
             className="w-full gradient-gold text-primary-foreground py-5 rounded-2xl font-semibold"
           >
             {isProcessing ? (
@@ -340,8 +343,8 @@ export const StoryVideoTool = ({ userId, onBack }: StoryVideoToolProps) => {
               <><BookOpen className="w-5 h-5 mr-2" /> Story Video ဖန်တီးမည် ({creditCost} Cr)</>
             )}
           </Button>
-          <p className={`text-[10px] text-center font-myanmar ${totalDuration > 180 ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
-            ⚠️ အများဆုံး ၃ မိနစ် (စက္ကန့် ၁၈၀) အထိသာ ထုတ်ယူနိုင်ပါသည်။ (လက်ရှိ: {totalDuration}s)
+          <p className={`text-[10px] text-center font-myanmar ${totalDuration > maxDuration ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
+            ⚠️ အများဆုံး {maxLabel} (စက္ကန့် {maxDuration}) အထိသာ ထုတ်ယူနိုင်ပါသည်။ (လက်ရှိ: {totalDuration}s)
           </p>
         </>
       )}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Save, Gift, Play, Loader2, Settings2, Clock, CreditCard, Eye, EyeOff } from "lucide-react";
+import { Save, Gift, Play, Loader2, Settings2, Clock, CreditCard, Eye, EyeOff, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAppSettings } from "@/hooks/useAppSettings";
@@ -17,6 +17,8 @@ export const AppSettingsTab = () => {
   const [webhookSecret, setWebhookSecret] = useState("");
   const [showWebhookSecret, setShowWebhookSecret] = useState(false);
   const [savingWebhook, setSavingWebhook] = useState(false);
+  const [maxVideoDuration, setMaxVideoDuration] = useState(180);
+  const [savingVideoDuration, setSavingVideoDuration] = useState(false);
   useEffect(() => {
     if (!isLoading) {
       setAdRewardAmount(settings.ad_reward_amount);
@@ -28,15 +30,17 @@ export const AppSettingsTab = () => {
 
   // Load webhook secret
   useEffect(() => {
-    const loadWebhookSecret = async () => {
+    const loadSecrets = async () => {
       const { data } = await supabase
         .from("app_settings")
-        .select("value")
-        .eq("key", "stripe_webhook_secret")
-        .maybeSingle();
-      if (data?.value) setWebhookSecret(data.value);
+        .select("key, value")
+        .in("key", ["stripe_webhook_secret", "max_video_duration"]);
+      data?.forEach((d) => {
+        if (d.key === "stripe_webhook_secret" && d.value) setWebhookSecret(d.value);
+        if (d.key === "max_video_duration" && d.value) setMaxVideoDuration(parseInt(d.value, 10) || 180);
+      });
     };
-    loadWebhookSecret();
+    loadSecrets();
   }, []);
 
   const handleSaveWebhookSecret = async () => {
@@ -190,6 +194,55 @@ export const AppSettingsTab = () => {
             </div>
             <p className="text-xs text-muted-foreground">
               Campaign အတည်ပြုခံရသူများ ရရှိမည့် Credits
+            </p>
+          </div>
+        </div>
+
+        {/* Shotstack Video Duration Limit */}
+        <div className="gradient-card rounded-xl p-5 border border-blue-500/20">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+              <Film className="w-4 h-4 text-blue-500" />
+            </div>
+            <div>
+              <h4 className="font-semibold text-foreground font-myanmar">Shotstack Plan Max Duration</h4>
+              <p className="text-xs text-muted-foreground">Video tools များ၏ အများဆုံး Duration ကို ထိန်းချုပ်ပါ</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium font-myanmar text-foreground">
+              Max Video Duration (Seconds)
+            </label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                value={maxVideoDuration}
+                onChange={(e) => setMaxVideoDuration(parseInt(e.target.value) || 0)}
+                min={30}
+                max={3600}
+                className="max-w-[150px]"
+              />
+              <span className="text-sm text-muted-foreground">seconds ({Math.floor(maxVideoDuration / 60)} min)</span>
+              <Button
+                onClick={async () => {
+                  setSavingVideoDuration(true);
+                  try {
+                    await supabase.from("app_settings").upsert({ key: "max_video_duration", value: maxVideoDuration.toString() }, { onConflict: "key" });
+                    toast({ title: "Video Duration Limit သိမ်းဆည်းပြီးပါပြီ" });
+                  } catch (e: any) {
+                    toast({ title: "Error", description: e.message, variant: "destructive" });
+                  } finally {
+                    setSavingVideoDuration(false);
+                  }
+                }}
+                disabled={savingVideoDuration}
+                size="sm"
+              >
+                {savingVideoDuration ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground font-myanmar">
+              ဤတန်ဖိုးပြောင်းလိုက်ရင် Video tools အားလုံးမှာ ချက်ချင်း အသက်ဝင်ပါမည်။ (Default: 180 = 3 min)
             </p>
           </div>
         </div>

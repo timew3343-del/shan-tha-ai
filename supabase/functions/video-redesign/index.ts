@@ -89,6 +89,11 @@ serve(async (req) => {
       );
     }
 
+    // Dynamic max duration check from admin settings
+    const { data: maxDurSetting } = await supabaseAdmin
+      .from("app_settings").select("value").eq("key", "max_video_duration").maybeSingle();
+    const maxVideoDuration = maxDurSetting?.value ? parseInt(maxDurSetting.value, 10) : 180;
+
     // Get credit cost from admin settings
     const { data: costSetting } = await supabaseAdmin
       .from("app_settings").select("value").eq("key", "credit_cost_video_redesign").maybeSingle();

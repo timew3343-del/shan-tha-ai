@@ -12,6 +12,8 @@ import { ToolHeader } from "@/components/ToolHeader";
 import { FirstOutputGuide } from "@/components/FirstOutputGuide";
 import { useToolOutput } from "@/hooks/useToolOutput";
 import { motion } from "framer-motion";
+import { useMaxVideoDuration } from "@/hooks/useMaxVideoDuration";
+import { VideoLimitWarning } from "@/components/VideoLimitWarning";
 
 interface VideoRedesignToolProps {
   userId?: string;
@@ -366,9 +368,7 @@ export const VideoRedesignTool = ({ userId, onBack }: VideoRedesignToolProps) =>
           </>
         )}
       </Button>
-      <p className="text-[10px] text-muted-foreground text-center font-myanmar">
-        ⚠️ အများဆုံး ၃ မိနစ် (စက္ကန့် ၁၈၀) အထိသာ ထုတ်ယူနိုင်ပါသည်။
-      </p>
+      <VideoLimitWarning />
 
       {/* Result */}
       {resultVideo && (
