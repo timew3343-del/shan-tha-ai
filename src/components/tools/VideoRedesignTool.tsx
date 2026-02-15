@@ -366,6 +366,9 @@ export const VideoRedesignTool = ({ userId, onBack }: VideoRedesignToolProps) =>
           </>
         )}
       </Button>
+      <p className="text-[10px] text-muted-foreground text-center font-myanmar">
+        ⚠️ အများဆုံး ၃ မိနစ် (စက္ကန့် ၁၈၀) အထိသာ ထုတ်ယူနိုင်ပါသည်။
+      </p>
 
       {/* Result */}
       {resultVideo && (
