@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 const PLATFORM_NAME = "Myanmar AI Studio";
-const WEBSITE_URL = "https://shan-tha-ai.lovable.app";
+const WEBSITE_URL = "https://myanmaraistudio.com";
 
 const PLATFORM_FEATURES = [
   "AI ပုံထုပ်ရန် (Image Generation)",
@@ -46,7 +46,7 @@ const MARKETING_TOPICS = [
 const SLIDE_COLORS = ["#1a1a2e", "#16213e", "#0f3460", "#533483", "#e94560", "#1b1b2f", "#162447", "#1f4068"];
 
 // Logo URL for watermark overlay
-const LOGO_URL = "https://shan-tha-ai.lovable.app/favicon.png";
+const LOGO_URL = "https://myanmaraistudio.com/favicon.png";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -268,10 +268,10 @@ async function generateTTS(
   apiKey: string, text: string, language: string, voice: string
 ): Promise<string | null> {
   try {
-    // Truncate text to ~500 chars for TTS
-    const ttsText = text.substring(0, 500).replace(/\n/g, ". ");
+    // Use full text for TTS (up to 4000 chars for complete narration)
+    const ttsText = text.substring(0, 4000).replace(/\n/g, ". ");
 
-    const res = await fetch("https://api.shotstack.io/create/stage/assets", {
+    const res = await fetch("https://api.shotstack.io/create/v1/assets", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": apiKey },
       body: JSON.stringify({
@@ -294,7 +294,7 @@ async function generateTTS(
     const start = Date.now();
     while (Date.now() - start < maxWait) {
       await new Promise(r => setTimeout(r, 5000));
-      const statusRes = await fetch(`https://api.shotstack.io/create/stage/assets/${assetId}`, {
+      const statusRes = await fetch(`https://api.shotstack.io/create/v1/assets/${assetId}`, {
         headers: { "x-api-key": apiKey },
       });
       if (!statusRes.ok) continue;
@@ -330,8 +330,8 @@ async function renderPortraitVideo(
     timeline: {
       background: "#000000",
       fonts: [
-        { src: "https://templates.shotstack.io/basic/asset/font/opensans-regular.ttf" },
-        { src: "https://cdn.jsdelivr.net/gh/nicholasgasior/gfonts@master/dist/NotoSansMyanmar-Regular.ttf" },
+        { src: "https://fonts.gstatic.com/s/opensans/v40/memSYaGs126MiZpBA-UvWbX2vVnXBbObj2OVZyOOSr4dVJWUgsjZ0B4gaVc.ttf" },
+        { src: "https://fonts.gstatic.com/s/notosansmyanmar/v20/AlZq_y1ZtY3ymOryg38hOCSdOnFq0En23g.ttf" },
       ],
       tracks,
     },
@@ -343,8 +343,8 @@ async function renderPortraitVideo(
     },
   };
 
-  console.log("Submitting Shotstack 9:16 portrait render...");
-  const renderRes = await fetch("https://api.shotstack.io/edit/stage/render", {
+  console.log("Submitting Shotstack 9:16 portrait render (production)...");
+  const renderRes = await fetch("https://api.shotstack.io/edit/v1/render", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey },
     body: JSON.stringify(editPayload),
@@ -366,7 +366,7 @@ async function renderPortraitVideo(
   const start = Date.now();
   while (Date.now() - start < maxWait) {
     await new Promise(r => setTimeout(r, 10000));
-    const statusRes = await fetch(`https://api.shotstack.io/edit/stage/render/${renderId}`, {
+    const statusRes = await fetch(`https://api.shotstack.io/edit/v1/render/${renderId}`, {
       headers: { "x-api-key": apiKey },
     });
     if (!statusRes.ok) continue;

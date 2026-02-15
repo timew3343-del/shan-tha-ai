@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -934,6 +935,23 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
                       </Button>
                     </div>
                   )}
+                </div>
+                <div className="flex justify-end mt-1">
+                  <Button variant="ghost" size="sm" className="h-6 px-2 text-destructive hover:text-destructive text-[9px]"
+                    onClick={async () => {
+                      try {
+                        // Try deleting from both tables
+                        const { error: e1 } = await supabase.from("auto_service_videos").delete().eq("id", video.id);
+                        const { error: e2 } = await supabase.from("daily_content_videos").delete().eq("id", video.id);
+                        if (e1 && e2) throw e1;
+                        setVideos(prev => prev.filter(v => v.id !== video.id));
+                        toast({ title: "ဖျက်ပြီးပါပြီ" });
+                      } catch (e: any) {
+                        toast({ title: "Error", description: e.message, variant: "destructive" });
+                      }
+                    }}>
+                    <Trash2 className="w-3 h-3 mr-1" /> ဖျက်မည်
+                  </Button>
                 </div>
               </Card>
             ))
