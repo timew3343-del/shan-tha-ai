@@ -42,7 +42,10 @@ serve(async (req) => {
     }
 
     const userId = user.id;
-    console.log(`Authenticated user: ${userId}`);
+
+    // Check admin
+    const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
+    const userIsAdmin = isAdminData === true;
 
     // Check maintenance mode
     const { data: maintenanceSetting } = await supabaseAdmin
@@ -58,16 +61,16 @@ serve(async (req) => {
       );
     }
 
-    // Fetch global profit margin and calculate credit cost
-    const { data: marginSetting } = await supabaseAdmin
-      .from("app_settings")
-      .select("value")
-      .eq("key", "profit_margin")
-      .maybeSingle();
-    
-    const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
-    const BASE_COST = 15; // Base API cost for character animation
-    const creditCost = Math.ceil(BASE_COST * (1 + profitMargin / 100));
+    // Get credit cost from admin settings
+    const { data: costSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "credit_cost_character_animation").maybeSingle();
+    let creditCost: number;
+    if (costSetting?.value) {
+      creditCost = parseInt(costSetting.value, 10);
+    } else {
+      const { data: marginSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "profit_margin").maybeSingle();
+      const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
+      creditCost = Math.ceil(15 * (1 + profitMargin / 100));
+    }
 
     // Check user's credit balance
     const { data: profile, error: profileError } = await supabaseAdmin
@@ -84,7 +87,7 @@ serve(async (req) => {
       );
     }
 
-    if (profile.credit_balance < creditCost) {
+    if (!userIsAdmin && profile.credit_balance < creditCost) {
       return new Response(
         JSON.stringify({ 
           success: false, 
@@ -206,19 +209,15 @@ serve(async (req) => {
       );
     }
 
-    // Deduct credits after successful generation
-    const { data: deductResult, error: deductError } = await supabaseAdmin.rpc("deduct_user_credits", {
-      _user_id: userId,
-      _amount: creditCost,
-      _action: "Character animation"
-    });
-
-    if (deductError) {
-      console.error("Failed to deduct credits:", deductError);
-      // Still return success since animation was generated, but log the issue
+    // Deduct credits after successful generation (skip for admin)
+    if (!userIsAdmin) {
+      const { data: deductResult, error: deductError } = await supabaseAdmin.rpc("deduct_user_credits", {
+        _user_id: userId, _amount: creditCost, _action: "Character animation"
+      });
+      if (deductError) console.error("Failed to deduct credits:", deductError);
+      else console.log("Credits deducted. New balance:", (deductResult as any)?.new_balance);
     } else {
-      const deductData = deductResult as { success: boolean; new_balance?: number } | null;
-      console.log("Credits deducted successfully. New balance:", deductData?.new_balance);
+      console.log("Admin free access - skipping credit deduction for Character animation");
     }
 
     const videoUrl = Array.isArray(result.output) ? result.output[0] : result.output;
@@ -227,10 +226,8 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ 
-        success: true, 
-        video_url: videoUrl,
-        prediction_id: prediction.id,
-        credits_deducted: creditCost,
+        success: true, video_url: videoUrl, prediction_id: prediction.id,
+        credits_deducted: userIsAdmin ? 0 : creditCost,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

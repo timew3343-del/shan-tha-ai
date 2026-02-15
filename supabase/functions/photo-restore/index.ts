@@ -85,13 +85,17 @@ serve(async (req) => {
       });
     }
 
+    // Check admin
+    const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
+    const userIsAdmin = isAdminData === true;
+
     // Credit check
     const { data: costSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "credit_cost_photo_restoration").maybeSingle();
     const creditCostPerImage = costSetting?.value ? parseInt(costSetting.value, 10) : 10;
     const totalCost = creditCostPerImage * imageList.length;
 
     const { data: profile } = await supabaseAdmin.from("profiles").select("credit_balance").eq("user_id", userId).single();
-    if (!profile || profile.credit_balance < totalCost) {
+    if (!userIsAdmin && (!profile || profile.credit_balance < totalCost)) {
       return new Response(JSON.stringify({ error: "Insufficient credits", required: totalCost }), {
         status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -119,11 +123,15 @@ serve(async (req) => {
       });
     }
 
-    // Deduct credits only for successful restorations
+    // Deduct credits only for successful restorations (skip for admin)
     const actualCost = creditCostPerImage * successfulResults.length;
-    await supabaseAdmin.rpc("deduct_user_credits", {
-      _user_id: userId, _amount: actualCost, _action: `Photo Restoration (${successfulResults.length} images)`,
-    });
+    if (!userIsAdmin) {
+      await supabaseAdmin.rpc("deduct_user_credits", {
+        _user_id: userId, _amount: actualCost, _action: `Photo Restoration (${successfulResults.length} images)`,
+      });
+    } else {
+      console.log("Admin free access - skipping credit deduction for Photo Restoration");
+    }
 
     // Legacy single-image response format compatibility
     if (body.imageBase64 && !body.images) {

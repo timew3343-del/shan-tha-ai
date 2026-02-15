@@ -85,6 +85,11 @@ serve(async (req) => {
     }
 
     const userId = user.id;
+
+    // Check admin
+    const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
+    const userIsAdmin = isAdminData === true;
+
     const { images, productDetails, language, resolution, platforms, adStyle, showSubtitles, videoDurationMinutes } = await req.json();
     const requestedDurationMin = Math.min(Math.max(videoDurationMinutes || 1, 1), 10);
 
@@ -94,24 +99,24 @@ serve(async (req) => {
 
     console.log(`Auto Ad: user=${userId}, images=${images.length}, platforms=${platforms.join(",")}, lang=${language}, duration=${requestedDurationMin}min`);
 
-    // Calculate credit cost (with duration multiplier)
-    const { data: marginSettings } = await supabaseAdmin.from("app_settings").select("key, value").in("key", ["profit_margin", "auto_ad_profit_margin"]);
-    const marginMap: Record<string, string> = {};
-    marginSettings?.forEach((s: any) => { marginMap[s.key] = s.value || ""; });
+    // Get credit cost from admin settings
+    const { data: costSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "credit_cost_auto_ad").maybeSingle();
+    let creditCost: number;
+    if (costSetting?.value) {
+      creditCost = parseInt(costSetting.value, 10) * platforms.length * requestedDurationMin;
+    } else {
+      const { data: marginSettings } = await supabaseAdmin.from("app_settings").select("key, value").in("key", ["profit_margin", "auto_ad_profit_margin"]);
+      const marginMap: Record<string, string> = {};
+      marginSettings?.forEach((s: any) => { marginMap[s.key] = s.value || ""; });
+      const profitMargin = marginMap.auto_ad_profit_margin ? parseInt(marginMap.auto_ad_profit_margin, 10) : marginMap.profit_margin ? parseInt(marginMap.profit_margin, 10) : 50;
+      const BASE_COST = 18;
+      const perPlatformCost = Math.ceil(BASE_COST * (1 + profitMargin / 100) * requestedDurationMin);
+      creditCost = perPlatformCost * platforms.length;
+    }
 
-    const profitMargin = marginMap.auto_ad_profit_margin
-      ? parseInt(marginMap.auto_ad_profit_margin, 10)
-      : marginMap.profit_margin
-        ? parseInt(marginMap.profit_margin, 10)
-        : 50;
-
-    const BASE_COST = 18;
-    const perPlatformCost = Math.ceil(BASE_COST * (1 + profitMargin / 100) * requestedDurationMin);
-    const creditCost = perPlatformCost * platforms.length;
-
-    // Check balance
+    // Admin bypass + Check balance
     const { data: profile } = await supabaseAdmin.from("profiles").select("credit_balance").eq("user_id", userId).single();
-    if (!profile || profile.credit_balance < creditCost) {
+    if (!userIsAdmin && (!profile || profile.credit_balance < creditCost)) {
       return new Response(JSON.stringify({ error: "ခရက်ဒစ် မလုံလောက်ပါ", required: creditCost }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -374,15 +379,18 @@ serve(async (req) => {
       }
     }
 
-    // Deduct credits after success
-    const { data: deductResult } = await supabaseAdmin.rpc("deduct_user_credits", {
-      _user_id: userId, _amount: creditCost, _action: "auto_ad",
-    });
-
-    await supabaseAdmin.from("credit_audit_log").insert({
-      user_id: userId, amount: -creditCost, credit_type: "deduction",
-      description: `Auto Ad: ${platforms.join(",")} ${language}`,
-    });
+    // Deduct credits after success (skip for admin)
+    if (!userIsAdmin) {
+      const { data: deductResult } = await supabaseAdmin.rpc("deduct_user_credits", {
+        _user_id: userId, _amount: creditCost, _action: "auto_ad",
+      });
+      await supabaseAdmin.from("credit_audit_log").insert({
+        user_id: userId, amount: -creditCost, credit_type: "deduction",
+        description: `Auto Ad: ${platforms.join(",")} ${language}`,
+      });
+    } else {
+      console.log("Admin free access - skipping credit deduction for Auto Ad");
+    }
 
     // Save outputs to user_outputs (server-side)
     const platformLabels: Record<string, string> = { youtube: "YouTube (16:9)", fb_tiktok: "FB/TikTok (9:16)", square: "Square (1:1)" };

@@ -30,17 +30,25 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Image is required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    console.log(`BG Studio: user=${userId}, bg=${backgroundId}`);
+    // Check admin
+    const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
+    const userIsAdmin = isAdminData === true;
+    console.log(`BG Studio: user=${userId}, bg=${backgroundId}, isAdmin=${userIsAdmin}`);
 
-    // Calculate credit cost
-    const { data: marginSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "profit_margin").maybeSingle();
-    const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
-    const BASE_COST = 2;
-    const creditCost = Math.ceil(BASE_COST * (1 + profitMargin / 100));
+    // Get credit cost from admin settings
+    const { data: costSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "credit_cost_bg_studio").maybeSingle();
+    let creditCost: number;
+    if (costSetting?.value) {
+      creditCost = parseInt(costSetting.value, 10);
+    } else {
+      const { data: marginSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "profit_margin").maybeSingle();
+      const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
+      creditCost = Math.ceil(2 * (1 + profitMargin / 100));
+    }
 
-    // Check balance
+    // Admin bypass + Check balance
     const { data: profile } = await supabaseAdmin.from("profiles").select("credit_balance").eq("user_id", userId).single();
-    if (!profile || profile.credit_balance < creditCost) {
+    if (!userIsAdmin && (!profile || profile.credit_balance < creditCost)) {
       return new Response(JSON.stringify({ error: "ခရက်ဒစ် မလုံလောက်ပါ", required: creditCost }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -125,22 +133,24 @@ serve(async (req) => {
       }
     }
 
-    // Deduct credits after success
-    const { data: deductResult } = await supabaseAdmin.rpc("deduct_user_credits", {
-      _user_id: userId, _amount: creditCost, _action: "bg_studio",
-    });
-
-    // Log audit
-    await supabaseAdmin.from("credit_audit_log").insert({
-      user_id: userId, amount: creditCost, credit_type: "deduction", description: `BG Studio: ${backgroundId}`,
-    });
-
-    console.log("BG Studio completed successfully");
+    // Deduct credits after success (skip for admin)
+    let newBalance = profile?.credit_balance || 0;
+    if (!userIsAdmin) {
+      const { data: deductResult } = await supabaseAdmin.rpc("deduct_user_credits", {
+        _user_id: userId, _amount: creditCost, _action: "bg_studio",
+      });
+      newBalance = deductResult?.new_balance ?? 0;
+      await supabaseAdmin.from("credit_audit_log").insert({
+        user_id: userId, amount: creditCost, credit_type: "deduction", description: `BG Studio: ${backgroundId}`,
+      });
+    } else {
+      console.log("Admin free access - skipping credit deduction for BG Studio");
+    }
 
     return new Response(JSON.stringify({
       image: finalImage,
-      creditsUsed: creditCost,
-      newBalance: deductResult?.new_balance,
+      creditsUsed: userIsAdmin ? 0 : creditCost,
+      newBalance,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (error: unknown) {

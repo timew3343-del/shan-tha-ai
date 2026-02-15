@@ -51,7 +51,10 @@ serve(async (req) => {
     }
 
     const userId = user.id;
-    console.log(`User ${userId} requesting video redesign`);
+
+    // Check admin
+    const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
+    const userIsAdmin = isAdminData === true;
 
     // Parse and validate request body
     let parsedBody: { inputVideo?: string; prompt?: string };
@@ -86,10 +89,17 @@ serve(async (req) => {
       );
     }
 
-    // Fixed 70% profit margin for this tool
-    const PROFIT_MARGIN = 70;
-    const BASE_COST = 12;
-    const creditCost = Math.ceil(BASE_COST * (1 + PROFIT_MARGIN / 100));
+    // Get credit cost from admin settings
+    const { data: costSetting } = await supabaseAdmin
+      .from("app_settings").select("value").eq("key", "credit_cost_video_redesign").maybeSingle();
+    let creditCost: number;
+    if (costSetting?.value) {
+      creditCost = parseInt(costSetting.value, 10);
+    } else {
+      const PROFIT_MARGIN = 70;
+      const BASE_COST = 12;
+      creditCost = Math.ceil(BASE_COST * (1 + PROFIT_MARGIN / 100));
+    }
 
     console.log(`Video Redesign credit cost: ${creditCost} (base: ${BASE_COST}, margin: ${PROFIT_MARGIN}%)`);
 
@@ -107,7 +117,7 @@ serve(async (req) => {
       );
     }
 
-    if (profile.credit_balance < creditCost) {
+    if (!userIsAdmin && profile.credit_balance < creditCost) {
       return new Response(
         JSON.stringify({
           error: "ခရက်ဒစ် မလုံလောက်ပါ",
@@ -241,29 +251,20 @@ serve(async (req) => {
       );
     }
 
-    // Deduct credits AFTER success
-    const { data: deductResult, error: deductError } = await supabaseAdmin.rpc(
-      "deduct_user_credits",
-      {
-        _user_id: userId,
-        _amount: creditCost,
-        _action: "Video Redesign (Style Transfer)",
-      }
-    );
-
-    if (deductError) {
-      console.error("Credit deduction error:", deductError);
+    // Deduct credits AFTER success (skip for admin)
+    let newBalance = profile.credit_balance;
+    if (!userIsAdmin) {
+      const { data: deductResult, error: deductError } = await supabaseAdmin.rpc("deduct_user_credits", {
+        _user_id: userId, _amount: creditCost, _action: "Video Redesign (Style Transfer)",
+      });
+      if (deductError) console.error("Credit deduction error:", deductError);
+      await supabaseAdmin.from("credit_audit_log").insert({
+        user_id: userId, amount: creditCost, credit_type: "deduction", description: `Video Redesign: ${prompt.substring(0, 50)}`,
+      });
+      newBalance = deductResult?.new_balance ?? profile.credit_balance - creditCost;
+    } else {
+      console.log("Admin free access - skipping credit deduction for Video Redesign");
     }
-
-    // Log to audit
-    await supabaseAdmin.from("credit_audit_log").insert({
-      user_id: userId,
-      amount: creditCost,
-      credit_type: "deduction",
-      description: `Video Redesign: ${prompt.substring(0, 50)}`,
-    });
-
-    const newBalance = deductResult?.new_balance ?? profile.credit_balance - creditCost;
 
     console.log(`Video redesign successful for user ${userId}, cost: ${creditCost}, new balance: ${newBalance}`);
 
@@ -271,7 +272,7 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         video: resultUrl,
-        creditsUsed: creditCost,
+        creditsUsed: userIsAdmin ? 0 : creditCost,
         newBalance: newBalance,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
