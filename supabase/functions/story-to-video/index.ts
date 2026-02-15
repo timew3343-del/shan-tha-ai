@@ -91,16 +91,24 @@ serve(async (req) => {
       }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // Fetch OpenAI key for primary AI
+    const { data: aiSettings } = await supabaseAdmin
+      .from("app_settings").select("key, value")
+      .in("key", ["openai_api_key", "api_enabled_openai"]);
+    const aiConfigMap: Record<string, string> = {};
+    aiSettings?.forEach((s: any) => { aiConfigMap[s.key] = s.value; });
+    const openaiKey = aiConfigMap["api_enabled_openai"] !== "false" ? aiConfigMap["openai_api_key"] : null;
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
+    if (!openaiKey && !LOVABLE_API_KEY) {
       return new Response(JSON.stringify({ error: "AI service not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     console.log(`Story-to-Video: User ${userId}, ${clampedScenes} scenes, style: ${artStyle}`);
 
-    // Step 1: Generate character Visual ID + scene scripts via Gemini
-    const scriptPrompt = `You are a professional storyboard artist and scriptwriter. 
+    // Step 1: Generate character Visual ID + scene scripts via OpenAI GPT-4o (primary) or Lovable AI (fallback)
+    const scriptPrompt = `You are a professional storyboard artist and scriptwriter for Myanmaraistudio.com. 
 
 STORY: "${story}"
 
@@ -129,34 +137,62 @@ Respond with ONLY valid JSON:
   ]
 }`;
 
-    const scriptResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: "You are a professional storyboard creator. Always respond with valid JSON only." },
-          { role: "user", content: scriptPrompt },
-        ],
-      }),
-    });
+    const scriptMessages = [
+      { role: "system", content: "You are a professional storyboard creator. Always respond with valid JSON only." },
+      { role: "user", content: scriptPrompt },
+    ];
 
-    if (!scriptResponse.ok) {
-      const errText = await scriptResponse.text();
-      console.error("Gemini script error:", scriptResponse.status, errText);
-      if (scriptResponse.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded" }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    let scriptText = "";
+
+    // Try OpenAI GPT-4o first
+    if (openaiKey) {
+      try {
+        console.log("Story script: trying OpenAI GPT-4o (primary)");
+        const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "gpt-4o", messages: scriptMessages, response_format: { type: "json_object" }, temperature: 0.7 }),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          scriptText = data.choices?.[0]?.message?.content || "";
+          console.log("Story script: success with OpenAI GPT-4o");
+        } else {
+          const errText = await resp.text();
+          console.warn("OpenAI script failed:", resp.status, errText.substring(0, 100));
+        }
+      } catch (err: any) {
+        console.warn("OpenAI script error:", err.message);
       }
-      return new Response(JSON.stringify({ error: "AI script generation failed" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const scriptData = await scriptResponse.json();
-    const scriptText = scriptData.choices?.[0]?.message?.content || "";
+    // Fallback to Lovable AI
+    if (!scriptText && LOVABLE_API_KEY) {
+      console.log("Story script: falling back to Lovable AI");
+      const scriptResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages: scriptMessages }),
+      });
+      if (scriptResponse.ok) {
+        const scriptData = await scriptResponse.json();
+        scriptText = scriptData.choices?.[0]?.message?.content || "";
+      } else {
+        const errText = await scriptResponse.text();
+        console.error("Lovable AI script error:", scriptResponse.status, errText);
+        if (scriptResponse.status === 429) {
+          return new Response(JSON.stringify({ error: "Rate limit exceeded" }),
+            { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        return new Response(JSON.stringify({ error: "AI script generation failed" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+
+    if (!scriptText) {
+      return new Response(JSON.stringify({ error: "AI script generation failed - no response" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     let storyboard: { characterId: string; negativePrompt: string; scenes: SceneScript[] };
     try {

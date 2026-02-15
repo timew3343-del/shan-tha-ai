@@ -18,50 +18,70 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(result);
 }
 
-// AI model failover list
-const AI_MODELS = [
-  "google/gemini-3-flash-preview",
-  "google/gemini-2.5-flash",
-  "openai/gpt-5-mini",
-];
+// Fetch OpenAI key dynamically from app_settings
+async function getOpenAIKey(supabaseAdmin: any): Promise<string | null> {
+  const { data: settings } = await supabaseAdmin
+    .from("app_settings").select("key, value")
+    .in("key", ["openai_api_key", "api_enabled_openai"]);
+  const configMap: Record<string, string> = {};
+  settings?.forEach((s: any) => { configMap[s.key] = s.value; });
+  if (configMap["api_enabled_openai"] === "false") return null;
+  return configMap["openai_api_key"] || null;
+}
 
-async function callAIWithFailover(apiKey: string, messages: any[]): Promise<any> {
-  let lastError = "";
-  for (const model of AI_MODELS) {
+async function callAIWithFailover(supabaseAdmin: any, lovableKey: string, messages: any[]): Promise<any> {
+  // Try OpenAI GPT-4o first
+  const openaiKey = await getOpenAIKey(supabaseAdmin);
+  if (openaiKey) {
     try {
-      console.log(`Auto-Ad AI trying: ${model}`);
+      console.log("Auto-Ad AI: trying OpenAI GPT-4o (primary)");
+      const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "gpt-4o", messages, response_format: { type: "json_object" }, temperature: 0.7, max_tokens: 1500 }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        const content = data.choices?.[0]?.message?.content;
+        if (content) {
+          console.log("Auto-Ad AI: success with OpenAI GPT-4o");
+          try { return JSON.parse(content); } catch { return { voiceover: content, scenes: [], cta: "Shop Now" }; }
+        }
+      } else {
+        const errText = await resp.text();
+        console.warn(`OpenAI failed: ${resp.status} - ${errText.substring(0, 100)}`);
+      }
+    } catch (err: any) {
+      console.warn(`OpenAI error: ${err.message}`);
+    }
+  }
+
+  // Fallback: Lovable AI Gateway
+  const fallbackModels = ["google/gemini-3-flash-preview", "google/gemini-2.5-flash"];
+  for (const model of fallbackModels) {
+    try {
+      console.log(`Auto-Ad AI fallback: ${model}`);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 45000);
-
       const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model,
-          messages,
-          response_format: { type: "json_object" },
-          temperature: 0.7,
-          max_tokens: 1500,
-        }),
+        headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model, messages, response_format: { type: "json_object" }, temperature: 0.7, max_tokens: 1500 }),
         signal: controller.signal,
       });
-
       clearTimeout(timeoutId);
-
       if (response.ok) {
         const data = await response.json();
         const content = data.choices?.[0]?.message?.content;
         if (content) {
-          console.log(`Auto-Ad AI success: ${model}`);
+          console.log(`Auto-Ad AI: success with ${model}`);
           try { return JSON.parse(content); } catch { return { voiceover: content, scenes: [], cta: "Shop Now" }; }
         }
       }
       const errText = await response.text();
-      lastError = `${model}: ${response.status}`;
-      console.warn(`Auto-Ad AI ${lastError} - ${errText.substring(0, 100)}`);
+      console.warn(`${model}: ${response.status} - ${errText.substring(0, 100)}`);
     } catch (err: any) {
-      lastError = `${model}: ${err.message}`;
-      console.warn(`Auto-Ad AI error: ${lastError}`);
+      console.warn(`${model} error: ${err.message}`);
     }
   }
   return { voiceover: "", scenes: [], cta: "Shop Now" };
@@ -138,14 +158,14 @@ serve(async (req) => {
     const langMap: Record<string, string> = { my: "Myanmar (Burmese)", en: "English", th: "Thai" };
     const langName = langMap[language] || "Myanmar (Burmese)";
 
-    const adScript = await callAIWithFailover(LOVABLE_API_KEY, [
+    const adScript = await callAIWithFailover(supabaseAdmin, LOVABLE_API_KEY, [
       {
         role: "system",
-        content: `You are a world-class advertising producer. Create a professional 30-second video ad script in ${langName}.
+        content: `You are a world-class advertising producer for Myanmaraistudio.com. Create a professional ${requestedDurationMin}-minute video ad script in ${langName}.
         Include: voiceover narration, scene descriptions for ${images.length} product images, background music suggestion, call-to-action.
         Return JSON: { "voiceover": "full narration text", "scenes": [{"description": "scene desc", "duration_seconds": 3}], "cta": "call to action", "music_mood": "upbeat/calm/dramatic" }`,
       },
-      { role: "user", content: `Product: ${productDetails}. Number of product images: ${images.length}` },
+      { role: "user", content: `Product: ${productDetails}. Number of product images: ${images.length}. Duration: ${requestedDurationMin} minutes.` },
     ]);
 
     console.log("Ad script generated");
@@ -408,11 +428,12 @@ serve(async (req) => {
     }
     console.log(`Auto Ad completed, ${resultVideos.length} videos saved to store`);
 
+    const { data: updatedProfile } = await supabaseAdmin.from("profiles").select("credit_balance").eq("user_id", userId).single();
     return new Response(JSON.stringify({
       videos: resultVideos,
       script: adScript,
-      creditsUsed: creditCost,
-      newBalance: (deductResult as any)?.new_balance,
+      creditsUsed: userIsAdmin ? 0 : creditCost,
+      newBalance: updatedProfile?.credit_balance ?? 0,
       savedToStore: true,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
