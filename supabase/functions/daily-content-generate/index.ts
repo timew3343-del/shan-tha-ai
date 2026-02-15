@@ -59,9 +59,11 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: "AI API not configured" }), {
+    // Get OpenAI API key from admin settings (primary AI engine)
+    const { data: openaiEnabledSetting } = await supabaseAdmin
+      .from("app_settings").select("value").eq("key", "api_enabled_openai").maybeSingle();
+    if (openaiEnabledSetting?.value === "false") {
+      return new Response(JSON.stringify({ error: "OpenAI API is disabled in admin settings" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -80,6 +82,11 @@ serve(async (req) => {
     const { data: openaiKeySetting } = await supabaseAdmin
       .from("app_settings").select("value").eq("key", "openai_api_key").maybeSingle();
     const OPENAI_API_KEY = openaiKeySetting?.value;
+    if (!OPENAI_API_KEY) {
+      return new Response(JSON.stringify({ error: "OpenAI API key not configured in admin settings" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Load configs
     const { data: settings } = await supabaseAdmin
@@ -134,7 +141,7 @@ serve(async (req) => {
 
       try {
         console.log(`Generating ${vc.type} script...`);
-        const scriptResult = await generateScript(LOVABLE_API_KEY, vc.type, vc.topic);
+        const scriptResult = await generateScript(OPENAI_API_KEY, vc.type, vc.topic);
 
         const { data: record, error: insertErr } = await supabaseAdmin.from("daily_content_videos").insert({
           video_type: vc.type, title: scriptResult.title,
@@ -516,19 +523,20 @@ Return a JSON object with these fields:
 
 Return ONLY valid JSON, no markdown.`;
 
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: "gpt-4o",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
       temperature: 0.8,
+      max_tokens: 2000,
     }),
   });
 
