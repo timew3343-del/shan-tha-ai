@@ -41,17 +41,25 @@ serve(async (req) => {
       });
     }
 
-    // Fetch admin margin for dynamic pricing
-    const { data: marginSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "profit_margin").maybeSingle();
-    const adminMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 200;
+    // Check admin
+    const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
+    const userIsAdmin = isAdminData === true;
 
-    // Calculate total base cost
-    const totalBaseCost = items.reduce((sum: number, item: any) => sum + (item.baseCost || 1), 0);
-    const creditCost = Math.max(1, Math.ceil(totalBaseCost * (1 + adminMargin / 100)));
+    // Get credit cost from admin settings
+    const { data: costSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "credit_cost_virtual_tryon").maybeSingle();
+    let creditCost: number;
+    if (costSetting?.value) {
+      creditCost = parseInt(costSetting.value, 10) * items.length;
+    } else {
+      const { data: marginSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "profit_margin").maybeSingle();
+      const adminMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 200;
+      const totalBaseCost = items.reduce((sum: number, item: any) => sum + (item.baseCost || 1), 0);
+      creditCost = Math.max(1, Math.ceil(totalBaseCost * (1 + adminMargin / 100)));
+    }
 
-    // Credit check
+    // Admin bypass + Credit check
     const { data: profile } = await supabaseAdmin.from("profiles").select("credit_balance").eq("user_id", userId).single();
-    if (!profile || profile.credit_balance < creditCost) {
+    if (!userIsAdmin && (!profile || profile.credit_balance < creditCost)) {
       return new Response(JSON.stringify({ error: "Insufficient credits", required: creditCost }), {
         status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -162,12 +170,16 @@ serve(async (req) => {
       });
     }
 
-    // Deduct credits
-    await supabaseAdmin.rpc("deduct_user_credits", {
-      _user_id: userId, _amount: creditCost, _action: `Virtual Try-On (${items.length} items)`,
-    });
+    // Deduct credits (skip for admin)
+    if (!userIsAdmin) {
+      await supabaseAdmin.rpc("deduct_user_credits", {
+        _user_id: userId, _amount: creditCost, _action: `Virtual Try-On (${items.length} items)`,
+      });
+    } else {
+      console.log("Admin free access - skipping credit deduction for Virtual Try-On");
+    }
 
-    return new Response(JSON.stringify({ success: true, imageUrl: resultUrl, creditsUsed: creditCost }), {
+    return new Response(JSON.stringify({ success: true, imageUrl: resultUrl, creditsUsed: userIsAdmin ? 0 : creditCost }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: any) {

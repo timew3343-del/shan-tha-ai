@@ -11,31 +11,12 @@ interface GenerateImageRequest {
   referenceImage?: string;
 }
 
-// Helper function to refund credits on failure
-async function refundCredits(supabaseAdmin: any, userId: string, amount: number, reason: string) {
-  try {
-    const { error } = await supabaseAdmin.rpc("add_user_credits", {
-      _user_id: userId,
-      _amount: amount,
-    });
-    if (error) {
-      console.error("Failed to refund credits:", error);
-    } else {
-      console.log(`Refunded ${amount} credits to user ${userId} - Reason: ${reason}`);
-    }
-  } catch (e) {
-    console.error("Refund error:", e);
-  }
-}
-
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    // Require authentication
     const authHeader = req.headers.get("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return new Response(
@@ -44,18 +25,15 @@ serve(async (req) => {
       );
     }
 
-    // Create admin client to bypass RLS
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Verify JWT and get user
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     
     if (userError || !user) {
-      console.error("Auth error:", userError);
       return new Response(
         JSON.stringify({ error: "Invalid or expired token" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -63,9 +41,12 @@ serve(async (req) => {
     }
 
     const userId = user.id;
-    console.log(`User ${userId} requesting image generation`);
 
-    // Parse and validate request body
+    // Check if user is admin
+    const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
+    const userIsAdmin = isAdminData === true;
+    console.log(`User ${userId} requesting image generation, isAdmin=${userIsAdmin}`);
+
     let body: GenerateImageRequest;
     try {
       body = await req.json();
@@ -98,47 +79,40 @@ serve(async (req) => {
       );
     }
 
-    // Check user credits server-side
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .select("credit_balance")
-      .eq("user_id", userId)
-      .single();
+    // Get credit cost from admin settings first, fallback to profit_margin calculation
+    const { data: costSetting } = await supabaseAdmin
+      .from("app_settings").select("value").eq("key", "credit_cost_image_generation").maybeSingle();
+    
+    let creditCost: number;
+    if (costSetting?.value) {
+      creditCost = parseInt(costSetting.value, 10);
+    } else {
+      const { data: marginSetting } = await supabaseAdmin
+        .from("app_settings").select("value").eq("key", "profit_margin").maybeSingle();
+      const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
+      creditCost = Math.ceil(2 * (1 + profitMargin / 100));
+    }
 
-    if (profileError || !profile) {
-      console.error("Profile error:", profileError);
+    // Admin bypass + credit check
+    const { data: profile } = await supabaseAdmin
+      .from("profiles").select("credit_balance").eq("user_id", userId).single();
+
+    if (!profile) {
       return new Response(
         JSON.stringify({ error: "User profile not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Fetch global profit margin and calculate credit cost
-    const { data: marginSetting } = await supabaseAdmin
-      .from("app_settings")
-      .select("value")
-      .eq("key", "profit_margin")
-      .maybeSingle();
-    
-    const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
-    const BASE_COST = 2; // Base API cost for image generation
-    const creditCost = Math.ceil(BASE_COST * (1 + profitMargin / 100));
-    
-    if (profile.credit_balance < creditCost) {
+    if (!userIsAdmin && profile.credit_balance < creditCost) {
       return new Response(
-        JSON.stringify({ 
-          error: "Insufficient credits", 
-          required: creditCost,
-          balance: profile.credit_balance 
-        }),
+        JSON.stringify({ error: "Insufficient credits", required: creditCost, balance: profile.credit_balance }),
         { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Get Lovable API key (auto-provisioned)
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
-      console.error("LOVABLE_API_KEY not configured");
       return new Response(
         JSON.stringify({ error: "Image generation service not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -147,11 +121,8 @@ serve(async (req) => {
 
     console.log(`Generating image for prompt: "${prompt.substring(0, 50)}..."`);
 
-    // Build messages array for Lovable AI
     const messages: any[] = [];
-    
     if (referenceImage) {
-      // If reference image provided, include it for image editing
       messages.push({
         role: "user",
         content: [
@@ -160,14 +131,9 @@ serve(async (req) => {
         ]
       });
     } else {
-      // Text-to-image generation
-      messages.push({
-        role: "user",
-        content: `Generate an image: ${prompt}`
-      });
+      messages.push({ role: "user", content: `Generate an image: ${prompt}` });
     }
 
-    // Call Lovable AI Gateway with faster flash image model
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -176,7 +142,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash-image",
-        messages: messages,
+        messages,
         modalities: ["image", "text"]
       }),
     });
@@ -184,65 +150,41 @@ serve(async (req) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Lovable AI error:", response.status, errorText);
-      
       if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI service quota exceeded." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      
-      return new Response(
-        JSON.stringify({ error: "Image generation failed" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Image generation failed" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const data = await response.json();
-    
-    // Extract generated image from response
     const generatedImage = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     
     if (!generatedImage) {
-      console.error("No image in response:", JSON.stringify(data));
-      return new Response(
-        JSON.stringify({ error: "No image generated" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "No image generated" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Deduct credits ONLY AFTER successful generation using secure RPC
-    const { data: deductResult, error: deductError } = await supabaseAdmin.rpc("deduct_user_credits", {
-      _user_id: userId,
-      _amount: creditCost,
-      _action: "Image generation"
-    });
-
-    if (deductError) {
-      console.error("Credit deduction error:", deductError);
-      // Image was generated, but credit deduction failed - still return image
+    // Deduct credits AFTER success (skip for admin)
+    let newBalance = profile.credit_balance;
+    if (!userIsAdmin) {
+      const { data: deductResult } = await supabaseAdmin.rpc("deduct_user_credits", {
+        _user_id: userId, _amount: creditCost, _action: "Image generation"
+      });
+      newBalance = deductResult?.new_balance ?? (profile.credit_balance - creditCost);
+    } else {
+      console.log("Admin free access - skipping credit deduction for image generation");
     }
-
-    const newBalance = deductResult?.new_balance ?? (profile.credit_balance - creditCost);
-    console.log(`Image generated successfully for user ${userId}, new balance: ${newBalance}`);
 
     return new Response(
       JSON.stringify({
         success: true,
         image: generatedImage,
-        creditsUsed: creditCost,
-        newBalance: newBalance,
+        creditsUsed: userIsAdmin ? 0 : creditCost,
+        newBalance,
       }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: any) {
     console.error("Generate image error:", error);

@@ -36,7 +36,8 @@ serve(async (req) => {
     }
 
     const userId = user.id;
-    console.log(`User ${userId} requesting copyright check`);
+    const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
+    const userIsAdmin = isAdminData === true;
 
     const { content, contentType, frames } = await req.json();
 
@@ -62,17 +63,16 @@ serve(async (req) => {
     }
 
     // Calculate credit cost with profit margin
-    const { data: marginSetting } = await supabaseAdmin
-      .from("app_settings")
-      .select("value")
-      .eq("key", "profit_margin")
-      .maybeSingle();
+    const { data: costSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "credit_cost_copyright_check").maybeSingle();
+    let creditCost: number;
+    if (costSetting?.value) { creditCost = parseInt(costSetting.value, 10); }
+    else {
+      const { data: marginSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "profit_margin").maybeSingle();
+      const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
+      creditCost = Math.ceil(3 * (1 + profitMargin / 100));
+    }
 
-    const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
-    const BASE_COST = 3; // Base cost for copyright analysis
-    const creditCost = Math.ceil(BASE_COST * (1 + profitMargin / 100));
-
-    if (profile.credit_balance < creditCost) {
+    if (!userIsAdmin && profile.credit_balance < creditCost) {
       return new Response(
         JSON.stringify({
           error: "Insufficient credits",
@@ -198,34 +198,16 @@ If the content appears original and safe, give a high score with minor suggestio
       };
     }
 
-    // Deduct credits after successful analysis
-    const { error: deductError } = await supabaseAdmin.rpc("deduct_user_credits", {
-      _user_id: userId,
-      _amount: creditCost,
-      _action: "Copyright Check",
-    });
-
-    if (deductError) {
-      console.error("Credit deduction error:", deductError);
+    // Deduct credits (skip for admin)
+    if (!userIsAdmin) {
+      await supabaseAdmin.rpc("deduct_user_credits", { _user_id: userId, _amount: creditCost, _action: "Copyright Check" });
+      await supabaseAdmin.from("credit_audit_log").insert({ user_id: userId, amount: -creditCost, credit_type: "copyright_check", description: `Copyright Safety Check (${contentType})` });
+    } else {
+      console.log("Admin free access - skipping credit deduction for Copyright Check");
     }
 
-    // Log to audit
-    await supabaseAdmin.from("credit_audit_log").insert({
-      user_id: userId,
-      amount: -creditCost,
-      credit_type: "copyright_check",
-      description: `Copyright Safety Check (${contentType})`,
-    });
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        analysis: analysisResult,
-        creditCost,
-        newBalance: profile.credit_balance - creditCost,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ success: true, analysis: analysisResult, creditCost, newBalance: profile.credit_balance - (userIsAdmin ? 0 : creditCost) }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error: any) {
     console.error("Copyright check error:", error);
     return new Response(

@@ -46,7 +46,8 @@ serve(async (req) => {
     }
 
     const userId = user.id;
-    // Parse and validate request body
+    const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
+    const userIsAdmin = isAdminData === true;
     let body: ContentCalendarRequest;
     try {
       body = await req.json();
@@ -89,36 +90,41 @@ serve(async (req) => {
 
     console.log(`Social media agent request: user=${userId}, mode=${mode}, images=${images.length}, numDays=${numDays}`);
 
-    // Fetch global profit margin and calculate credit cost
-    const { data: marginSetting } = await supabaseAdmin
-      .from("app_settings")
-      .select("value")
-      .eq("key", "profit_margin")
-      .maybeSingle();
-    
-    const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
+    // Get credit cost from admin settings
+    const { data: costSettingPhoto } = await supabaseAdmin.from("app_settings").select("value").eq("key", "credit_cost_photoshoot").maybeSingle();
+    const { data: costSettingSocial } = await supabaseAdmin.from("app_settings").select("value").eq("key", "credit_cost_social_media_agent").maybeSingle();
     
     let creditCost: number;
     if (mode === "photoshoot") {
-      const BASE_COST = 6; // Base API cost for photoshoot
-      creditCost = Math.ceil(BASE_COST * (1 + profitMargin / 100));
+      creditCost = costSettingPhoto?.value ? parseInt(costSettingPhoto.value, 10) : (() => {
+        const { data: ms } = { data: null } as any; // fallback
+        return Math.ceil(6 * 1.4);
+      })();
     } else {
-      // Calendar: per-day pricing
-      const BASE_7DAY_COST = 18; // Base API cost for 7-day calendar
-      const base7DayCostWithMargin = Math.ceil(BASE_7DAY_COST * (1 + profitMargin / 100));
+      creditCost = costSettingSocial?.value ? parseInt(costSettingSocial.value, 10) * Math.min(Math.max(numDays, 1), 30) / 7 : (() => {
+        return Math.ceil(18 * 1.4 / 7) * Math.min(Math.max(numDays, 1), 30);
+      })();
+      creditCost = Math.ceil(creditCost);
+    }
+
+    // Fallback: recalculate if no admin setting
+    if (mode === "photoshoot" && !costSettingPhoto?.value) {
+      const { data: marginSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "profit_margin").maybeSingle();
+      const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
+      creditCost = Math.ceil(6 * (1 + profitMargin / 100));
+    } else if (mode !== "photoshoot" && !costSettingSocial?.value) {
+      const { data: marginSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "profit_margin").maybeSingle();
+      const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
+      const base7DayCostWithMargin = Math.ceil(18 * (1 + profitMargin / 100));
       const perDayCost = Math.ceil(base7DayCostWithMargin / 7);
       creditCost = perDayCost * Math.min(Math.max(numDays, 1), 30);
     }
 
-    // Check balance
-    const { data: profile } = await supabaseAdmin
-      .from("profiles").select("credit_balance").eq("user_id", userId).single();
-
-    if (!profile || profile.credit_balance < creditCost) {
-      return new Response(
-        JSON.stringify({ error: "ခရက်ဒစ် မလုံလောက်ပါ", required: creditCost, balance: profile?.credit_balance || 0 }),
-        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // Admin bypass + Check balance
+    const { data: profile } = await supabaseAdmin.from("profiles").select("credit_balance").eq("user_id", userId).single();
+    if (!userIsAdmin && (!profile || profile.credit_balance < creditCost)) {
+      return new Response(JSON.stringify({ error: "ခရက်ဒစ် မလုံလောက်ပါ", required: creditCost, balance: profile?.credit_balance || 0 }),
+        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Get API keys
@@ -177,15 +183,16 @@ serve(async (req) => {
       await supabaseAdmin.storage.from("videos").upload(fileName, uploadBytes, { contentType: "image/png", upsert: true });
       const { data: signedData, error: signedErr } = await supabaseAdmin.storage.from("videos").createSignedUrl(fileName, 86400);
 
-      await supabaseAdmin.rpc("deduct_user_credits", { _user_id: userId, _amount: creditCost, _action: "Professional Photoshoot" });
-      await supabaseAdmin.from("credit_audit_log").insert({
-        user_id: userId, amount: -creditCost, credit_type: "photoshoot",
-        description: `Photoshoot: ${themeName} - ${businessDescription.substring(0, 50)}`,
-      });
+      if (!userIsAdmin) {
+        await supabaseAdmin.rpc("deduct_user_credits", { _user_id: userId, _amount: creditCost, _action: "Professional Photoshoot" });
+        await supabaseAdmin.from("credit_audit_log").insert({ user_id: userId, amount: -creditCost, credit_type: "photoshoot", description: `Photoshoot: ${themeName}` });
+      } else {
+        console.log("Admin free access - skipping credit deduction for Photoshoot");
+      }
 
       return new Response(JSON.stringify({
-        success: true, resultImageUrl: signedErr ? "" : signedData?.signedUrl || "", creditsUsed: creditCost,
-        newBalance: profile.credit_balance - creditCost,
+        success: true, resultImageUrl: signedErr ? "" : signedData?.signedUrl || "", creditsUsed: userIsAdmin ? 0 : creditCost,
+        newBalance: profile!.credit_balance - (userIsAdmin ? 0 : creditCost),
       }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
