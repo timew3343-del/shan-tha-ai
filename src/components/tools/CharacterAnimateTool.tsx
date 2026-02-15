@@ -8,6 +8,7 @@ import { useCredits } from "@/hooks/useCredits";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { supabase } from "@/integrations/supabase/client";
 import { Upload, Download, Loader2, X, ImageIcon, Video, Sparkles } from "lucide-react";
+import { downloadVideo } from "@/lib/downloadHelper";
 import { motion } from "framer-motion";
 
 interface CharacterAnimateToolProps {
@@ -127,11 +128,7 @@ export const CharacterAnimateTool = ({ userId, onBack }: CharacterAnimateToolPro
 
   const handleDownload = () => {
     if (!resultUrl) return;
-    const a = document.createElement("a");
-    a.href = resultUrl;
-    a.download = `character-animation-${Date.now()}.mp4`;
-    a.target = "_blank";
-    a.click();
+    downloadVideo(resultUrl, "character-animation");
   };
 
   return (

@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { Upload, Sparkles, Download, Loader2, X, Video, Wand2, Play } from "lucide-react";
+import { downloadVideo } from "@/lib/downloadHelper";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
@@ -386,17 +387,13 @@ export const VideoRedesignTool = ({ userId, onBack }: VideoRedesignToolProps) =>
             className="w-full rounded-xl border border-border/50 bg-black/20"
           />
 
-          <a
-            href={resultVideo}
-            download={`video-redesign-${Date.now()}.mp4`}
-            target="_blank"
-            rel="noopener noreferrer"
+          <Button
+            onClick={() => downloadVideo(resultVideo!, "video-redesign")}
+            className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-myanmar"
           >
-            <Button className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-myanmar">
-              <Download className="w-4 h-4 mr-2" />
-              Download Video
-            </Button>
-          </a>
+            <Download className="w-4 h-4 mr-2" />
+            Download Video
+          </Button>
         </motion.div>
       )}
     </motion.div>

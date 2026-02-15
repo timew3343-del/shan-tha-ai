@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Video, Upload, Sparkles, Download, Loader2, X, Clock, Music } from "lucide-react";
+import { downloadVideo } from "@/lib/downloadHelper";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -332,12 +333,7 @@ export const VideoTool = ({ userId, onBack }: VideoToolProps) => {
               <h3 className="text-sm font-semibold text-primary font-myanmar">ရလဒ်</h3>
             </div>
             <Button
-              onClick={() => {
-                const link = document.createElement("a");
-                link.href = generatedVideo;
-                link.download = `generated-video-${Date.now()}.mp4`;
-                link.click();
-              }}
+              onClick={() => downloadVideo(generatedVideo, "generated-video")}
               size="sm" variant="outline" className="text-xs font-myanmar"
             >
               <Download className="w-3 h-3 mr-1" />Download

@@ -2,8 +2,9 @@ import { useState, useRef, useCallback } from "react";
 import {
   Loader2, Download, Upload, Video, Film, Type, Image as ImageIcon,
   Play, Scissors, FlipHorizontal, Palette, Globe, Mic, User,
-  LayoutGrid, EyeOff, Plus, X, Check, ChevronDown
+  LayoutGrid, EyeOff, Plus, X, Check, ChevronDown, Copy
 } from "lucide-react";
+import { downloadVideo } from "@/lib/downloadHelper";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -147,6 +148,7 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<string | null>(null);
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
 
   const charRef = useRef<HTMLInputElement>(null);
   const logoRef = useRef<HTMLInputElement>(null);
@@ -192,8 +194,8 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
     }
 
     setIsProcessing(true);
-    setProgress(0);
     setResult(null);
+    setAiAnalysis(null);
 
     try {
       // Simulate progress stages
@@ -255,9 +257,12 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
       setProgress(100);
       refetch();
 
-      const outputUrl = data?.videoUrl || data?.result || videoUrl;
+      // Store AI analysis text and video URL separately
+      const analysisText = data?.result || data?.reply || "";
+      const outputUrl = data?.videoUrl || videoUrl;
+      setAiAnalysis(analysisText);
       setResult(outputUrl);
-      saveOutput("video", outputUrl);
+      if (analysisText) saveOutput("text", analysisText);
 
       toast({ title: "ဗီဒီယို တည်းဖြတ်ပြီးပါပြီ!", description: `${cost} Credits သုံးစွဲပါပြီ` });
     } catch (e: any) {
@@ -528,23 +533,31 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
       </Button>
 
       {/* Result */}
-      {result && (
+      {(result || aiAnalysis) && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="gradient-card rounded-2xl p-4 border border-primary/30 space-y-3">
-          <h3 className="text-sm font-semibold text-primary font-myanmar">🎬 ဗီဒီယို ရလဒ်</h3>
-          <div className="bg-black/90 rounded-xl p-2 flex items-center justify-center min-h-[120px]">
-            <div className="text-center text-muted-foreground">
-              <Video className="w-10 h-10 mx-auto mb-2 text-primary/60" />
-              <p className="text-xs font-myanmar">ဗီဒီယို ရရှိပါပြီ</p>
+          <h3 className="text-sm font-semibold text-primary font-myanmar">🎬 AI ခွဲခြမ်းစိတ်ဖြာချက်</h3>
+          
+          {/* AI Analysis Text */}
+          {aiAnalysis && (
+            <div className="space-y-2">
+              <div className="bg-secondary/30 rounded-xl p-3 max-h-[300px] overflow-y-auto">
+                <p className="text-xs text-foreground whitespace-pre-wrap font-myanmar">{aiAnalysis}</p>
+              </div>
+              <Button onClick={() => {
+                navigator.clipboard.writeText(aiAnalysis);
+                toast({ title: "ကူးယူပြီးပါပြီ" });
+              }} variant="outline" className="w-full text-xs">
+                <Copy className="w-3 h-3 mr-1" /> ကူးယူမည်
+              </Button>
             </div>
-          </div>
-          <Button onClick={() => {
-            const a = document.createElement("a");
-            a.href = result;
-            a.download = `video-multi-${Date.now()}.mp4`;
-            a.click();
-          }} variant="outline" className="w-full">
-            <Download className="w-4 h-4 mr-2" />Download Video
-          </Button>
+          )}
+          
+          {/* Original video link */}
+          {result && result !== videoUrl && (
+            <Button onClick={() => downloadVideo(result, "video-multi")} variant="outline" className="w-full">
+              <Download className="w-4 h-4 mr-2" />Download Video
+            </Button>
+          )}
         </motion.div>
       )}
 
