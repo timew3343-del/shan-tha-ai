@@ -189,6 +189,9 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
   const [supportChat, setSupportChat] = useState<{ role: string; content: string }[]>([]);
   const [isSendingSupport, setIsSendingSupport] = useState(false);
 
+  // Sponsor / Notes
+  const [sponsorNote, setSponsorNote] = useState("");
+
   // Saved settings tracking (for upgrade logic)
   const [savedDuration, setSavedDuration] = useState(0);
   const [savedQuantity, setSavedQuantity] = useState(0);
@@ -385,6 +388,11 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
     } finally {
       setIsSendingSupport(false);
     }
+  };
+
+  const handleSaveSponsorNote = () => {
+    if (!sponsorNote.trim()) return;
+    toast({ title: "✅ မှတ်ချက် သိမ်းပြီးပါပြီ", description: sponsorNote.substring(0, 50) + "..." });
   };
 
   return (
@@ -874,6 +882,24 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
               <RefreshCw className="w-3 h-3" />
             </Button>
           </div>
+
+          {/* Sponsor / Notes Section */}
+          <Card className="p-3 border-primary/20 bg-primary/5">
+            <div className="flex items-center gap-2 mb-2">
+              <MessageCircle className="w-4 h-4 text-primary" />
+              <span className="text-xs font-bold font-myanmar">📝 Sponsor / မှတ်ချက်များ</span>
+            </div>
+            <Textarea
+              placeholder="ဗီဒီယိုအတွက် Sponsor စာသား၊ မေးခွန်းများ သို့မဟုတ် မှတ်ချက်များ ရေးပါ..."
+              value={sponsorNote}
+              onChange={e => setSponsorNote(e.target.value)}
+              className="text-xs min-h-[60px] resize-none mb-2"
+            />
+            <Button size="sm" variant="outline" className="w-full text-[10px] h-8" onClick={handleSaveSponsorNote}
+              disabled={!sponsorNote.trim()}>
+              <Save className="w-3 h-3 mr-1" /> မှတ်ချက် သိမ်းမည်
+            </Button>
+          </Card>
 
           {videos.length === 0 ? (
             <Card className="p-6 border-border/50 bg-card/60 text-center">
