@@ -19,6 +19,7 @@ const Admin = lazy(() => import("./pages/Admin"));
 const EarnCredits = lazy(() => import("./pages/EarnCredits"));
 const About = lazy(() => import("./pages/About"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const LiveChat = lazy(() => import("./pages/LiveChat"));
 
 // Configure React Query with aggressive caching (SWR pattern)
 const queryClient = new QueryClient({
@@ -58,6 +59,7 @@ const App = () => (
                   <Route path="/admin" element={<Admin />} />
                   <Route path="/earn-credits" element={<EarnCredits />} />
                   <Route path="/about" element={<About />} />
+                  <Route path="/live-chat" element={<LiveChat />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>
