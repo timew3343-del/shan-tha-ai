@@ -336,6 +336,36 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_memory: {
+        Row: {
+          content: string
+          created_at: string
+          embedding: string | null
+          id: string
+          metadata: Json | null
+          role: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          metadata?: Json | null
+          role?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          metadata?: Json | null
+          role?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       collaborator_invites: {
         Row: {
           added_by: string
@@ -465,6 +495,81 @@ export type Database = {
           updated_at?: string
           video_type?: string
           video_url?: string | null
+        }
+        Relationships: []
+      }
+      daily_free_usage: {
+        Row: {
+          created_at: string
+          id: string
+          tool_type: string
+          usage_count: number
+          usage_date: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          tool_type?: string
+          usage_count?: number
+          usage_date?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          tool_type?: string
+          usage_count?: number
+          usage_date?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      generation_jobs: {
+        Row: {
+          created_at: string
+          credits_cost: number
+          credits_deducted: boolean
+          error_message: string | null
+          external_job_id: string | null
+          id: string
+          input_params: Json
+          output_url: string | null
+          status: string
+          thumbnail_url: string | null
+          tool_type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          credits_cost?: number
+          credits_deducted?: boolean
+          error_message?: string | null
+          external_job_id?: string | null
+          id?: string
+          input_params?: Json
+          output_url?: string | null
+          status?: string
+          thumbnail_url?: string | null
+          tool_type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          credits_cost?: number
+          credits_deducted?: boolean
+          error_message?: string | null
+          external_job_id?: string | null
+          id?: string
+          input_params?: Json
+          output_url?: string | null
+          status?: string
+          thumbnail_url?: string | null
+          tool_type?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -938,6 +1043,10 @@ export type Database = {
       }
       add_user_credits: {
         Args: { _amount: number; _user_id: string }
+        Returns: Json
+      }
+      check_and_use_free_quota: {
+        Args: { _daily_limit?: number; _tool_type?: string; _user_id: string }
         Returns: Json
       }
       cleanup_expired_outputs: { Args: never; Returns: number }
