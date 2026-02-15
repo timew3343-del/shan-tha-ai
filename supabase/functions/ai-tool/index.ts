@@ -83,6 +83,10 @@ const TOOL_CONFIGS: Record<string, ToolConfig> = {
     systemPrompt: `${AGENTIC_PREFIX}You are a professional translator. Translate the given text accurately. Only return the translation, nothing else. Maintain the tone and meaning of the original text.`,
     costKey: "credit_cost_voice_translator", baseCost: 2, actionLabel: "Voice Translator", provider: "gemini",
   },
+  video_multi_tool: {
+    systemPrompt: `${AGENTIC_PREFIX}You are a professional video editing AI assistant. Analyze the video editing request and generate:\n1. Auto-generated subtitles/captions in the requested language\n2. Platform-optimized metadata (title, description, hashtags)\n3. Editing suggestions based on the target platform\n4. Color grading recommendations\nRespond in the user's requested language. Be specific and actionable.`,
+    costKey: "credit_cost_video_multi_tool", baseCost: 3, actionLabel: "Video Multi-Tool", provider: "gemini",
+  },
 };
 
 // Priority-ordered model list for sequential failover (OpenAI primary when enabled)
