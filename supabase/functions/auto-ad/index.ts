@@ -85,15 +85,16 @@ serve(async (req) => {
     }
 
     const userId = user.id;
-    const { images, productDetails, language, resolution, platforms, adStyle, showSubtitles } = await req.json();
+    const { images, productDetails, language, resolution, platforms, adStyle, showSubtitles, videoDurationMinutes } = await req.json();
+    const requestedDurationMin = Math.min(Math.max(videoDurationMinutes || 1, 1), 10);
 
     if (!images?.length || !productDetails) {
       return new Response(JSON.stringify({ error: "Images and product details required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    console.log(`Auto Ad: user=${userId}, images=${images.length}, platforms=${platforms.join(",")}, lang=${language}, res=${resolution}`);
+    console.log(`Auto Ad: user=${userId}, images=${images.length}, platforms=${platforms.join(",")}, lang=${language}, duration=${requestedDurationMin}min`);
 
-    // Calculate credit cost
+    // Calculate credit cost (with duration multiplier)
     const { data: marginSettings } = await supabaseAdmin.from("app_settings").select("key, value").in("key", ["profit_margin", "auto_ad_profit_margin"]);
     const marginMap: Record<string, string> = {};
     marginSettings?.forEach((s: any) => { marginMap[s.key] = s.value || ""; });
@@ -105,7 +106,7 @@ serve(async (req) => {
         : 50;
 
     const BASE_COST = 18;
-    const perPlatformCost = Math.ceil(BASE_COST * (1 + profitMargin / 100));
+    const perPlatformCost = Math.ceil(BASE_COST * (1 + profitMargin / 100) * requestedDurationMin);
     const creditCost = perPlatformCost * platforms.length;
 
     // Check balance
@@ -205,13 +206,26 @@ serve(async (req) => {
         }
 
         // Generate additional scene images with Stability AI
+        // Calculate scenes needed based on requested duration
+        const totalDurationSec = requestedDurationMin * 60;
+        const sceneDuration = 8; // seconds per scene
+        const numScenesNeeded = Math.max(Math.ceil(totalDurationSec / sceneDuration), 3);
+        const additionalScenesNeeded = numScenesNeeded - 1; // -1 for the product image already added
+        console.log(`Auto Ad: generating ${additionalScenesNeeded} additional scenes for ${requestedDurationMin}min video`);
+
         const sceneImages: string[] = [productImageUrl];
         if (STABILITY_API_KEY) {
-          const scenePrompts = [
-            `Professional product showcase, ${adStyle} style, ${language === "my" ? "Myanmar" : "international"} advertising, cinematic lighting, 16:9`,
-            `Call to action scene, ${adStyle} style, modern advertisement ending, brand logo placement area, 16:9`,
+          const sceneThemes = [
+            "Professional product showcase, studio lighting",
+            "Product in use, lifestyle scene",
+            "Happy customer using product",
+            "Product benefits infographic style",
+            "Premium brand presentation",
+            "Call to action scene, modern advertisement ending",
           ];
-          for (const prompt of scenePrompts) {
+          for (let si = 0; si < additionalScenesNeeded; si++) {
+            const theme = sceneThemes[si % sceneThemes.length];
+            const prompt = `${theme}, ${adStyle} style, ${language === "my" ? "Myanmar" : "international"} advertising, cinematic lighting, variation ${si + 1}, 16:9`;
             try {
               const fd = new FormData();
               fd.append("prompt", prompt);
@@ -230,7 +244,7 @@ serve(async (req) => {
                 await supabaseAdmin.storage.from("videos").upload(sceneFileName, sceneBytes.buffer, { contentType: "image/png" });
                 const { data: sceneSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(sceneFileName, 86400 * 7);
                 if (sceneSigned?.signedUrl) sceneImages.push(sceneSigned.signedUrl);
-                console.log(`Ad scene image generated for ${platform}`);
+                console.log(`Ad scene ${sceneImages.length}/${numScenesNeeded} for ${platform}`);
               } else {
                 await sceneResp.text();
               }
@@ -250,7 +264,6 @@ serve(async (req) => {
         const aspectRatio = aspectMap[platform] || "16:9";
 
         // Build Shotstack timeline
-        const sceneDuration = 5;
         const clips = sceneImages.map((url, i) => ({
           asset: { type: "image", src: url },
           start: i * sceneDuration,

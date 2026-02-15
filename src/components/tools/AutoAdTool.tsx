@@ -46,6 +46,13 @@ const STYLE_OPTIONS = [
   { value: "anime", label: "🌸 Anime" },
 ];
 
+const AD_DURATION_OPTIONS = [
+  { value: "1", label: "⏱️ 1 မိနစ်" },
+  { value: "3", label: "⏱️ 3 မိနစ်" },
+  { value: "5", label: "⏱️ 5 မိနစ်" },
+  { value: "10", label: "⏱️ 10 မိနစ်" },
+];
+
 export const AutoAdTool = ({ userId, onBack }: AutoAdToolProps) => {
   const { toast } = useToast();
   const { credits, refetch: refetchCredits } = useCredits(userId);
@@ -57,6 +64,7 @@ export const AutoAdTool = ({ userId, onBack }: AutoAdToolProps) => {
   const [language, setLanguage] = useState("my");
   // Resolution auto-determined by platform (Logic 2)
   const [adStyle, setAdStyle] = useState("cinematic");
+  const [adDuration, setAdDuration] = useState("1");
   const [showSubtitles, setShowSubtitles] = useState(true);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["youtube"]);
 
@@ -68,7 +76,8 @@ export const AutoAdTool = ({ userId, onBack }: AutoAdToolProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const baseCost = costs.auto_ad || 25;
-  const creditCost = Math.ceil(baseCost * selectedPlatforms.length);
+  const durationMultiplier = parseInt(adDuration) || 1;
+  const creditCost = Math.ceil(baseCost * selectedPlatforms.length * durationMultiplier);
 
   const handleImagesUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -161,6 +170,7 @@ export const AutoAdTool = ({ userId, onBack }: AutoAdToolProps) => {
             language,
             adStyle,
             showSubtitles,
+            videoDurationMinutes: parseInt(adDuration) || 1,
             platforms: selectedPlatforms,
           }),
         }
@@ -262,7 +272,17 @@ export const AutoAdTool = ({ userId, onBack }: AutoAdToolProps) => {
         </div>
       </div>
 
-      {/* Subtitle Toggle */}
+      {/* Duration Selector */}
+      <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+        <label className="flex items-center gap-1.5 text-sm font-medium text-primary mb-2 font-myanmar">
+          ⏱️ ဗီဒီယို အရှည်
+        </label>
+        <Select value={adDuration} onValueChange={setAdDuration}>
+          <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
+          <SelectContent>{AD_DURATION_OPTIONS.map((d) => (<SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>))}</SelectContent>
+        </Select>
+      </div>
+
       <div className="gradient-card rounded-2xl p-3 border border-primary/20 flex items-center justify-between">
         <label className="text-sm font-medium text-primary font-myanmar">📝 စာတန်းထိုး</label>
         <button onClick={() => setShowSubtitles(!showSubtitles)} className={`w-12 h-6 rounded-full transition-colors ${showSubtitles ? "bg-primary" : "bg-muted"}`}>
