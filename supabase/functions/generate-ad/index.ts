@@ -144,6 +144,11 @@ serve(async (req) => {
 
     const userId = user.id;
 
+    // ===== ADMIN CHECK =====
+    const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
+    const userIsAdmin = isAdminData === true;
+    console.log(`Ad generation: user=${userId}, isAdmin=${userIsAdmin}`);
+
     // ===== PARSE INPUT =====
     const {
       productImageBase64,
@@ -161,22 +166,24 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Ad generation: user=${userId}, style=${adStyle}, duration=${duration}, lang=${language}, voice=${voiceGender}`);
+    // ===== CALCULATE CREDIT COST: prioritize credit_cost_ad_generation, then profit_margin =====
+    const { data: costSetting } = await supabaseAdmin
+      .from("app_settings").select("value").eq("key", "credit_cost_ad_generation").maybeSingle();
 
-    // ===== CALCULATE CREDIT COST using global profit margin =====
-    const { data: marginSetting } = await supabaseAdmin
-      .from("app_settings")
-      .select("value")
-      .eq("key", "profit_margin")
-      .maybeSingle();
-
-    const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
-    const BASE_COST = 6; // Base API cost for ad generator
-    const baseCost = Math.ceil(BASE_COST * (1 + profitMargin / 100));
+    let creditCost: number;
     const multiplier = DURATION_MULTIPLIERS[duration] || 1;
-    const creditCost = Math.ceil(baseCost * multiplier);
 
-    // ===== CHECK BALANCE =====
+    if (costSetting?.value) {
+      creditCost = Math.ceil(parseInt(costSetting.value, 10) * multiplier);
+    } else {
+      const { data: marginSetting } = await supabaseAdmin
+        .from("app_settings").select("value").eq("key", "profit_margin").maybeSingle();
+      const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
+      const BASE_COST = 6;
+      creditCost = Math.ceil(BASE_COST * (1 + profitMargin / 100) * multiplier);
+    }
+
+    // ===== CHECK BALANCE (skip for admin) =====
     const { data: profile } = await supabaseAdmin
       .from("profiles")
       .select("credit_balance")
@@ -190,7 +197,7 @@ serve(async (req) => {
       );
     }
 
-    if (profile.credit_balance < creditCost) {
+    if (!userIsAdmin && profile.credit_balance < creditCost) {
       return new Response(
         JSON.stringify({
           error: "ခရက်ဒစ် မလုံလောက်ပါ",
@@ -367,7 +374,6 @@ Guidelines:
     let videoData: string | null = null;
 
     try {
-      // Get the enhanced image bytes for video generation
       let videoImageData = enhancedImageBase64;
       if (videoImageData.includes(",")) {
         videoImageData = videoImageData.split(",")[1];
@@ -394,7 +400,6 @@ Guidelines:
         if (generationId) {
           console.log(`Video generation started: ${generationId}`);
 
-          // Poll for completion (max 3 minutes)
           const maxAttempts = 36;
           for (let attempt = 0; attempt < maxAttempts; attempt++) {
             await new Promise((resolve) => setTimeout(resolve, 5000));
@@ -436,28 +441,31 @@ Guidelines:
       }
     } catch (videoError) {
       console.error("Video generation error:", videoError);
-      // Continue without video - still return image and script
     }
 
-    // ======== STEP 4: Deduct credits AFTER success ========
-    console.log(`Deducting ${creditCost} credits from user ${userId}...`);
+    // ======== STEP 4: Deduct credits AFTER success (skip for admin) ========
+    let newBalance = profile.credit_balance;
+    if (!userIsAdmin) {
+      console.log(`Deducting ${creditCost} credits from user ${userId}...`);
+      const { data: deductResult } = await supabaseAdmin.rpc("deduct_user_credits", {
+        _user_id: userId,
+        _amount: creditCost,
+        _action: `Ad Generator (${adStyle}, ${duration})`,
+      });
 
-    const { data: deductResult } = await supabaseAdmin.rpc("deduct_user_credits", {
-      _user_id: userId,
-      _amount: creditCost,
-      _action: `Ad Generator (${adStyle}, ${duration})`,
-    });
+      await supabaseAdmin.from("credit_audit_log").insert({
+        user_id: userId,
+        amount: -creditCost,
+        credit_type: "ad_generation",
+        description: `Ad: ${adStyle} style, ${duration}, ${language} - ${productDescription.substring(0, 50)}`,
+      });
 
-    // Log to audit
-    await supabaseAdmin.from("credit_audit_log").insert({
-      user_id: userId,
-      amount: -creditCost,
-      credit_type: "ad_generation",
-      description: `Ad: ${adStyle} style, ${duration}, ${language} - ${productDescription.substring(0, 50)}`,
-    });
+      newBalance = deductResult?.new_balance ?? (profile.credit_balance - creditCost);
+    } else {
+      console.log("Admin free access - skipping credit deduction for Ad Generator");
+    }
 
-    const newBalance = deductResult?.new_balance ?? (profile.credit_balance - creditCost);
-    console.log(`Ad generated for user ${userId}. Credits: ${creditCost}, Balance: ${newBalance}`);
+    console.log(`Ad generated for user ${userId}. Credits: ${userIsAdmin ? 0 : creditCost}, Balance: ${newBalance}`);
 
     return new Response(
       JSON.stringify({
@@ -465,7 +473,7 @@ Guidelines:
         adScript,
         enhancedImage: enhancedImageBase64,
         video: videoData,
-        creditsUsed: creditCost,
+        creditsUsed: userIsAdmin ? 0 : creditCost,
         newBalance,
         duration,
         style: adStyle,
