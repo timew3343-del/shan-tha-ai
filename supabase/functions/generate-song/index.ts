@@ -21,10 +21,10 @@ const LYRICS_MODELS = [
   "openai/gpt-5-mini",
 ];
 
-async function generateLyricsWithFailover(apiKey: string, systemPrompt: string, userPrompt: string): Promise<string | null> {
+async function callAIWithFailover(apiKey: string, systemPrompt: string, userPrompt: string, maxTokens = 1500): Promise<string | null> {
   for (const model of LYRICS_MODELS) {
     try {
-      console.log(`Lyrics: trying ${model}`);
+      console.log(`AI: trying ${model}`);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
 
@@ -37,7 +37,7 @@ async function generateLyricsWithFailover(apiKey: string, systemPrompt: string, 
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
           ],
-          max_tokens: 1500,
+          max_tokens: maxTokens,
           temperature: 0.8,
         }),
         signal: controller.signal,
@@ -47,19 +47,45 @@ async function generateLyricsWithFailover(apiKey: string, systemPrompt: string, 
 
       if (response.ok) {
         const data = await response.json();
-        const lyrics = data.choices?.[0]?.message?.content;
-        if (lyrics) {
-          console.log(`Lyrics success with ${model}, length: ${lyrics.length}`);
-          return lyrics;
+        const content = data.choices?.[0]?.message?.content;
+        if (content) {
+          console.log(`AI success with ${model}, length: ${content.length}`);
+          return content;
         }
       }
       const errText = await response.text();
-      console.warn(`Lyrics ${model} failed: ${response.status} - ${errText.substring(0, 100)}`);
+      console.warn(`AI ${model} failed: ${response.status} - ${errText.substring(0, 100)}`);
     } catch (err: any) {
-      console.warn(`Lyrics ${model} error: ${err.message}`);
+      console.warn(`AI ${model} error: ${err.message}`);
     }
   }
   return null;
+}
+
+// Phonetic normalization: convert Burmese text to pronunciation-friendly version for Suno
+async function normalizePhonetics(apiKey: string, lyrics: string, language: string): Promise<string> {
+  if (language !== "my" && language !== "Myanmar (Burmese)") return lyrics;
+  
+  console.log("Phonetic normalization: converting Burmese lyrics for better AI singing...");
+  
+  const systemPrompt = `You are a Burmese linguistics expert. Your job is to take Burmese song lyrics and make them easier for an AI music generator to pronounce correctly.
+
+Rules:
+1. Add spaces between each Burmese syllable/word for clearer pronunciation
+2. Replace uncommon or complex consonant clusters with simpler phonetic equivalents
+3. Keep the meaning intact - only adjust spacing and phonetic clarity
+4. Preserve all section markers like [Verse 1], [Chorus], etc.
+5. Do NOT transliterate to English/Latin - keep Burmese script
+6. Normalize Unicode to NFC form
+7. Output ONLY the cleaned lyrics, nothing else`;
+
+  const result = await callAIWithFailover(apiKey, systemPrompt, `Clean these Burmese lyrics for AI singing:\n\n${lyrics}`, 2000);
+  if (result) {
+    console.log(`Phonetic normalization complete, length: ${result.length}`);
+    return result.trim().normalize("NFC");
+  }
+  console.warn("Phonetic normalization failed, using original lyrics");
+  return lyrics.normalize("NFC");
 }
 
 // Song generation with failover: SunoAPI.org → GoAPI Suno
@@ -306,8 +332,14 @@ Genre: ${genre}. Mood: ${mood}.
 Format: Write ONLY the lyrics with [Verse 1], [Chorus], [Verse 2], [Bridge], [Chorus] sections.
 Keep it 2-3 minutes of singing length. Do NOT include any production notes or instructions.`;
 
-      lyrics = await generateLyricsWithFailover(LOVABLE_API_KEY, systemPrompt, topic || "Write a beautiful song");
+      lyrics = await callAIWithFailover(LOVABLE_API_KEY, systemPrompt, topic || "Write a beautiful song");
       if (!lyrics) lyrics = topic || "Song lyrics";
+    }
+
+    // ===== STEP 1.5: Phonetic Normalization for Burmese =====
+    let processedLyrics = lyrics;
+    if (lyrics && (language === "my" || !language)) {
+      processedLyrics = await normalizePhonetics(LOVABLE_API_KEY, lyrics, "my");
     }
 
     // ===== STEP 2: Generate Music =====
@@ -315,8 +347,10 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
       console.log("Step 2: Generating song...");
 
       const songTitle = (topic || "AI Song").substring(0, 80);
-      const songTags = `${genre || "pop"}, ${mood || "happy"}`;
-      const songLyrics = lyrics || topic || "A beautiful song about life";
+      // Inject style tags for better pronunciation and quality
+      const styleTags = "[Clear Vocals], [Native Burmese Accent], [Studio Quality], [High Fidelity]";
+      const songTags = `${genre || "pop"}, ${mood || "happy"}, ${styleTags}`;
+      const songLyrics = processedLyrics || topic || "A beautiful song about life";
 
       const songResult = await generateSongWithFailover(supabaseAdmin, songTitle, songTags, songLyrics);
 
