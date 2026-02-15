@@ -179,61 +179,180 @@ serve(async (req) => {
       }
     }
 
-    // Step 3: Generate video for each platform
-    console.log("Step 3: Generating videos...");
+    // Step 3: Generate video for each platform using Shotstack
+    console.log("Step 3: Generating videos via Shotstack...");
     const resultVideos: { platform: string; url: string }[] = [];
+    const SHOTSTACK_KEY = Deno.env.get("SHOTSTACK_API_KEY");
 
     for (const platform of platforms) {
       try {
+        // Upload product image to storage for Shotstack access
+        let productImageUrl = "";
         const imageToUse = enhancedImageBase64 || images[0];
-        
-        if (STABILITY_API_KEY && imageToUse) {
-          // Decode the base64 image
+        if (imageToUse) {
           let rawBase64 = imageToUse;
           if (rawBase64.includes(",")) rawBase64 = rawBase64.split(",")[1];
-          const videoImageBytes = Uint8Array.from(atob(rawBase64), (c) => c.charCodeAt(0));
+          const imgBytes = Uint8Array.from(atob(rawBase64), (c) => c.charCodeAt(0));
+          const imgFileName = `ad-img-${userId}-${Date.now()}.png`;
+          await supabaseAdmin.storage.from("videos").upload(imgFileName, imgBytes.buffer, { contentType: "image/png" });
+          const { data: imgSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(imgFileName, 86400 * 7);
+          productImageUrl = imgSigned?.signedUrl || "";
+        }
 
-          const videoFormData = new FormData();
-          videoFormData.append("image", new Blob([videoImageBytes], { type: "image/png" }), "image.png");
-          videoFormData.append("motion_bucket_id", "180");
-          videoFormData.append("cfg_scale", "2.0");
+        if (!productImageUrl) {
+          console.warn(`No product image for ${platform}, skipping`);
+          continue;
+        }
 
-          const startResponse = await fetch("https://api.stability.ai/v2beta/image-to-video", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${STABILITY_API_KEY}` },
-            body: videoFormData,
-          });
-
-          if (startResponse.ok) {
-            const startData = await startResponse.json();
-            const genId = startData.id;
-            console.log(`Video generation for ${platform}: ${genId}`);
-
-            for (let i = 0; i < 36; i++) {
-              await new Promise(r => setTimeout(r, 5000));
-              const checkResponse = await fetch(`https://api.stability.ai/v2beta/image-to-video/result/${genId}`, {
-                headers: { Authorization: `Bearer ${STABILITY_API_KEY}`, Accept: "video/*" },
+        // Generate additional scene images with Stability AI
+        const sceneImages: string[] = [productImageUrl];
+        if (STABILITY_API_KEY) {
+          const scenePrompts = [
+            `Professional product showcase, ${adStyle} style, ${language === "my" ? "Myanmar" : "international"} advertising, cinematic lighting, 16:9`,
+            `Call to action scene, ${adStyle} style, modern advertisement ending, brand logo placement area, 16:9`,
+          ];
+          for (const prompt of scenePrompts) {
+            try {
+              const fd = new FormData();
+              fd.append("prompt", prompt);
+              fd.append("output_format", "png");
+              fd.append("aspect_ratio", "16:9");
+              const sceneResp = await fetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${STABILITY_API_KEY}`, Accept: "image/*" },
+                body: fd,
               });
-
-              if (checkResponse.status === 200) {
-                const videoBuffer = await checkResponse.arrayBuffer();
-                const fileName = `auto-ad-${platform}-${userId}-${Date.now()}.mp4`;
-                await supabaseAdmin.storage.from("videos").upload(fileName, videoBuffer, { contentType: "video/mp4" });
-                const { data: signedData, error: signedErr } = await supabaseAdmin.storage.from("videos").createSignedUrl(fileName, 86400);
-                resultVideos.push({ platform, url: signedErr ? "" : signedData?.signedUrl || "" });
-                console.log(`Video for ${platform} completed`);
-                break;
-              } else if (checkResponse.status === 202) {
-                await checkResponse.text(); // consume body
+              if (sceneResp.ok) {
+                const sceneBuffer = await sceneResp.arrayBuffer();
+                const sceneBase64 = arrayBufferToBase64(sceneBuffer);
+                const sceneBytes = Uint8Array.from(atob(sceneBase64), (c) => c.charCodeAt(0));
+                const sceneFileName = `ad-scene-${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.png`;
+                await supabaseAdmin.storage.from("videos").upload(sceneFileName, sceneBytes.buffer, { contentType: "image/png" });
+                const { data: sceneSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(sceneFileName, 86400 * 7);
+                if (sceneSigned?.signedUrl) sceneImages.push(sceneSigned.signedUrl);
+                console.log(`Ad scene image generated for ${platform}`);
               } else {
-                const errText = await checkResponse.text();
-                console.error(`Video ${platform} error:`, checkResponse.status, errText.substring(0, 100));
-                break;
+                await sceneResp.text();
               }
+            } catch (e) {
+              console.warn("Scene generation error:", e);
             }
-          } else {
-            const errText = await startResponse.text();
-            console.error(`Video start failed for ${platform}:`, startResponse.status, errText.substring(0, 100));
+          }
+        }
+
+        if (!SHOTSTACK_KEY) {
+          console.error("Shotstack API key not configured");
+          continue;
+        }
+
+        // Determine aspect ratio from platform
+        const aspectMap: Record<string, string> = { youtube: "16:9", fb_tiktok: "9:16", square: "1:1" };
+        const aspectRatio = aspectMap[platform] || "16:9";
+
+        // Build Shotstack timeline
+        const sceneDuration = 5;
+        const clips = sceneImages.map((url, i) => ({
+          asset: { type: "image", src: url },
+          start: i * sceneDuration,
+          length: sceneDuration,
+          fit: "cover",
+          transition: i > 0 ? { in: "fade" } : undefined,
+          effect: "zoomIn",
+        }));
+
+        // Add CTA text overlay
+        const ctaText = adScript?.cta || "Shop Now!";
+        const totalDuration = sceneImages.length * sceneDuration;
+        const textClips = [{
+          asset: {
+            type: "html",
+            html: `<p style="font-family:sans-serif;font-size:36px;color:white;text-shadow:3px 3px 6px black;text-align:center;padding:20px;font-weight:bold;">${ctaText}</p>`,
+            width: 800, height: 120,
+          },
+          start: totalDuration - sceneDuration,
+          length: sceneDuration,
+          position: "bottom",
+          offset: { y: 0.1 },
+          transition: { in: "fade" },
+        }];
+
+        // Add voiceover subtitle if enabled
+        if (showSubtitles && adScript?.voiceover) {
+          const voLines = adScript.voiceover.split(/[.!?။]/).filter((l: string) => l.trim());
+          const lineDur = totalDuration / Math.max(voLines.length, 1);
+          voLines.forEach((line: string, i: number) => {
+            textClips.push({
+              asset: {
+                type: "html",
+                html: `<p style="font-family:sans-serif;font-size:24px;color:white;text-shadow:2px 2px 4px black;text-align:center;padding:10px;">${line.trim()}</p>`,
+                width: 800, height: 80,
+              },
+              start: i * lineDur,
+              length: lineDur,
+              position: "bottom",
+              offset: { y: 0.02 },
+              transition: { in: "fade", out: "fade" },
+            });
+          });
+        }
+
+        const shotstackPayload = {
+          timeline: {
+            background: "#000000",
+            tracks: [
+              { clips: textClips },
+              { clips },
+            ],
+          },
+          output: { format: "mp4", resolution: "hd", aspectRatio },
+        };
+
+        console.log(`Sending to Shotstack for ${platform}...`);
+        const renderResp = await fetch("https://api.shotstack.io/v1/render", {
+          method: "POST",
+          headers: { "x-api-key": SHOTSTACK_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify(shotstackPayload),
+        });
+
+        if (!renderResp.ok) {
+          const errText = await renderResp.text();
+          console.error(`Shotstack render error for ${platform}:`, renderResp.status, errText.substring(0, 200));
+          continue;
+        }
+
+        const renderData = await renderResp.json();
+        const renderId = renderData.response?.id;
+        if (!renderId) { console.error("No render ID from Shotstack"); continue; }
+        console.log(`Shotstack render started for ${platform}: ${renderId}`);
+
+        // Poll for completion
+        for (let i = 0; i < 36; i++) {
+          await new Promise(r => setTimeout(r, 5000));
+          const checkResp = await fetch(`https://api.shotstack.io/v1/render/${renderId}`, {
+            headers: { "x-api-key": SHOTSTACK_KEY },
+          });
+          const checkData = await checkResp.json();
+          const status = checkData.response?.status;
+          console.log(`Shotstack poll ${platform} ${i}: ${status}`);
+
+          if (status === "done") {
+            const renderUrl = checkData.response?.url;
+            if (renderUrl) {
+              // Download and upload to storage
+              const videoResp = await fetch(renderUrl);
+              const videoBuffer = await videoResp.arrayBuffer();
+              console.log(`Downloaded ${videoBuffer.byteLength} bytes for ${platform}`);
+              const fileName = `auto-ad-${platform}-${userId}-${Date.now()}.mp4`;
+              await supabaseAdmin.storage.from("videos").upload(fileName, videoBuffer, { contentType: "video/mp4" });
+              const { data: signedData } = await supabaseAdmin.storage.from("videos").createSignedUrl(fileName, 86400 * 7);
+              const videoUrl = signedData?.signedUrl || "";
+              resultVideos.push({ platform, url: videoUrl });
+              console.log(`Video for ${platform} completed`);
+            }
+            break;
+          } else if (status === "failed") {
+            console.error(`Shotstack render failed for ${platform}:`, checkData.response?.error);
+            break;
           }
         }
       } catch (vidErr) {
@@ -247,17 +366,32 @@ serve(async (req) => {
     });
 
     await supabaseAdmin.from("credit_audit_log").insert({
-      user_id: userId, amount: creditCost, credit_type: "deduction",
-      description: `Auto Ad: ${platforms.join(",")} ${language} ${resolution}`,
+      user_id: userId, amount: -creditCost, credit_type: "deduction",
+      description: `Auto Ad: ${platforms.join(",")} ${language}`,
     });
 
-    console.log("Auto Ad completed");
+    // Save outputs to user_outputs (server-side)
+    const platformLabels: Record<string, string> = { youtube: "YouTube (16:9)", fb_tiktok: "FB/TikTok (9:16)", square: "Square (1:1)" };
+    for (const vid of resultVideos) {
+      if (vid.url) {
+        await supabaseAdmin.from("user_outputs").insert({
+          user_id: userId,
+          tool_id: "auto_ad",
+          tool_name: "Auto ကြော်ငြာ",
+          output_type: "video",
+          content: `Auto ကြော်ငြာ - ${platformLabels[vid.platform] || vid.platform}`,
+          file_url: vid.url,
+        });
+      }
+    }
+    console.log(`Auto Ad completed, ${resultVideos.length} videos saved to store`);
 
     return new Response(JSON.stringify({
       videos: resultVideos,
       script: adScript,
       creditsUsed: creditCost,
       newBalance: (deductResult as any)?.new_balance,
+      savedToStore: true,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (error: unknown) {
