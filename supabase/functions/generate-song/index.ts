@@ -284,23 +284,25 @@ serve(async (req) => {
     const userIsAdmin = await isAdmin(supabaseAdmin, userId);
     console.log(`Song/MTV: user=${userId}, isAdmin=${userIsAdmin}`);
 
-    let parsedBody: { serviceOption?: string; topic?: string; genre?: string; mood?: string; language?: string; mtvStyle?: string; showSubtitles?: boolean; audioBase64?: string };
+    let parsedBody: { serviceOption?: string; topic?: string; genre?: string; mood?: string; language?: string; mtvStyle?: string; showSubtitles?: boolean; audioBase64?: string; videoDurationMinutes?: number };
     try { parsedBody = await req.json(); } catch { return respond({ error: "Invalid request body" }, 400); }
 
-    const { serviceOption, topic, genre, mood, language, mtvStyle, showSubtitles, audioBase64 } = parsedBody;
+    const { serviceOption, topic, genre, mood, language, mtvStyle, showSubtitles, audioBase64, videoDurationMinutes } = parsedBody;
+    const requestedDurationMin = Math.min(Math.max(videoDurationMinutes || 1, 1), 10);
 
     if (!serviceOption || !["song_only", "mtv_only", "full_auto"].includes(serviceOption)) {
       return respond({ error: "Invalid service option" }, 400);
     }
 
-    console.log(`Song/MTV: option=${serviceOption}, genre=${genre}, mood=${mood}`);
+    console.log(`Song/MTV: option=${serviceOption}, genre=${genre}, mood=${mood}, duration=${requestedDurationMin}min`);
 
-    // Calculate credit cost
+    // Calculate credit cost (duration multiplier for video modes)
     const { data: marginSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "profit_margin").maybeSingle();
     const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
     const BASE_COST = 15;
+    const durationMult = serviceOption === "song_only" ? 1 : requestedDurationMin;
     const costMultiplier = serviceOption === "song_only" ? 1 : serviceOption === "mtv_only" ? 1.2 : 2;
-    const creditCost = Math.ceil(BASE_COST * costMultiplier * (1 + profitMargin / 100));
+    const creditCost = Math.ceil(BASE_COST * costMultiplier * durationMult * (1 + profitMargin / 100));
 
     // Admin bypass: skip credit check entirely
     if (!userIsAdmin) {
@@ -391,6 +393,12 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
         if (!SHOTSTACK_KEY) throw new Error("Shotstack API key not configured");
 
         // Generate scene images using Stability AI
+        // Calculate how many scenes we need based on requested duration
+        const totalDurationSec = requestedDurationMin * 60;
+        const sceneDuration = 10; // seconds per scene
+        const numScenesNeeded = Math.ceil(totalDurationSec / sceneDuration);
+        console.log(`MTV: generating ${numScenesNeeded} scenes for ${requestedDurationMin}min video`);
+
         const sceneImages: string[] = [];
         const styleDescriptions: Record<string, string> = {
           cartoon: "colorful cartoon animation style, vibrant 2D animation",
@@ -401,11 +409,21 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
           cinematic: "cinematic widescreen shot, dramatic lighting, film quality",
         };
 
-        const scenePrompts = [
-          `Music video opening scene, ${styleDescriptions[mtvStyle || "cartoon"]}, ${mood || "romantic"} atmosphere, 16:9`,
-          `Music video climax scene, ${styleDescriptions[mtvStyle || "cartoon"]}, dramatic emotional moment, 16:9`,
-          `Music video ending scene, ${styleDescriptions[mtvStyle || "cartoon"]}, peaceful resolution, 16:9`,
+        const sceneThemes = [
+          "opening scene, establishing shot",
+          "emotional close-up moment",
+          "climax scene, dramatic emotional moment",
+          "transition scene, movement and energy",
+          "peaceful contemplation scene",
+          "ending scene, resolution and closure",
         ];
+
+        // Generate scene prompts based on number needed
+        const scenePrompts: string[] = [];
+        for (let i = 0; i < numScenesNeeded; i++) {
+          const theme = sceneThemes[i % sceneThemes.length];
+          scenePrompts.push(`Music video ${theme}, ${styleDescriptions[mtvStyle || "cartoon"]}, ${mood || "romantic"} atmosphere, variation ${i + 1}, 16:9`);
+        }
 
         if (STABILITY_API_KEY) {
           for (const prompt of scenePrompts) {
@@ -425,7 +443,7 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
                 await supabaseAdmin.storage.from("videos").upload(imgName, buf, { contentType: "image/png", upsert: true });
                 const { data: imgSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(imgName, 3600);
                 if (imgSigned?.signedUrl) sceneImages.push(imgSigned.signedUrl);
-                console.log(`Scene image ${sceneImages.length} generated`);
+                console.log(`Scene image ${sceneImages.length}/${numScenesNeeded} generated`);
               } else {
                 console.warn(`Scene gen failed: ${sceneResp.status}`);
                 await sceneResp.text();
@@ -439,7 +457,6 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
         if (sceneImages.length === 0) throw new Error("No scene images generated for MTV");
 
         // Build Shotstack timeline with scenes + audio
-        const sceneDuration = 10; // seconds per scene
         const clips = sceneImages.map((url, i) => ({
           asset: { type: "image", src: url },
           start: i * sceneDuration,

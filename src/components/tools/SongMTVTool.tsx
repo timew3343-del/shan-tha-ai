@@ -66,6 +66,13 @@ const MTV_STYLE_OPTIONS = [
   { value: "cinematic", label: "🎬 Cinematic" },
 ];
 
+const DURATION_OPTIONS = [
+  { value: "1", label: "⏱️ 1 မိနစ်" },
+  { value: "3", label: "⏱️ 3 မိနစ်" },
+  { value: "5", label: "⏱️ 5 မိနစ်" },
+  { value: "10", label: "⏱️ 10 မိနစ်" },
+];
+
 export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
   const { toast } = useToast();
   const { credits, refetch: refetchCredits } = useCredits(userId);
@@ -78,6 +85,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
   const [mood, setMood] = useState("happy");
   const [language, setLanguage] = useState("my");
   const [mtvStyle, setMtvStyle] = useState("cartoon");
+  const [videoDuration, setVideoDuration] = useState("1");
   const [showSubtitles, setShowSubtitles] = useState(true);
   const [audioFile, setAudioFile] = useState<string | null>(null);
   const [audioFileName, setAudioFileName] = useState("");
@@ -94,10 +102,11 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
 
   const getCreditCost = () => {
     let base: number;
+    const durationMin = parseInt(videoDuration) || 1;
     switch (serviceOption) {
       case "song_only": base = costs.song_mtv || 20; break;
-      case "mtv_only": base = Math.ceil((costs.song_mtv || 20) * 1.2); break;
-      case "full_auto": base = Math.ceil((costs.song_mtv || 20) * 2); break;
+      case "mtv_only": base = Math.ceil((costs.song_mtv || 20) * 1.2 * durationMin); break;
+      case "full_auto": base = Math.ceil((costs.song_mtv || 20) * 2 * durationMin); break;
       default: base = costs.song_mtv || 20;
     }
     // 15% discount when subtitles are OFF (Logic 1)
@@ -202,6 +211,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
               language,
               mtvStyle,
               showSubtitles,
+              videoDurationMinutes: parseInt(videoDuration) || 1,
               audioBase64: serviceOption === "mtv_only" ? audioFile?.split(",")[1] : undefined,
             }),
             signal: controller.signal,
@@ -322,6 +332,16 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
             </div>
 
             {serviceOption === "full_auto" && (
+              <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+                <label className="block text-sm font-medium text-primary mb-2 font-myanmar">⏱️ ဗီဒီယို အရှည်</label>
+                <Select value={videoDuration} onValueChange={setVideoDuration}>
+                  <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>{DURATION_OPTIONS.map((d) => (<SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>))}</SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {serviceOption === "full_auto" && (
               <div className="gradient-card rounded-2xl p-3 border border-primary/20 flex items-center justify-between">
                 <div>
                   <label className="text-sm font-medium text-primary font-myanmar">📝 စာတန်းထိုးမည်</label>
@@ -379,6 +399,15 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
                   <SelectContent>{LANGUAGE_OPTIONS.map((l) => (<SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>))}</SelectContent>
                 </Select>
               </div>
+            </div>
+
+            {/* Duration selector for MTV only */}
+            <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+              <label className="block text-sm font-medium text-primary mb-2 font-myanmar">⏱️ ဗီဒီယို အရှည်</label>
+              <Select value={videoDuration} onValueChange={setVideoDuration}>
+                <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>{DURATION_OPTIONS.map((d) => (<SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>))}</SelectContent>
+              </Select>
             </div>
 
             {/* Subtitle toggle for MTV only mode */}
