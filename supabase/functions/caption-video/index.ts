@@ -221,48 +221,74 @@ serve(async (req) => {
     const detectedLanguage = transcriptionResult.detected_language || "unknown";
     console.log(`Transcription complete. Detected language: ${detectedLanguage}, SRT length: ${srtContent.length}`);
 
-    // ======== STEP 2: Translate with Gemini ========
+    // ======== STEP 2: Translate with OpenAI GPT-4o (primary) or Lovable AI (fallback) ========
     let translatedSrt = srtContent;
     const langName = LANGUAGE_NAMES[targetLanguage] || targetLanguage;
 
     if (targetLanguage && targetLanguage !== "original") {
-      console.log(`Step 2: Translating to ${langName} via Lovable AI...`);
+      console.log(`Step 2: Translating to ${langName}...`);
 
-      const translateResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: [
-            {
-              role: "system",
-              content: `You are a professional subtitle translator. Translate SRT content accurately.
+      const translateMessages = [
+        {
+          role: "system",
+          content: `You are a professional subtitle translator for Myanmaraistudio.com. Translate SRT content accurately.
 RULES: Keep ALL SRT formatting (numbers, timestamps). Only translate text lines. Return ONLY translated SRT.`,
-            },
-            {
-              role: "user",
-              content: `Translate the following SRT subtitle content to ${langName}:\n\n${srtContent}`,
-            },
-          ],
-          temperature: 0.3,
-          max_tokens: 8192,
-        }),
-      });
+        },
+        {
+          role: "user",
+          content: `Translate the following SRT subtitle content to ${langName}:\n\n${srtContent}`,
+        },
+      ];
 
-      if (translateResponse.ok) {
-        const aiData = await translateResponse.json();
-        const translated = aiData.choices?.[0]?.message?.content;
-        if (translated) {
-          translatedSrt = translated.trim();
-          console.log(`Translation complete. Output length: ${translatedSrt.length}`);
+      // Try OpenAI GPT-4o first
+      const { data: aiSettings } = await supabaseAdmin
+        .from("app_settings").select("key, value")
+        .in("key", ["openai_api_key", "api_enabled_openai"]);
+      const aiMap: Record<string, string> = {};
+      aiSettings?.forEach((s: any) => { aiMap[s.key] = s.value; });
+      const openaiKey = aiMap["api_enabled_openai"] !== "false" ? aiMap["openai_api_key"] : null;
+
+      let translated = "";
+      if (openaiKey) {
+        try {
+          console.log("Caption translate: trying OpenAI GPT-4o");
+          const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ model: "gpt-4o", messages: translateMessages, temperature: 0.3, max_tokens: 8192 }),
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            translated = data.choices?.[0]?.message?.content?.trim() || "";
+            console.log("Caption translate: success with OpenAI GPT-4o");
+          } else {
+            console.warn("OpenAI translate failed:", resp.status);
+          }
+        } catch (err: any) {
+          console.warn("OpenAI translate error:", err.message);
         }
-      } else {
-        const errText = await translateResponse.text();
-        console.error("AI translation failed:", translateResponse.status, errText);
-        // Continue with original transcription
+      }
+
+      // Fallback to Lovable AI
+      if (!translated && LOVABLE_API_KEY) {
+        console.log("Caption translate: fallback to Lovable AI");
+        const translateResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages: translateMessages, temperature: 0.3, max_tokens: 8192 }),
+        });
+        if (translateResponse.ok) {
+          const aiData = await translateResponse.json();
+          translated = aiData.choices?.[0]?.message?.content?.trim() || "";
+        } else {
+          const errText = await translateResponse.text();
+          console.error("AI translation failed:", translateResponse.status, errText);
+        }
+      }
+
+      if (translated) {
+        translatedSrt = translated;
+        console.log(`Translation complete. Output length: ${translatedSrt.length}`);
       }
     }
 
