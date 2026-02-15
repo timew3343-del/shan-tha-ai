@@ -13,6 +13,7 @@ import { DosDontsTab } from "@/components/DosDontsTab";
 import { CourseTab } from "@/components/CourseTab";
 import { AdminVideoTab } from "@/components/AdminVideoTab";
 import { StoreTab } from "@/components/StoreTab";
+import { FullScreenChat } from "@/components/FullScreenChat";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { MaintenanceBanner } from "@/components/MaintenanceBanner";
 import { WelcomeOnboarding } from "@/components/WelcomeOnboarding";
@@ -149,6 +150,7 @@ const Index = () => {
 
       <main id="main-content" className="max-w-lg mx-auto" role="main">
         <MaintenanceBanner className="mx-4 mt-4" />
+        {activeTab === "ai-chat" && <FullScreenChat userId={user.id} />}
         {activeTab === "ai-tools" && <AIToolsTab userId={user.id} />}
         {activeTab === "auto-service" && <AutoServiceTab userId={user.id} />}
         {activeTab === "store" && <StoreTab userId={user.id} />}

@@ -1,5 +1,5 @@
 import { forwardRef } from "react";
-import { Wand2, BookCheck, GraduationCap, Package, Zap, Film } from "lucide-react";
+import { Wand2, BookCheck, GraduationCap, Package, Zap, Film, MessageCircle } from "lucide-react";
 import { useLanguage } from "@/i18n/LanguageContext";
 
 interface BottomNavigationProps {
@@ -13,6 +13,7 @@ export const BottomNavigation = forwardRef<HTMLElement, BottomNavigationProps>(
     const { t } = useLanguage();
 
     const tabs = [
+      { id: "ai-chat", label: "AI", icon: MessageCircle },
       { id: "ai-tools", label: t('nav.aiTools'), icon: Wand2 },
       { id: "auto-service", label: "Auto", icon: Zap },
       { id: "store", label: t('nav.store'), icon: Package },
