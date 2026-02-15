@@ -467,7 +467,7 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
             subtitleClips.push({
               asset: {
                 type: "html",
-                html: `<p style="font-family:sans-serif;font-size:28px;color:white;text-shadow:2px 2px 4px black;text-align:center;padding:10px;">${line.trim()}</p>`,
+                html: `<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;700&display=swap" rel="stylesheet"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:28px;color:white;text-shadow:2px 2px 4px black;text-align:center;padding:10px;">${line.trim()}</p>`,
                 width: 800,
                 height: 100,
               },

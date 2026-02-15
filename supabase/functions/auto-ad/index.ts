@@ -263,10 +263,11 @@ serve(async (req) => {
         // Add CTA text overlay
         const ctaText = adScript?.cta || "Shop Now!";
         const totalDuration = sceneImages.length * sceneDuration;
+        const myanmarFontLink = `<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;700&display=swap" rel="stylesheet">`;
         const textClips = [{
           asset: {
             type: "html",
-            html: `<p style="font-family:sans-serif;font-size:36px;color:white;text-shadow:3px 3px 6px black;text-align:center;padding:20px;font-weight:bold;">${ctaText}</p>`,
+            html: `${myanmarFontLink}<p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:36px;color:white;text-shadow:3px 3px 6px black;text-align:center;padding:20px;font-weight:bold;">${ctaText}</p>`,
             width: 800, height: 120,
           },
           start: totalDuration - sceneDuration,
@@ -284,7 +285,7 @@ serve(async (req) => {
             textClips.push({
               asset: {
                 type: "html",
-                html: `<p style="font-family:sans-serif;font-size:24px;color:white;text-shadow:2px 2px 4px black;text-align:center;padding:10px;">${line.trim()}</p>`,
+                html: `${myanmarFontLink}<p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:24px;color:white;text-shadow:2px 2px 4px black;text-align:center;padding:10px;">${line.trim()}</p>`,
                 width: 800, height: 80,
               },
               start: i * lineDur,
