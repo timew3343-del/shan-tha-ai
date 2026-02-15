@@ -226,9 +226,9 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
       refetchCredits();
       // Save to Store based on what was generated
       if (result.video) {
-        saveOutput("video", result.video);
+        saveOutput("video", result.lyrics || result.video, undefined, result.video);
       } else if (result.audio) {
-        saveOutput("audio", result.audio);
+        saveOutput("audio", result.lyrics || "Song generated", undefined, result.audio);
       } else if (result.lyrics) {
         saveOutput("text", result.lyrics);
       }
