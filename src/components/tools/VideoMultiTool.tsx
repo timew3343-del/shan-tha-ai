@@ -531,6 +531,9 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
           <><Play className="w-4 h-4 mr-2" />Generate Video ({cost} Credits)</>
         )}
       </Button>
+      <p className="text-[10px] text-muted-foreground text-center font-myanmar">
+        ⚠️ အများဆုံး ၃ မိနစ် (စက္ကန့် ၁၈၀) အထိသာ ထုတ်ယူနိုင်ပါသည်။
+      </p>
 
       {/* Result */}
       {(result || aiAnalysis) && (

@@ -93,8 +93,14 @@ export const StoryVideoTool = ({ userId, onBack }: StoryVideoToolProps) => {
     return () => clearInterval(interval);
   }, [isProcessing]);
 
+  const totalDuration = sceneCount * durationPerScene;
+
   const handleGenerate = async () => {
     if (!story.trim() || !userId) return;
+    if (totalDuration > 180) {
+      toast({ title: "Maximum limit is 3 minutes", description: "⚠️ အများဆုံး ၃ မိနစ် (စက္ကန့် ၁၈၀) အထိသာ ထုတ်ယူနိုင်ပါသည်။", variant: "destructive" });
+      return;
+    }
     if (credits < creditCost) {
       toast({ title: "ခရက်ဒစ် မလုံလောက်ပါ", description: `${creditCost} Credits လိုအပ်ပါသည်`, variant: "destructive" });
       return;
@@ -322,17 +328,22 @@ export const StoryVideoTool = ({ userId, onBack }: StoryVideoToolProps) => {
 
       {/* Generate Button */}
       {scenes.length === 0 && (
-        <Button
-          onClick={handleGenerate}
-          disabled={isProcessing || !story.trim()}
-          className="w-full gradient-gold text-primary-foreground py-5 rounded-2xl font-semibold"
-        >
-          {isProcessing ? (
-            <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> AI Generating...</>
-          ) : (
-            <><BookOpen className="w-5 h-5 mr-2" /> Story Video ဖန်တီးမည် ({creditCost} Cr)</>
-          )}
-        </Button>
+        <>
+          <Button
+            onClick={handleGenerate}
+            disabled={isProcessing || !story.trim() || totalDuration > 180}
+            className="w-full gradient-gold text-primary-foreground py-5 rounded-2xl font-semibold"
+          >
+            {isProcessing ? (
+              <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> AI Generating...</>
+            ) : (
+              <><BookOpen className="w-5 h-5 mr-2" /> Story Video ဖန်တီးမည် ({creditCost} Cr)</>
+            )}
+          </Button>
+          <p className={`text-[10px] text-center font-myanmar ${totalDuration > 180 ? "text-destructive font-semibold" : "text-muted-foreground"}`}>
+            ⚠️ အများဆုံး ၃ မိနစ် (စက္ကန့် ၁၈၀) အထိသာ ထုတ်ယူနိုင်ပါသည်။ (လက်ရှိ: {totalDuration}s)
+          </p>
+        </>
       )}
 
       {/* Results */}
