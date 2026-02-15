@@ -426,6 +426,11 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
         <p className="text-xs text-muted-foreground font-myanmar">
           နေ့စဉ် AI ဗီဒီယို အလိုအလျောက် ဖန်တီးပေးခြင်း
         </p>
+        {isAdmin && (
+          <Badge variant="outline" className="mt-1 border-green-500 text-green-500 text-[10px]">
+            <Shield className="w-3 h-3 mr-1" /> Admin Mode: Unlimited Generation
+          </Badge>
+        )}
       </div>
 
       {/* Top Tabs */}

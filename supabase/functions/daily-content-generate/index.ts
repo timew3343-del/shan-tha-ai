@@ -76,6 +76,11 @@ serve(async (req) => {
       });
     }
 
+    // Get OpenAI key for high-quality Burmese TTS
+    const { data: openaiKeySetting } = await supabaseAdmin
+      .from("app_settings").select("value").eq("key", "openai_api_key").maybeSingle();
+    const OPENAI_API_KEY = openaiKeySetting?.value;
+
     // Load configs
     const { data: settings } = await supabaseAdmin
       .from("app_settings").select("key, value")
@@ -141,10 +146,13 @@ serve(async (req) => {
 
         console.log(`Rendering ${vc.type} video with Shotstack (9:16 portrait)...`);
         try {
-          // Generate TTS audio first (English only - Burmese not supported by Shotstack TTS)
+          // Generate TTS audio
           let ttsAudioUrl: string | null = null;
           if (vc.lang === "en") {
             ttsAudioUrl = await generateTTS(SHOTSTACK_API_KEY, scriptResult.narration || scriptResult.description, "en-US", "Matthew");
+          } else if (vc.lang === "my" && OPENAI_API_KEY) {
+            // Use OpenAI TTS-1-HD for Burmese (high quality, natural sounding)
+            ttsAudioUrl = await generateOpenAITTS(OPENAI_API_KEY, supabaseAdmin, scriptResult.narration || scriptResult.description);
           }
 
           const videoUrl = await renderPortraitVideo(SHOTSTACK_API_KEY, scriptResult, vc.duration, vc.type, ttsAudioUrl);
@@ -189,7 +197,56 @@ serve(async (req) => {
   }
 });
 
-// ==================== TTS GENERATION ====================
+// ==================== OPENAI TTS FOR BURMESE ====================
+
+async function generateOpenAITTS(
+  openaiKey: string, supabaseAdmin: any, text: string
+): Promise<string | null> {
+  try {
+    const normalizedText = text.trim().normalize("NFC").substring(0, 3000);
+    console.log(`Generating Burmese TTS via OpenAI TTS-1-HD, len=${normalizedText.length}`);
+
+    const ttsResponse = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${openaiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "tts-1-hd",
+        input: normalizedText,
+        voice: "nova",
+        response_format: "mp3",
+      }),
+    });
+
+    if (!ttsResponse.ok) {
+      console.warn(`OpenAI TTS failed: ${ttsResponse.status}`);
+      return null;
+    }
+
+    // Upload to Supabase storage for Shotstack to access
+    const audioBuffer = await ttsResponse.arrayBuffer();
+    const fileName = `tts-${Date.now()}.mp3`;
+    const { error: uploadErr } = await supabaseAdmin.storage
+      .from("user-outputs")
+      .upload(`tts/${fileName}`, audioBuffer, { contentType: "audio/mpeg", upsert: true });
+
+    if (uploadErr) {
+      console.warn("TTS upload error:", uploadErr);
+      return null;
+    }
+
+    const { data: urlData } = supabaseAdmin.storage.from("user-outputs").getPublicUrl(`tts/${fileName}`);
+    console.log(`Burmese TTS uploaded: ${urlData?.publicUrl}`);
+    return urlData?.publicUrl || null;
+  } catch (e) {
+    console.warn("OpenAI TTS error:", e);
+    return null;
+  }
+}
+
+// ==================== SHOTSTACK TTS GENERATION ====================
 
 async function generateTTS(
   apiKey: string, text: string, language: string, voice: string
@@ -256,7 +313,10 @@ async function renderPortraitVideo(
   const editPayload = {
     timeline: {
       background: "#000000",
-      fonts: [{ src: "https://templates.shotstack.io/basic/asset/font/opensans-regular.ttf" }],
+      fonts: [
+        { src: "https://templates.shotstack.io/basic/asset/font/opensans-regular.ttf" },
+        { src: "https://cdn.jsdelivr.net/gh/nicholasgasior/gfonts@master/dist/NotoSansMyanmar-Regular.ttf" },
+      ],
       tracks,
     },
     output: {
@@ -322,9 +382,9 @@ function buildPortraitSlides(
   slideClips.push({
     asset: {
       type: "html",
-      html: `<div style="font-family: 'Open Sans'; text-align: center; padding: 30px 20px; color: white; display: flex; flex-direction: column; justify-content: center; height: 100%;">
+      html: `<div style="font-family: 'Noto Sans Myanmar', 'Open Sans', sans-serif; text-align: center; padding: 30px 20px; color: white; display: flex; flex-direction: column; justify-content: center; height: 100%;">
         <div style="font-size: 16px; color: ${accentColor}; margin-bottom: 12px; letter-spacing: 2px;">✦ ${PLATFORM_NAME} ✦</div>
-        <h1 style="font-size: 32px; margin: 16px 0; color: ${titleColor}; line-height: 1.3;">${escapeHtml(script.title)}</h1>
+        <h1 style="font-size: 28px; margin: 16px 0; color: ${titleColor}; line-height: 1.5;">${escapeHtml(script.title)}</h1>
         <p style="font-size: 14px; opacity: 0.7; margin-top: 12px;">${WEBSITE_URL}</p>
         <div style="margin-top: 20px; font-size: 13px; color: ${accentColor};">▶ ${videoType === "marketing" ? "ကြော်ငြာ" : "Tutorial"}</div>
       </div>`,
@@ -347,9 +407,9 @@ function buildPortraitSlides(
     slideClips.push({
       asset: {
         type: "html",
-        html: `<div style="font-family: 'Open Sans'; text-align: center; padding: 30px 20px; color: white; display: flex; flex-direction: column; justify-content: center; height: 100%;">
-          <div style="font-size: 48px; color: ${titleColor}; margin-bottom: 16px; font-weight: bold;">Step ${stepNum}</div>
-          <p style="font-size: 22px; line-height: 1.6; padding: 0 10px;">${escapeHtml(truncated)}</p>
+      html: `<div style="font-family: 'Noto Sans Myanmar', 'Open Sans', sans-serif; text-align: center; padding: 30px 20px; color: white; display: flex; flex-direction: column; justify-content: center; height: 100%;">
+          <div style="font-size: 42px; color: ${titleColor}; margin-bottom: 16px; font-weight: bold;">Step ${stepNum}</div>
+          <p style="font-size: 20px; line-height: 1.8; padding: 0 10px;">${escapeHtml(truncated)}</p>
           <div style="margin-top: 20px; font-size: 11px; opacity: 0.5;">${PLATFORM_NAME}</div>
         </div>`,
         width: 576,
