@@ -101,8 +101,8 @@ export const useOutputStore = (userId?: string) => {
             tool_id: output.toolId,
             tool_name: output.toolName,
             output_type: output.type,
-            content: output.type === "text" ? output.content : null,
-            file_url: output.type !== "text" ? output.content : null,
+            content: output.content || null,
+            file_url: output.fileUrl || (output.type !== "text" ? output.content : null),
             thumbnail_url: output.thumbnail || null,
           })
           .select()

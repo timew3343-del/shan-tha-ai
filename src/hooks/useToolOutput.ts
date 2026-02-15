@@ -15,9 +15,9 @@ export const useToolOutput = (toolId: string, toolName: string) => {
 
   const { addOutput } = useOutputStore(userId);
 
-  const saveOutput = (type: StoredOutput["type"], content: string, thumbnail?: string) => {
+  const saveOutput = (type: StoredOutput["type"], content: string, thumbnail?: string, fileUrl?: string) => {
     markAsLearned();
-    addOutput({ toolId, toolName, type, content, thumbnail });
+    addOutput({ toolId, toolName, type, content, thumbnail, fileUrl });
   };
 
   return { showGuide, markAsLearned, saveOutput };
