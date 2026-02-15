@@ -6,6 +6,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function sanitizeQuery(text: string): string {
+  return text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, '').trim();
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -22,14 +26,25 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Invalid token" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { query, limit = 5 } = await req.json();
-    if (!query || typeof query !== "string") {
-      return new Response(JSON.stringify({ error: "Query required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    let body: any;
+    try { body = await req.json(); } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON body" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+
+    const { query, limit = 5 } = body;
+
+    // Input validation
+    if (!query || typeof query !== "string") {
+      return new Response(JSON.stringify({ error: "Query must be a non-empty string" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const sanitizedQuery = sanitizeQuery(query);
+    if (sanitizedQuery.length === 0 || sanitizedQuery.length > 5000) {
+      return new Response(JSON.stringify({ error: "Query must be 1-5000 characters" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const safeLimit = Math.min(Math.max(Number(limit) || 5, 1), 20);
 
     let relevantMemories: any[] = [];
 
-    // Try vector similarity search if we have OpenAI for embeddings
     const { data: settings } = await supabaseAdmin
       .from("app_settings").select("key, value")
       .in("key", ["openai_api_key", "api_enabled_openai"]);
@@ -38,71 +53,46 @@ serve(async (req) => {
 
     if (configMap["api_enabled_openai"] !== "false" && configMap["openai_api_key"]) {
       try {
-        // Generate embedding for query
         const embResponse = await fetch("https://api.openai.com/v1/embeddings", {
           method: "POST",
           headers: { Authorization: `Bearer ${configMap["openai_api_key"]}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "text-embedding-3-small", input: query.slice(0, 8000) }),
+          body: JSON.stringify({ model: "text-embedding-3-small", input: sanitizedQuery.slice(0, 8000) }),
         });
-
         if (embResponse.ok) {
           const embData = await embResponse.json();
           const queryEmbedding = embData.data?.[0]?.embedding;
-
           if (queryEmbedding) {
-            // Vector similarity search
             const { data: vectorResults } = await supabaseAdmin.rpc("match_chat_memories", {
-              query_embedding: queryEmbedding,
-              match_threshold: 0.7,
-              match_count: limit,
-              p_user_id: user.id,
+              query_embedding: queryEmbedding, match_threshold: 0.7, match_count: safeLimit, p_user_id: user.id,
             });
-
-            if (vectorResults?.length) {
-              relevantMemories = vectorResults;
-            }
+            if (vectorResults?.length) relevantMemories = vectorResults;
           }
         }
-      } catch (e) {
-        console.warn("Vector search failed, falling back to keyword:", e);
-      }
+      } catch (e) { console.warn("Vector search failed:", e); }
     }
 
-    // Fallback: keyword-based search using ILIKE
     if (relevantMemories.length === 0) {
-      const keywords = query.split(/\s+/).filter((w: string) => w.length > 2).slice(0, 5);
+      const keywords = sanitizedQuery.split(/\s+/).filter((w: string) => w.length > 2).slice(0, 5);
       if (keywords.length > 0) {
-        const orConditions = keywords.map((k: string) => `content.ilike.%${k}%`).join(",");
+        // Sanitize keywords for ILIKE to prevent injection
+        const safeKeywords = keywords.map((k: string) => k.replace(/[%_\\]/g, ''));
+        const orConditions = safeKeywords.map((k: string) => `content.ilike.%${k}%`).join(",");
         const { data: keywordResults } = await supabaseAdmin
-          .from("chat_memory")
-          .select("content, role, created_at")
-          .eq("user_id", user.id)
-          .or(orConditions)
-          .order("created_at", { ascending: false })
-          .limit(limit);
-
-        if (keywordResults?.length) {
-          relevantMemories = keywordResults;
-        }
+          .from("chat_memory").select("content, role, created_at").eq("user_id", user.id)
+          .or(orConditions).order("created_at", { ascending: false }).limit(safeLimit);
+        if (keywordResults?.length) relevantMemories = keywordResults;
       }
     }
 
-    // Format context for AI prompt injection
     let contextText = "";
     if (relevantMemories.length > 0) {
-      contextText = relevantMemories
-        .map((m: any) => `[${m.role}]: ${m.content}`)
-        .join("\n---\n");
+      contextText = relevantMemories.map((m: any) => `[${m.role}]: ${m.content}`).join("\n---\n");
     }
 
     return new Response(JSON.stringify({ 
-      success: true, 
-      context: contextText, 
-      count: relevantMemories.length,
+      success: true, context: contextText, count: relevantMemories.length,
       method: relevantMemories.length > 0 ? "found" : "none",
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error: any) {
     console.error("rag-query error:", error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
