@@ -367,9 +367,15 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
       }
     }
 
-    // ===== STEP 3: Generate MTV Video =====
-    if ((serviceOption === "mtv_only" || (serviceOption === "full_auto" && !videoUrl)) && STABILITY_API_KEY) {
-      console.log("Step 3: Generating MTV video...");
+    // Clean lyrics for subtitles (needed before Step 3 for subtitle overlay)
+    let cleanLyrics: string | null = null;
+    if (lyrics) {
+      cleanLyrics = lyrics.replace(/\[.*?\]/g, "").replace(/\n{3,}/g, "\n\n").trim();
+    }
+
+    // ===== STEP 3: Generate MTV Video via Shotstack =====
+    if (serviceOption === "mtv_only" || (serviceOption === "full_auto" && !videoUrl)) {
+      console.log("Step 3: Generating MTV video via Shotstack...");
 
       if (serviceOption === "mtv_only" && audioBase64) {
         const audioBytes = Uint8Array.from(atob(audioBase64), c => c.charCodeAt(0));
@@ -380,6 +386,11 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
       }
 
       try {
+        const SHOTSTACK_KEY = Deno.env.get("SHOTSTACK_API_KEY");
+        if (!SHOTSTACK_KEY) throw new Error("Shotstack API key not configured");
+
+        // Generate scene images using Stability AI
+        const sceneImages: string[] = [];
         const styleDescriptions: Record<string, string> = {
           cartoon: "colorful cartoon animation style, vibrant 2D animation",
           "3d": "3D rendered cinematic scene, Pixar quality",
@@ -389,76 +400,143 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
           cinematic: "cinematic widescreen shot, dramatic lighting, film quality",
         };
 
-        const scenePrompt = `Music video scene for ${genre || "pop"} ${mood || "happy"} song, ${styleDescriptions[mtvStyle || "cartoon"] || "cinematic"}, professional MTV quality, vibrant colors, 16:9 widescreen, no text, no watermark`;
+        const scenePrompts = [
+          `Music video opening scene, ${styleDescriptions[mtvStyle || "cartoon"]}, ${mood || "romantic"} atmosphere, 16:9`,
+          `Music video climax scene, ${styleDescriptions[mtvStyle || "cartoon"]}, dramatic emotional moment, 16:9`,
+          `Music video ending scene, ${styleDescriptions[mtvStyle || "cartoon"]}, peaceful resolution, 16:9`,
+        ];
 
-        const fd = new FormData();
-        fd.append("prompt", scenePrompt);
-        fd.append("output_format", "png");
-        fd.append("aspect_ratio", "16:9");
+        if (STABILITY_API_KEY) {
+          for (const prompt of scenePrompts) {
+            try {
+              const fd = new FormData();
+              fd.append("prompt", prompt);
+              fd.append("output_format", "png");
+              fd.append("aspect_ratio", "16:9");
+              const sceneResp = await fetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${STABILITY_API_KEY}`, Accept: "image/*" },
+                body: fd,
+              });
+              if (sceneResp.ok) {
+                const buf = await sceneResp.arrayBuffer();
+                const imgName = `scene-${userId}-${Date.now()}-${sceneImages.length}.png`;
+                await supabaseAdmin.storage.from("videos").upload(imgName, buf, { contentType: "image/png", upsert: true });
+                const { data: imgSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(imgName, 3600);
+                if (imgSigned?.signedUrl) sceneImages.push(imgSigned.signedUrl);
+                console.log(`Scene image ${sceneImages.length} generated`);
+              } else {
+                console.warn(`Scene gen failed: ${sceneResp.status}`);
+                await sceneResp.text();
+              }
+            } catch (e) {
+              console.warn("Scene image error:", e);
+            }
+          }
+        }
 
-        const sceneResponse = await fetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
+        if (sceneImages.length === 0) throw new Error("No scene images generated for MTV");
+
+        // Build Shotstack timeline with scenes + audio
+        const sceneDuration = 10; // seconds per scene
+        const clips = sceneImages.map((url, i) => ({
+          asset: { type: "image", src: url },
+          start: i * sceneDuration,
+          length: sceneDuration,
+          effect: i % 2 === 0 ? "zoomIn" : "slideLeft",
+          transition: { in: "fade", out: "fade" },
+        }));
+
+        // Add audio track if available
+        const soundtrack: any[] = [];
+        if (audioUrl) {
+          soundtrack.push({
+            asset: { type: "audio", src: audioUrl, volume: 1 },
+            start: 0,
+            length: sceneImages.length * sceneDuration,
+          });
+        }
+
+        // Add subtitle overlay if enabled
+        const subtitleClips: any[] = [];
+        if (showSubtitles && cleanLyrics) {
+          const lines = cleanLyrics.split("\n").filter(l => l.trim());
+          const lineDuration = (sceneImages.length * sceneDuration) / Math.max(lines.length, 1);
+          lines.forEach((line, i) => {
+            subtitleClips.push({
+              asset: {
+                type: "html",
+                html: `<p style="font-family:sans-serif;font-size:28px;color:white;text-shadow:2px 2px 4px black;text-align:center;padding:10px;">${line.trim()}</p>`,
+                width: 800,
+                height: 100,
+              },
+              start: i * lineDuration,
+              length: lineDuration,
+              position: "bottom",
+              offset: { y: 0.05 },
+              transition: { in: "fade", out: "fade" },
+            });
+          });
+        }
+
+        const shotstackPayload = {
+          timeline: {
+            background: "#000000",
+            tracks: [
+              ...(subtitleClips.length ? [{ clips: subtitleClips }] : []),
+              { clips }, // video track
+              ...(soundtrack.length ? [{ clips: soundtrack }] : []),
+            ],
+          },
+          output: { format: "mp4", resolution: "hd", aspectRatio: "16:9" },
+        };
+
+        console.log("Sending to Shotstack...");
+        const renderResp = await fetch("https://api.shotstack.io/v1/render", {
           method: "POST",
-          headers: { Authorization: `Bearer ${STABILITY_API_KEY}`, Accept: "image/*" },
-          body: fd,
+          headers: { "x-api-key": SHOTSTACK_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify(shotstackPayload),
         });
 
-        if (sceneResponse.ok) {
-          const sceneBuffer = await sceneResponse.arrayBuffer();
-          console.log("Scene image generated, creating video...");
+        if (!renderResp.ok) {
+          const errText = await renderResp.text();
+          console.error("Shotstack render error:", renderResp.status, errText.substring(0, 300));
+          throw new Error(`Shotstack render failed: ${renderResp.status}`);
+        }
 
-          const videoFormData = new FormData();
-          videoFormData.append("image", new Blob([sceneBuffer], { type: "image/png" }), "scene.png");
-          videoFormData.append("motion_bucket_id", "200");
-          videoFormData.append("cfg_scale", "2.5");
+        const renderData = await renderResp.json();
+        const renderId = renderData.response?.id;
+        if (!renderId) throw new Error("No render ID from Shotstack");
+        console.log(`Shotstack render started: ${renderId}`);
 
-          const videoStartResponse = await fetch("https://api.stability.ai/v2beta/image-to-video", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${STABILITY_API_KEY}` },
-            body: videoFormData,
+        // Poll for completion (max 3 minutes)
+        for (let i = 0; i < 36; i++) {
+          await new Promise(r => setTimeout(r, 5000));
+          const checkResp = await fetch(`https://api.shotstack.io/v1/render/${renderId}`, {
+            headers: { "x-api-key": SHOTSTACK_KEY },
           });
+          const checkData = await checkResp.json();
+          const status = checkData.response?.status;
+          console.log(`Shotstack poll ${i}: ${status}`);
 
-          if (videoStartResponse.ok) {
-            const videoStart = await videoStartResponse.json();
-            const genId = videoStart.id;
-            console.log(`Video generation started: ${genId}`);
-
-            for (let i = 0; i < 36; i++) {
-              await new Promise(r => setTimeout(r, 5000));
-              const videoCheck = await fetch(`https://api.stability.ai/v2beta/image-to-video/result/${genId}`, {
-                headers: { Authorization: `Bearer ${STABILITY_API_KEY}`, Accept: "video/*" },
-              });
-
-              if (videoCheck.status === 200) {
-                const videoBuffer = await videoCheck.arrayBuffer();
-                const fileName = `mtv-${userId}-${Date.now()}.mp4`;
-                await supabaseAdmin.storage.from("videos").upload(fileName, videoBuffer, { contentType: "video/mp4" });
-                const { data: signedVidData } = await supabaseAdmin.storage.from("videos").createSignedUrl(fileName, 86400 * 7);
-                if (signedVidData) videoUrl = signedVidData.signedUrl;
-                console.log("MTV video uploaded");
-                break;
-              } else if (videoCheck.status === 202) {
-                await videoCheck.text();
-              } else {
-                console.error("Video check error:", videoCheck.status, await videoCheck.text());
-                break;
-              }
+          if (status === "done") {
+            const renderUrl = checkData.response?.url;
+            if (renderUrl) {
+              videoUrl = await uploadToStorage(supabaseAdmin, renderUrl, userId, ".mp4", "video/mp4");
+              console.log("MTV video uploaded successfully");
             }
-          } else {
-            console.error("Video start failed:", await videoStartResponse.text());
+            break;
+          } else if (status === "failed") {
+            console.error("Shotstack render failed:", checkData.response?.error);
+            break;
           }
-        } else {
-          console.error("Scene generation failed:", await sceneResponse.text());
         }
       } catch (videoErr) {
-        console.error("Video generation error:", videoErr);
+        console.error("MTV video generation error:", videoErr);
       }
     }
 
-    // Clean lyrics for subtitles
-    let cleanLyrics: string | null = null;
-    if (lyrics) {
-      cleanLyrics = lyrics.replace(/\[.*?\]/g, "").replace(/\n{3,}/g, "\n\n").trim();
-    }
+    // Clean lyrics (already computed before Step 3 if needed)
 
     // Verify we produced something useful
     if (serviceOption === "song_only" && !audioUrl) throw new Error("Failed to generate music");
