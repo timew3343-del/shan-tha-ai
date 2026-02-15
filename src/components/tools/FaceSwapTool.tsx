@@ -41,7 +41,7 @@ export const FaceSwapTool = ({ userId, onBack }: FaceSwapToolProps) => {
   const videoInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  const creditCost = inputMode === "camera" ? (costs.live_camera || 15) : (costs.face_swap || 15);
+  const creditCost = costs.face_swap || 15;
   const { showGuide, markAsLearned, saveOutput } = useToolOutput("face-swap", "Face Swap");
 
   // Recording timer
@@ -329,7 +329,7 @@ export const FaceSwapTool = ({ userId, onBack }: FaceSwapToolProps) => {
           className="h-12 rounded-xl font-myanmar"
         >
           <Camera className="w-4 h-4 mr-2" />
-          Live Camera ({costs.live_camera || 15})
+          Live Camera ({costs.face_swap || 15})
         </Button>
       </div>
 

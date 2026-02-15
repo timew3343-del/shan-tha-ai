@@ -20,14 +20,14 @@ const TOOL_LABELS: Record<CreditCostKey, string> = {
   face_swap: "Face Swap",
   upscale: "4K Upscale",
   bg_remove: "BG Remove",
-  live_camera: "AI Live Cam",
+  
   video_export: "Video Export",
   youtube_to_text: "YouTube → Text",
   character_animation: "Character Animation",
   doc_slide_gen: "Doc & Slide",
   caption_per_minute: "Caption/min",
   ad_generator: "Ad Generator",
-  live_camera_chat: "Live Camera Chat",
+  
   social_media_agent: "Social Media Agent",
   photoshoot: "Photoshoot",
   story_video: "Story → Video",

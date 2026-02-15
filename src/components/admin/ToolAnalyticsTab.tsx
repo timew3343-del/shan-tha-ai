@@ -23,7 +23,7 @@ const TOOL_NAME_MAP: Record<string, string> = {
   face_swap: "Face Swap",
   upscale: "4K Upscaler",
   bg_remove: "BG Remover",
-  live_camera: "AI Live Cam",
+  
   video_export: "Video Export",
   youtube_to_text: "YouTube to Text",
   character_animation: "Character Animation",

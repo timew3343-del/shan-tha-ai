@@ -1067,6 +1067,22 @@ export type Database = {
         Returns: boolean
       }
       is_admin_email: { Args: { _email: string }; Returns: boolean }
+      match_chat_memories: {
+        Args: {
+          match_count?: number
+          match_threshold?: number
+          p_user_id?: string
+          query_embedding: string
+        }
+        Returns: {
+          content: string
+          created_at: string
+          id: string
+          role: string
+          similarity: number
+          user_id: string
+        }[]
+      }
       purchase_tutorial: {
         Args: { _credits_cost: number; _user_id: string }
         Returns: Json

@@ -12,14 +12,13 @@ const BASE_API_COSTS = {
   face_swap: 15,
   upscale: 1,
   bg_remove: 1,
-  live_camera: 15,
   video_export: 4,
   youtube_to_text: 10,
   character_animation: 15,
   doc_slide_gen: 24,
   caption_per_minute: 6,
   ad_generator: 6,
-  live_camera_chat: 1,
+  
   social_media_agent: 18,
   photoshoot: 6,
   story_video: 20,
@@ -67,14 +66,13 @@ export interface CreditCosts {
   face_swap: number;
   upscale: number;
   bg_remove: number;
-  live_camera: number;
   video_export: number;
   youtube_to_text: number;
   character_animation: number;
   doc_slide_gen: number;
   caption_per_minute: number;
   ad_generator: number;
-  live_camera_chat: number;
+  
   social_media_agent: number;
   photoshoot: number;
   story_video: number;
