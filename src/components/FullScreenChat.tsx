@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Image, Loader2, X, MessageCircle, Sparkles, Camera, Radio } from "lucide-react";
+import { Send, Image, Loader2, X, MessageCircle, Camera, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -9,6 +9,7 @@ import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { motion, AnimatePresence } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 import ReactMarkdown from "react-markdown";
+import { RolesGallery, CHAT_ROLES, type ChatRole } from "@/components/chat/RolesGallery";
 
 interface Message {
   role: "user" | "assistant";
@@ -31,6 +32,7 @@ export const FullScreenChat = ({ userId }: FullScreenChatProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedImageType, setSelectedImageType] = useState<string | null>(null);
+  const [selectedRole, setSelectedRole] = useState<ChatRole>(CHAT_ROLES[0]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -92,8 +94,13 @@ export const FullScreenChat = ({ userId }: FullScreenChatProps) => {
 
   const removeImage = () => { setSelectedImage(null); setSelectedImageType(null); if (fileInputRef.current) fileInputRef.current.value = ""; };
 
-  const streamChat = useCallback(async (userMessage: string, imageBase64?: string, imageType?: string) => {
-    const cacheKey = userMessage.trim().toLowerCase();
+  const handleRoleChange = (role: ChatRole) => {
+    setSelectedRole(role);
+    setMessages([]);
+  };
+
+  const streamChat = useCallback(async (userMessage: string, rolePrompt: string, imageBase64?: string, imageType?: string) => {
+    const cacheKey = `${selectedRole.id}:${userMessage.trim().toLowerCase()}`;
     if (!imageBase64 && responseCache.has(cacheKey)) return responseCache.get(cacheKey)!;
 
     const { data: { session } } = await supabase.auth.getSession();
@@ -102,7 +109,7 @@ export const FullScreenChat = ({ userId }: FullScreenChatProps) => {
     const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ message: userMessage, imageBase64: imageBase64?.split(",")[1], imageType }),
+      body: JSON.stringify({ message: userMessage, imageBase64: imageBase64?.split(",")[1], imageType, roleId: selectedRole.id, rolePrompt }),
     });
 
     if (!response.ok) {
@@ -147,7 +154,7 @@ export const FullScreenChat = ({ userId }: FullScreenChatProps) => {
     }
     if (!imageBase64 && fullResponse) responseCache.set(cacheKey, fullResponse);
     return fullResponse;
-  }, []);
+  }, [selectedRole.id]);
 
   const handleSend = async () => {
     const trimmedInput = input.trim();
@@ -164,7 +171,7 @@ export const FullScreenChat = ({ userId }: FullScreenChatProps) => {
     removeImage();
 
     try {
-      await streamChat(userMessage.content, imgSend || undefined, imgTypeSend || undefined);
+      await streamChat(userMessage.content, selectedRole.systemPrompt, imgSend || undefined, imgTypeSend || undefined);
       refetchCredits();
     } catch (error: any) {
       console.error("Chat error:", error);
@@ -183,27 +190,34 @@ export const FullScreenChat = ({ userId }: FullScreenChatProps) => {
     <div className="flex flex-col h-[calc(100vh-140px)] bg-background">
       {/* Header */}
       <div className="flex items-center gap-3 p-4 border-b border-border/50 bg-card/80 backdrop-blur-sm">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center">
-          <Sparkles className="w-5 h-5 text-primary-foreground" />
+        <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${selectedRole.color} flex items-center justify-center text-white`}>
+          {selectedRole.icon}
         </div>
         <div className="flex-1">
-          <h3 className="font-semibold text-foreground font-myanmar">AI Assistant</h3>
+          <h3 className="font-semibold text-foreground font-myanmar">{selectedRole.name}</h3>
           <p className="text-xs text-muted-foreground font-myanmar">{costs.ai_chat || 1} Credit/မေးခွန်း</p>
         </div>
+        <Button variant="outline" size="sm" onClick={openLiveMode} className="text-xs gap-1">
+          <Radio className="w-3 h-3" /> Live
+        </Button>
         <div className="text-xs text-muted-foreground bg-secondary/50 px-2 py-1 rounded-lg">
           💰 {credits ?? 0}
         </div>
       </div>
 
+      {/* Roles Gallery */}
+      <RolesGallery selectedRole={selectedRole} onSelectRole={handleRoleChange} />
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center text-center pt-20">
-            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
-              <MessageCircle className="w-8 h-8 text-primary/40" />
+          <div className="h-full flex flex-col items-center justify-center text-center pt-10">
+            <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${selectedRole.color} flex items-center justify-center mb-4 text-white`}>
+              {selectedRole.icon}
             </div>
-            <p className="text-sm text-muted-foreground font-myanmar">မေးခွန်းတစ်ခုခု မေးကြည့်ပါ</p>
-            <p className="text-xs text-muted-foreground/60 font-myanmar mt-1">ပုံတင်၍ AI ကို ရှင်းပြခိုင်းနိုင်ပါသည်</p>
+            <p className="text-sm font-semibold text-foreground font-myanmar">{selectedRole.name}</p>
+            <p className="text-xs text-muted-foreground font-myanmar mt-1">{selectedRole.description}</p>
+            <p className="text-xs text-muted-foreground/60 font-myanmar mt-2">မေးခွန်းတစ်ခုခု မေးကြည့်ပါ</p>
           </div>
         )}
         <AnimatePresence>
@@ -265,10 +279,6 @@ export const FullScreenChat = ({ userId }: FullScreenChatProps) => {
           <button type="button" onClick={cameraOpen ? closeCamera : openCamera} disabled={isLoading} className="shrink-0 flex flex-col items-center gap-0.5 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">
             <Camera className="w-5 h-5" />
             <span className="text-[10px] font-myanmar leading-none font-medium">ကင်မရာ</span>
-          </button>
-          <button type="button" onClick={openLiveMode} disabled={isLoading} className="shrink-0 flex flex-col items-center gap-0.5 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50">
-            <Radio className="w-5 h-5" />
-            <span className="text-[10px] font-myanmar leading-none font-medium">Live</span>
           </button>
           <div className="flex-1 relative">
             <Textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyPress}

@@ -6,6 +6,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function sanitizeText(text: string): string {
+  return text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, '').trim();
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -22,19 +26,32 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Invalid token" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { content, role, metadata } = await req.json();
-    if (!content || typeof content !== "string" || content.length > 10000) {
-      return new Response(JSON.stringify({ error: "Invalid content" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    let body: any;
+    try { body = await req.json(); } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON body" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Generate embedding via Lovable AI Gateway (using a text model for embedding-like representation)
-    // We use a simple approach: store content with a hash-based pseudo-embedding for keyword similarity
-    // For production, you'd want a proper embedding model
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    
+    const { content, role, metadata } = body;
+
+    // Robust input validation
+    if (!content || typeof content !== "string") {
+      return new Response(JSON.stringify({ error: "Content must be a non-empty string" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const sanitizedContent = sanitizeText(content);
+    if (sanitizedContent.length === 0 || sanitizedContent.length > 10000) {
+      return new Response(JSON.stringify({ error: "Content must be 1-10000 characters after sanitization" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    if (role && typeof role !== "string") {
+      return new Response(JSON.stringify({ error: "Role must be a string" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const validRoles = ["user", "assistant", "system"];
+    const safeRole = validRoles.includes(role) ? role : "user";
+    if (metadata && typeof metadata !== "object") {
+      return new Response(JSON.stringify({ error: "Metadata must be an object" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     let embedding: number[] | null = null;
-    
-    // Try OpenAI embeddings first
+
     const { data: settings } = await supabaseAdmin
       .from("app_settings").select("key, value")
       .in("key", ["openai_api_key", "api_enabled_openai"]);
@@ -46,7 +63,7 @@ serve(async (req) => {
         const embResponse = await fetch("https://api.openai.com/v1/embeddings", {
           method: "POST",
           headers: { Authorization: `Bearer ${configMap["openai_api_key"]}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "text-embedding-3-small", input: content.slice(0, 8000) }),
+          body: JSON.stringify({ model: "text-embedding-3-small", input: sanitizedContent.slice(0, 8000) }),
         });
         if (embResponse.ok) {
           const embData = await embResponse.json();
@@ -57,13 +74,12 @@ serve(async (req) => {
       }
     }
 
-    // Store in chat_memory (embedding may be null if no embedding model available)
     const { error: insertError } = await supabaseAdmin
       .from("chat_memory")
       .insert({
         user_id: user.id,
-        role: role || "user",
-        content,
+        role: safeRole,
+        content: sanitizedContent,
         embedding,
         metadata: metadata || {},
       });
