@@ -54,6 +54,12 @@ serve(async (req) => {
     }
 
     const userId = user.id;
+
+    // Check if user is admin
+    const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
+    const userIsAdmin = isAdminData === true;
+    console.log(`Story-to-Video: user=${userId}, isAdmin=${userIsAdmin}`);
+
     const { story, sceneCount, durationPerScene, aspectRatio, artStyle }: StoryRequest = await req.json();
 
     if (!story?.trim()) {
@@ -68,19 +74,18 @@ serve(async (req) => {
       .from("app_settings").select("value").eq("key", "profit_margin").maybeSingle();
     const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
 
-    // Cost: 2 per scene (Gemini) + 2 per scene (Stability image)
     const baseCostPerScene = 4;
     const totalBaseCost = baseCostPerScene * clampedScenes;
     const creditCost = Math.ceil(totalBaseCost * (1 + profitMargin / 100));
 
-    // Check credits
+    // Check credits (admin bypass)
     const { data: profile } = await supabaseAdmin
       .from("profiles").select("credit_balance").eq("user_id", userId).single();
     if (!profile) {
       return new Response(JSON.stringify({ error: "Profile not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    if (profile.credit_balance < creditCost) {
+    if (!userIsAdmin && profile.credit_balance < creditCost) {
       return new Response(JSON.stringify({
         error: "Insufficient credits", required: creditCost, balance: profile.credit_balance
       }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -257,22 +262,25 @@ Respond with ONLY valid JSON:
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Deduct credits after successful generation
-    await supabaseAdmin.rpc("deduct_user_credits", {
-      _user_id: userId,
-      _amount: creditCost,
-      _action: "Story-to-Video generation",
-    });
+    // Deduct credits after successful generation (admin bypass)
+    let newBalance = profile.credit_balance;
+    if (!userIsAdmin) {
+      const { data: deductResult } = await supabaseAdmin.rpc("deduct_user_credits", {
+        _user_id: userId,
+        _amount: creditCost,
+        _action: "Story-to-Video generation",
+      });
+      newBalance = (deductResult as any)?.new_balance ?? (profile.credit_balance - creditCost);
 
-    // Audit log
-    await supabaseAdmin.from("credit_audit_log").insert({
-      user_id: userId,
-      amount: -creditCost,
-      credit_type: "story_video",
-      description: `Story Video: ${clampedScenes} scenes (${artStyle})`,
-    });
-
-    const newBalance = profile.credit_balance - creditCost;
+      await supabaseAdmin.from("credit_audit_log").insert({
+        user_id: userId,
+        amount: -creditCost,
+        credit_type: "story_video",
+        description: `Story Video: ${clampedScenes} scenes (${artStyle})`,
+      });
+    } else {
+      console.log("Admin free access - skipping credit deduction for Story-to-Video");
+    }
 
     console.log(`Story-to-Video complete: ${generatedScenes.filter(s => s.image).length}/${clampedScenes} scenes`);
 
@@ -280,7 +288,7 @@ Respond with ONLY valid JSON:
       success: true,
       characterId: storyboard.characterId,
       scenes: generatedScenes,
-      creditsUsed: creditCost,
+      creditsUsed: userIsAdmin ? 0 : creditCost,
       newBalance,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
