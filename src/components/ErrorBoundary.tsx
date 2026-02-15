@@ -9,17 +9,37 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  retryCount: number;
 }
 
-export class ErrorBoundary extends Component<Props, State> {
-  public state: State = { hasError: false, error: null };
+const MAX_AUTO_RETRIES = 3;
 
-  public static getDerivedStateFromError(error: Error): State {
+export class ErrorBoundary extends Component<Props, State> {
+  public state: State = { hasError: false, error: null, retryCount: 0 };
+
+  public static getDerivedStateFromError(error: Error): Partial<State> {
     return { hasError: true, error };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("ErrorBoundary caught:", error, errorInfo);
+
+    // Auto-recover from transient React hook errors (duplicate React, HMR glitches)
+    const isTransient =
+      error.message?.includes("useEffect") ||
+      error.message?.includes("Invalid hook call") ||
+      error.message?.includes("Cannot read properties of null");
+
+    if (isTransient && this.state.retryCount < MAX_AUTO_RETRIES) {
+      console.log(`Auto-retrying (${this.state.retryCount + 1}/${MAX_AUTO_RETRIES})...`);
+      setTimeout(() => {
+        this.setState((prev) => ({
+          hasError: false,
+          error: null,
+          retryCount: prev.retryCount + 1,
+        }));
+      }, 500);
+    }
   }
 
   private handleReload = () => {

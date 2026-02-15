@@ -42,22 +42,55 @@ serve(async (req) => {
       });
     }
 
+    const userId = user.id;
+
+    // ===== ADMIN CHECK =====
+    const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
+    const userIsAdmin = isAdminData === true;
+    console.log(`Doc/Slides: user=${userId}, isAdmin=${userIsAdmin}`);
+
     const { content, imageCount, language, step } = await req.json();
 
     // Get API keys from app_settings
     const { data: settings } = await supabaseAdmin
       .from("app_settings")
       .select("key, value")
-      .in("key", ["gemini_api_key", "stability_api_key"]);
+      .in("key", ["gemini_api_key", "stability_api_key", "credit_cost_doc_slides", "profit_margin"]);
 
-    const geminiKey = settings?.find((s: any) => s.key === "gemini_api_key")?.value || Deno.env.get("GEMINI_API_KEY");
-    const stabilityKey = settings?.find((s: any) => s.key === "stability_api_key")?.value || Deno.env.get("STABILITY_API_KEY");
+    const settingsMap: Record<string, string> = {};
+    settings?.forEach((s: any) => { settingsMap[s.key] = s.value || ""; });
+
+    const geminiKey = settingsMap.gemini_api_key || Deno.env.get("GEMINI_API_KEY");
+    const stabilityKey = settingsMap.stability_api_key || Deno.env.get("STABILITY_API_KEY");
 
     if (!geminiKey) {
       return new Response(JSON.stringify({ error: "Gemini API key not configured" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // ===== CREDIT COST CALCULATION =====
+    let creditCost: number;
+    if (settingsMap.credit_cost_doc_slides) {
+      creditCost = parseInt(settingsMap.credit_cost_doc_slides, 10);
+    } else {
+      const profitMargin = settingsMap.profit_margin ? parseInt(settingsMap.profit_margin, 10) : 40;
+      const BASE_COST = 5;
+      creditCost = Math.ceil(BASE_COST * (1 + profitMargin / 100));
+    }
+
+    // ===== CREDIT CHECK (skip for admin) - only on analyze step =====
+    if (step === "analyze" && !userIsAdmin) {
+      const { data: profile } = await supabaseAdmin
+        .from("profiles").select("credit_balance").eq("user_id", userId).single();
+
+      if (!profile || profile.credit_balance < creditCost) {
+        return new Response(JSON.stringify({ error: "ခရက်ဒစ် မလုံလောက်ပါ", required: creditCost, balance: profile?.credit_balance ?? 0 }), {
+          status: 402,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     // Step 1: Text analysis with Gemini
@@ -140,10 +173,21 @@ Respond in this exact JSON format:
         });
       }
 
+      // Deduct credits after success (skip for admin)
+      if (!userIsAdmin) {
+        await supabaseAdmin.rpc("deduct_user_credits", {
+          _user_id: userId,
+          _amount: creditCost,
+          _action: "Doc/Slide generation",
+        });
+      } else {
+        console.log("Admin free access - skipping credit deduction for Doc/Slides");
+      }
+
       // Log usage for analytics
       await supabaseAdmin.from("credit_audit_log").insert({
-        user_id: user.id,
-        amount: 0,
+        user_id: userId,
+        amount: userIsAdmin ? 0 : -creditCost,
         credit_type: "doc_slide_analyze",
         description: `Doc/Slide text analysis - ${sections.length} sections`,
       });

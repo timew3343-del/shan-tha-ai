@@ -296,13 +296,22 @@ serve(async (req) => {
 
     console.log(`Song/MTV: option=${serviceOption}, genre=${genre}, mood=${mood}, duration=${requestedDurationMin}min`);
 
-    // Calculate credit cost (duration multiplier for video modes)
-    const { data: marginSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "profit_margin").maybeSingle();
-    const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
-    const BASE_COST = 15;
+    // Calculate credit cost: prioritize credit_cost_song_generation, then profit_margin
+    const costKey = serviceOption === "song_only" ? "credit_cost_song_generation" : "credit_cost_song_mtv";
+    const { data: costSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", costKey).maybeSingle();
+
+    let creditCost: number;
     const durationMult = serviceOption === "song_only" ? 1 : requestedDurationMin;
     const costMultiplier = serviceOption === "song_only" ? 1 : serviceOption === "mtv_only" ? 1.2 : 2;
-    const creditCost = Math.ceil(BASE_COST * costMultiplier * durationMult * (1 + profitMargin / 100));
+
+    if (costSetting?.value) {
+      creditCost = Math.ceil(parseInt(costSetting.value, 10) * costMultiplier * durationMult);
+    } else {
+      const { data: marginSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "profit_margin").maybeSingle();
+      const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
+      const BASE_COST = 15;
+      creditCost = Math.ceil(BASE_COST * costMultiplier * durationMult * (1 + profitMargin / 100));
+    }
 
     // Admin bypass: skip credit check entirely
     if (!userIsAdmin) {
