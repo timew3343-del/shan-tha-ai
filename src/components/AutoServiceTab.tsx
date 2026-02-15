@@ -189,9 +189,6 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
   const [supportChat, setSupportChat] = useState<{ role: string; content: string }[]>([]);
   const [isSendingSupport, setIsSendingSupport] = useState(false);
 
-  // Sponsor / Notes
-  const [sponsorNote, setSponsorNote] = useState("");
-
   // Saved settings tracking (for upgrade logic)
   const [savedDuration, setSavedDuration] = useState(0);
   const [savedQuantity, setSavedQuantity] = useState(0);
@@ -210,13 +207,40 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
 
   const fetchVideos = async () => {
     if (!userId) return;
-    const { data } = await supabase
+    // Fetch user's auto service videos
+    const { data: userVideos } = await supabase
       .from("auto_service_videos")
       .select("*")
       .eq("user_id", userId)
       .order("generated_date", { ascending: false })
       .limit(30);
-    if (data) setVideos(data);
+    
+    // Also fetch daily content videos (platform-wide generated)
+    const { data: dailyVideos } = await supabase
+      .from("daily_content_videos")
+      .select("*")
+      .eq("is_published", true)
+      .order("generated_date", { ascending: false })
+      .limit(10);
+    
+    // Merge: convert daily_content_videos to same shape
+    const convertedDaily = (dailyVideos || []).map((dv: any) => ({
+      id: dv.id,
+      title: dv.title,
+      description: dv.description,
+      video_url: dv.video_url,
+      thumbnail_url: dv.thumbnail_url,
+      generated_date: dv.generated_date,
+      target_language: dv.video_type === "english_tutorial" ? "English" : "Myanmar",
+      template_category: dv.video_type,
+      generation_status: dv.video_url ? "completed" : "pending",
+    }));
+    
+    // Combine and deduplicate by id
+    const all = [...(userVideos || []), ...convertedDaily];
+    const seen = new Set<string>();
+    const unique = all.filter(v => { if (seen.has(v.id)) return false; seen.add(v.id); return true; });
+    setVideos(unique);
   };
 
   const loadSavedSettings = async () => {
@@ -390,10 +414,6 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
     }
   };
 
-  const handleSaveSponsorNote = () => {
-    if (!sponsorNote.trim()) return;
-    toast({ title: "✅ မှတ်ချက် သိမ်းပြီးပါပြီ", description: sponsorNote.substring(0, 50) + "..." });
-  };
 
   return (
     <div className="flex flex-col gap-4 p-4 pb-24">
@@ -882,24 +902,6 @@ export const AutoServiceTab = ({ userId }: AutoServiceTabProps) => {
               <RefreshCw className="w-3 h-3" />
             </Button>
           </div>
-
-          {/* Sponsor / Notes Section */}
-          <Card className="p-3 border-primary/20 bg-primary/5">
-            <div className="flex items-center gap-2 mb-2">
-              <MessageCircle className="w-4 h-4 text-primary" />
-              <span className="text-xs font-bold font-myanmar">📝 Sponsor / မှတ်ချက်များ</span>
-            </div>
-            <Textarea
-              placeholder="ဗီဒီယိုအတွက် Sponsor စာသား၊ မေးခွန်းများ သို့မဟုတ် မှတ်ချက်များ ရေးပါ..."
-              value={sponsorNote}
-              onChange={e => setSponsorNote(e.target.value)}
-              className="text-xs min-h-[60px] resize-none mb-2"
-            />
-            <Button size="sm" variant="outline" className="w-full text-[10px] h-8" onClick={handleSaveSponsorNote}
-              disabled={!sponsorNote.trim()}>
-              <Save className="w-3 h-3 mr-1" /> မှတ်ချက် သိမ်းမည်
-            </Button>
-          </Card>
 
           {videos.length === 0 ? (
             <Card className="p-6 border-border/50 bg-card/60 text-center">
