@@ -166,6 +166,13 @@ export const StoreTab = ({ userId }: StoreTabProps) => {
                         <img src={output.fileUrl || output.content} alt={output.toolName} className="w-full max-h-48 object-cover rounded-xl mb-2" loading="lazy" />
                       ) : output.type === "video" ? (
                         <video src={output.fileUrl || output.content} controls className="w-full max-h-48 rounded-xl mb-2" />
+                      ) : output.type === "audio" ? (
+                        <>
+                          <audio src={output.fileUrl || output.content} controls className="w-full mb-2 rounded-xl" />
+                          {output.content && output.content !== output.fileUrl && output.content !== "Song generated" && (
+                            <p className="text-xs text-foreground/80 line-clamp-3 font-myanmar whitespace-pre-wrap mb-2">{output.content}</p>
+                          )}
+                        </>
                       ) : (
                         <p className="text-xs text-foreground/80 line-clamp-4 font-myanmar whitespace-pre-wrap mb-2">{output.content}</p>
                       )}

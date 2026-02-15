@@ -224,12 +224,14 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
       if (result.lyrics) setResultLyrics(result.lyrics);
       setProgress(100);
       refetchCredits();
-      // Save to Store based on what was generated
-      if (result.video) {
-        saveOutput("video", result.lyrics || result.video, undefined, result.video);
-      } else if (result.audio) {
+      // Save to Store - save each output type separately
+      if (result.audio) {
         saveOutput("audio", result.lyrics || "Song generated", undefined, result.audio);
-      } else if (result.lyrics) {
+      }
+      if (result.video) {
+        saveOutput("video", result.lyrics || "MTV Video", undefined, result.video);
+      }
+      if (!result.audio && !result.video && result.lyrics) {
         saveOutput("text", result.lyrics);
       }
 
