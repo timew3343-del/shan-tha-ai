@@ -120,13 +120,13 @@ serve(async (req) => {
     const { data: apiKeys } = await supabaseAdmin
       .from("app_settings")
       .select("key, value")
-      .in("key", ["replicate_api_token", "gemini_api_key"]);
+      .in("key", ["replicate_api_token"]);
 
     const keyMap: Record<string, string> = {};
     apiKeys?.forEach((k) => { keyMap[k.key] = k.value || ""; });
 
     const REPLICATE_API_KEY = keyMap.replicate_api_token || Deno.env.get("REPLICATE_API_KEY");
-    const GEMINI_API_KEY = keyMap.gemini_api_key || Deno.env.get("GEMINI_API_KEY");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
     if (!REPLICATE_API_KEY) {
       return new Response(
@@ -135,9 +135,9 @@ serve(async (req) => {
       );
     }
 
-    if (!GEMINI_API_KEY) {
+    if (!LOVABLE_API_KEY) {
       return new Response(
-        JSON.stringify({ error: "Gemini API key not configured" }),
+        JSON.stringify({ error: "AI translation service not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -226,48 +226,42 @@ serve(async (req) => {
     const langName = LANGUAGE_NAMES[targetLanguage] || targetLanguage;
 
     if (targetLanguage && targetLanguage !== "original") {
-      console.log(`Step 2: Translating to ${langName}...`);
+      console.log(`Step 2: Translating to ${langName} via Lovable AI...`);
 
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-
-      const translateResponse = await fetch(geminiUrl, {
+      const translateResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
-          contents: [
+          model: "google/gemini-3-flash-preview",
+          messages: [
             {
-              parts: [
-                {
-                  text: `You are a professional subtitle translator. Translate the following SRT subtitle content to ${langName}. 
-IMPORTANT RULES:
-1. Keep ALL SRT formatting exactly (numbers, timestamps like "00:00:01,000 --> 00:00:03,000")
-2. Only translate the text lines
-3. Maintain natural, fluent ${langName} language
-4. Do not add any extra text or explanations
-5. Return ONLY the translated SRT content
-
-SRT Content to translate:
-${srtContent}`,
-                },
-              ],
+              role: "system",
+              content: `You are a professional subtitle translator. Translate SRT content accurately.
+RULES: Keep ALL SRT formatting (numbers, timestamps). Only translate text lines. Return ONLY translated SRT.`,
+            },
+            {
+              role: "user",
+              content: `Translate the following SRT subtitle content to ${langName}:\n\n${srtContent}`,
             },
           ],
-          generationConfig: {
-            temperature: 0.3,
-            maxOutputTokens: 8192,
-          },
+          temperature: 0.3,
+          max_tokens: 8192,
         }),
       });
 
       if (translateResponse.ok) {
-        const geminiData = await translateResponse.json();
-        const translated = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+        const aiData = await translateResponse.json();
+        const translated = aiData.choices?.[0]?.message?.content;
         if (translated) {
           translatedSrt = translated.trim();
           console.log(`Translation complete. Output length: ${translatedSrt.length}`);
         }
       } else {
-        console.error("Gemini translation failed:", await translateResponse.text());
+        const errText = await translateResponse.text();
+        console.error("AI translation failed:", translateResponse.status, errText);
         // Continue with original transcription
       }
     }
