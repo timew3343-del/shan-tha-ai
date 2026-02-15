@@ -237,9 +237,18 @@ async function generateOpenAITTS(
       return null;
     }
 
-    const { data: urlData } = supabaseAdmin.storage.from("user-outputs").getPublicUrl(`tts/${fileName}`);
-    console.log(`Burmese TTS uploaded: ${urlData?.publicUrl}`);
-    return urlData?.publicUrl || null;
+    // Create a signed URL (1 hour expiry) since bucket is private
+    const { data: signedData, error: signedErr } = await supabaseAdmin.storage
+      .from("user-outputs")
+      .createSignedUrl(`tts/${fileName}`, 3600);
+
+    if (signedErr || !signedData?.signedUrl) {
+      console.warn("TTS signed URL error:", signedErr);
+      return null;
+    }
+
+    console.log(`Burmese TTS uploaded with signed URL`);
+    return signedData.signedUrl;
   } catch (e) {
     console.warn("OpenAI TTS error:", e);
     return null;
