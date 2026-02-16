@@ -1,11 +1,14 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Upload, CreditCard, CheckCircle, X, ZoomIn, Sparkles, Clock, Package, Building } from "lucide-react";
+import { ArrowLeft, Upload, CreditCard, CheckCircle, X, ZoomIn, Sparkles, Clock, Package, Building, Copy, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { Input } from "@/components/ui/input";
 import kbzpayQr from "@/assets/kbzpay-qr.jpg";
 import wavepayQr from "@/assets/wavepay-qr.jpg";
+import usdtTrc20Qr from "@/assets/usdt-trc20-qr.jpg";
+import usdtBep20Qr from "@/assets/usdt-bep20-qr.jpg";
 import { PromoCodeRedeem } from "@/components/PromoCodeRedeem";
 import { TopUpSupportChat } from "@/components/TopUpSupportChat";
 
@@ -19,7 +22,8 @@ interface PricingPackage {
   isBestValue?: boolean;
 }
 
-type PaymentMethod = "kbzpay" | "wavepay" | "thai_bank" | "stripe";
+type PaymentMethod = "kbzpay" | "wavepay" | "thai_bank" | "stripe" | "crypto";
+type CryptoNetwork = "trc20" | "bep20";
 
 export const TopUp = () => {
   const navigate = useNavigate();
@@ -34,6 +38,8 @@ export const TopUp = () => {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("kbzpay");
   const [stripeAvailable, setStripeAvailable] = useState(false);
   const [isStripeLoading, setIsStripeLoading] = useState(false);
+  const [cryptoNetwork, setCryptoNetwork] = useState<CryptoNetwork>("trc20");
+  const [txid, setTxid] = useState("");
 
   // Dynamic packages from database
   const [mmkPackages, setMmkPackages] = useState<PricingPackage[]>([]);
@@ -299,7 +305,7 @@ export const TopUp = () => {
         <div className="space-y-3 animate-fade-up" style={{ animationDelay: "0.1s" }}>
           <h3 className="font-semibold text-foreground text-sm">ငွေပေးချေနည်း ရွေးချယ်ပါ</h3>
 
-          <div className={`grid ${stripeAvailable ? 'grid-cols-4' : 'grid-cols-3'} gap-2`}>
+          <div className={`grid ${stripeAvailable ? 'grid-cols-5' : 'grid-cols-4'} gap-2`}>
             {/* Stripe Visa/Mastercard */}
             {stripeAvailable && (
               <button
@@ -364,6 +370,22 @@ export const TopUp = () => {
                 <Building className="w-4 h-4 text-white" />
               </div>
               <p className="text-xs text-foreground text-center">Thai Bank</p>
+            </button>
+
+            {/* Crypto USDT */}
+            <button
+              onClick={() => setPaymentMethod("crypto")}
+              className={`gradient-card rounded-xl p-3 border transition-all ${
+                paymentMethod === "crypto"
+                  ? "border-primary shadow-gold"
+                  : "border-border/30 hover:border-primary/30"
+              }`}
+            >
+              <div className="text-lg mb-1">₮</div>
+              <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center mx-auto mb-1">
+                <span className="text-white text-xs font-bold">U</span>
+              </div>
+              <p className="text-xs text-foreground text-center">USDT</p>
             </button>
           </div>
 
@@ -447,6 +469,99 @@ export const TopUp = () => {
               </div>
             </div>
           )}
+
+          {paymentMethod === "crypto" && (
+            <div className="gradient-card rounded-2xl p-4 border border-emerald-500/30 space-y-4">
+              {/* Network Selection */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCryptoNetwork("trc20")}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                    cryptoNetwork === "trc20"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  USDT (TRC-20)
+                </button>
+                <button
+                  onClick={() => setCryptoNetwork("bep20")}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                    cryptoNetwork === "bep20"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  USDT (BEP-20)
+                </button>
+              </div>
+
+              {/* QR Code */}
+              <div className="flex justify-center">
+                <button
+                  onClick={() => setZoomedImage(cryptoNetwork === "trc20" ? usdtTrc20Qr : usdtBep20Qr)}
+                  className="relative group"
+                >
+                  <img
+                    src={cryptoNetwork === "trc20" ? usdtTrc20Qr : usdtBep20Qr}
+                    alt={`USDT ${cryptoNetwork.toUpperCase()} QR`}
+                    className="w-48 h-48 rounded-xl object-cover border-2 border-emerald-500/50"
+                  />
+                  <div className="absolute inset-0 bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <ZoomIn className="w-6 h-6 text-white" />
+                  </div>
+                </button>
+              </div>
+
+              {/* Wallet Address */}
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground font-myanmar">
+                  Network: <span className="font-semibold text-foreground">{cryptoNetwork === "trc20" ? "Tron (TRC-20)" : "BNB Smart Chain (BEP-20)"}</span>
+                </p>
+                <div className="flex items-center gap-2 bg-secondary/50 rounded-lg p-2.5">
+                  <p className="text-xs text-primary font-mono break-all flex-1">
+                    {cryptoNetwork === "trc20"
+                      ? "TVF24mcvJygkJFnaGw6iSoYRfRvtQRjkaa"
+                      : "0x13b1f2384e3fef9528ced65e7e741f7b90d7bc05"}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 h-8 px-2"
+                    onClick={() => {
+                      const addr = cryptoNetwork === "trc20"
+                        ? "TVF24mcvJygkJFnaGw6iSoYRfRvtQRjkaa"
+                        : "0x13b1f2384e3fef9528ced65e7e741f7b90d7bc05";
+                      navigator.clipboard.writeText(addr);
+                      toast({ title: "ကူးယူပြီး!", description: "Wallet Address ကူးယူပြီးပါပြီ" });
+                    }}
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Warning */}
+              <div className="flex items-start gap-2 bg-destructive/10 border border-destructive/30 rounded-xl p-3">
+                <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+                <p className="text-xs text-destructive font-myanmar font-medium">
+                  သတိပြုရန် - ရွေးချယ်ထားသော Network အမှန်ဖြစ်ပါစေ။ Network လွဲမှားပါက ငွေပျောက်ဆုံးနိုင်ပြီး ပြန်လည်ရယူနိုင်မည်မဟုတ်ပါ။
+                </p>
+              </div>
+
+              {/* TXID Input */}
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-foreground font-myanmar">Transaction ID (TXID)</label>
+                <Input
+                  value={txid}
+                  onChange={(e) => setTxid(e.target.value)}
+                  placeholder="Transaction Hash ထည့်ပါ"
+                  className="font-mono text-xs"
+                />
+              </div>
+            </div>
+          )}
+
 
           {paymentMethod === "stripe" && (
             <div className="gradient-card rounded-2xl p-4 border border-indigo-500/30">
