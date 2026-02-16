@@ -1,84 +1,68 @@
 
 
-# Song/MTV Fix + Full Platform Tools Audit
+# Song/MTV Audio Output Fix + Full Tools Verification
 
-## Problem 1: Song Generation Stuck at "Processing"
+## Root Cause Found
 
-The cron job (`check-generation-jobs`) calls `check-job-status` every minute with the **anon key**. However, the previous security fix added a strict auth gate that requires an actual admin user. The anon key is not a user token, so `auth.getUser()` returns null and the function returns 401. This means **no jobs are ever polled or completed**.
+The `check-job-status` function's cron detection is broken. It compares the incoming token against `Deno.env.get("SUPABASE_ANON_KEY")`, but this comparison silently fails (likely the env var value doesn't match or has encoding differences). As a result:
 
-**Fix:** Add a special "cron mode" detection. When the Authorization header contains the anon/service-role key (not a user JWT), bypass the user check and process all pending jobs. When a real user calls it, only show their jobs.
+1. Cron calls every minute with the anon key
+2. Function treats it as a regular user call
+3. `auth.getUser(anonKey)` returns error (anon key is not a user JWT)
+4. Function returns 401 "Invalid token"
+5. **All 3 pending song jobs are stuck forever at "processing"**
 
-## Problem 2: User Lyrics Ignored
+Evidence: There are 3 jobs stuck in `processing` status with valid `external_job_id` values from SunoAPI, meaning the songs were successfully submitted but never polled for completion.
 
-Currently, `generate-song` always calls AI to generate NEW lyrics regardless of what the user types. The user wants:
-- If user provides full lyrics (multi-line, with song structure), use them **directly** as the song lyrics
-- If user provides a short topic/description, auto-generate lyrics via AI first
-- Strip any intro text the AI adds before the actual lyrics
+## Fix Strategy
 
-**Fix:** Add lyrics detection logic in `generate-song`:
-- If input has 4+ lines or 200+ characters, treat as direct lyrics
-- Otherwise, treat as a topic and generate lyrics via AI
-- Clean any AI preamble (text before first `[Verse]` or similar marker)
-
-## Problem 3: Remaining Tools Audit
-
-### Already Verified (17 Edge Functions):
-1. `remove-bg` - Output persistence + admin bypass added
-2. `upscale-image` - Output persistence + admin bypass added
-3. `generate-image` - Modalities fix + output persistence
-4. `face-swap` - Output persistence added
-5. `interior-design` - Output persistence added
-6. `video-redesign` - Output persistence added
-7. `bg-studio` - Output persistence added
-8. `caption-video` - Output persistence + admin bypass
-9. `character-animate` - Output persistence added
-10. `generate-ad` - Output persistence added
-11. `photo-restore` - Output persistence added
-12. `social-media-agent` - Output persistence + admin bypass
-13. `story-to-video` - Output persistence added
-14. `virtual-tryon` - Output persistence added
-15. `text-to-speech` - Output persistence added
-16. `speech-to-text` - Output persistence added
-17. `youtube-to-text` - Output persistence added
-
-### Needs Fix (3 Edge Functions):
-18. **`generate-song`** - Lyrics detection logic + cleanup
-19. **`check-job-status`** - Auth gate blocking cron; needs cron-compatible auth
-20. **`copyright-check`** - Output persistence added previously
-
-### Verified OK - No Changes Needed (14 Edge Functions):
-21. `ai-chat` - Streaming chat, no persistent output needed
-22. `ai-tool` - Handles 15+ sub-tools, text output returned inline
-23. `generate-video` - Uses generation_jobs async flow, already correct
-24. `auto-ad` - Uses generation_jobs async flow, already correct
-25. `improve-prompt` - Utility, returns improved text inline
-26. `generate-doc-slides` - Output persistence added previously
-27. `embed-text` - Utility for RAG memory, no user-facing output
-28. `rag-query` - Utility for context retrieval, no user-facing output
-29. `knowledge-query` - Streaming response, no persistent output needed
-30. `auto-service-preview` - Returns preview text inline, no persistence needed
-31. `auto-service-support` - Saves to `auto_service_support` table, correct
-32. `process-referral` - Credit management, no media output
-33. `stripe-checkout` - Payment flow, no media output
-34. `stripe-webhook` - Payment webhook, signature verification correct
-35. `add-ad-credits` - Ad reward system, correct
-36. `get-signed-url` - Admin utility, correct
-37. `daily-content-generate` - Admin cron, correct
+Instead of fragile string comparison, decode the JWT and check the `role` claim. The anon key has `"role": "anon"` and the service role key has `"role": "service_role"` in their JWT payloads.
 
 ## Technical Changes
 
-### 1. `supabase/functions/check-job-status/index.ts`
-- Detect cron calls (anon key or service-role key) vs user calls
-- For cron: skip user auth, process ALL pending jobs
-- For user: keep existing behavior (show only their jobs)
+### 1. `supabase/functions/check-job-status/index.ts` - Fix Cron Auth Detection
 
-### 2. `supabase/functions/generate-song/index.ts`
-- Add lyrics detection: if input >= 4 lines or >= 200 chars, treat as direct lyrics
-- If direct lyrics: skip AI generation, use user text as `prompt` for Suno
-- If short topic: generate lyrics via AI (current behavior)
-- Clean AI-generated lyrics: strip any preamble before first section marker
+Replace the string comparison approach with JWT payload decoding:
 
-### 3. `src/components/tools/SongMTVTool.tsx`
-- Update placeholder text to clarify users can paste full lyrics
-- Add visual hint showing "direct lyrics" vs "topic" detection
+```text
+// Current (broken):
+const isCronCall = token === ANON_KEY || token === SERVICE_KEY;
+
+// Fixed approach:
+// Decode the JWT payload (base64) and check if role is "anon" or "service_role"
+try {
+  const payload = JSON.parse(atob(token.split(".")[1]));
+  isCronCall = payload.role === "anon" || payload.role === "service_role";
+} catch { isCronCall = false; }
+```
+
+This is robust regardless of env var availability.
+
+### 2. Reset Stuck Jobs
+
+Run a query to reset the 3 stuck jobs back to "processing" status so the cron picks them up on the next cycle (they are already "processing" but older than 30 min, so the timeout handler may mark them failed - need to handle this).
+
+### 3. `generate-song/index.ts` - Already Working
+
+From logs, the generate-song function is working correctly:
+- Lyrics generation via AI succeeds
+- SunoAPI task submission succeeds (taskId returned)
+- Job saved to generation_jobs table
+- Returns immediately to client
+
+No changes needed here.
+
+### 4. `src/components/tools/SongMTVTool.tsx` - Already Working
+
+Frontend polling logic is correct. It polls generation_jobs every 5 seconds and shows results when status becomes "completed". No changes needed.
+
+## Summary
+
+Only ONE code change is needed: fix the cron auth detection in `check-job-status/index.ts` by decoding the JWT role claim instead of comparing raw token strings. This single fix will unblock all song generation jobs and allow the background cron to:
+- Poll SunoAPI for audio completion
+- Download and store the audio file
+- Update job status to "completed"
+- Save output to user_outputs (Store)
+
+The frontend will then automatically detect the completed job and display the audio player.
 
