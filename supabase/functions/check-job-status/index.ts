@@ -420,20 +420,34 @@ serve(async (req) => {
             const subtitleClips: any[] = [];
             if (showSubtitles && cleanLyrics) {
               const lines = cleanLyrics.split("\n").filter((l: string) => l.trim());
-              const lineDuration = (sceneImages.length * sceneDuration) / Math.max(lines.length, 1);
-              lines.forEach((line: string, i: number) => {
+              const totalVideoLen = sceneImages.length * sceneDuration;
+              // Minimum 3 seconds per line to prevent flickering
+              const minLineDur = 3;
+              const rawLineDur = totalVideoLen / Math.max(lines.length, 1);
+              const lineDuration = Math.max(rawLineDur, minLineDur);
+              // If lines overflow video length, truncate
+              const maxLines = Math.floor(totalVideoLen / lineDuration);
+              const visibleLines = lines.slice(0, maxLines);
+              
+              visibleLines.forEach((line: string, i: number) => {
+                // HTML-escape the text
+                const escaped = line.trim()
+                  .replace(/&/g, "&amp;")
+                  .replace(/</g, "&lt;")
+                  .replace(/>/g, "&gt;")
+                  .replace(/"/g, "&quot;");
+                
                 subtitleClips.push({
                   asset: {
                     type: "html",
-                    html: `<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;700&display=swap" rel="stylesheet"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:28px;color:${subtitleColor};text-shadow:2px 2px 4px black;text-align:center;padding:10px;">${line.trim()}</p>`,
-                    width: 800,
-                    height: 100,
+                    html: `<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@700&display=swap" rel="stylesheet"><div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:44px;font-weight:700;color:${subtitleColor};text-shadow:3px 3px 6px rgba(0,0,0,0.9), -1px -1px 3px rgba(0,0,0,0.7);text-align:center;padding:12px 24px;background:rgba(0,0,0,0.45);border-radius:8px;line-height:1.4;">${escaped}</p></div>`,
+                    width: 1200,
+                    height: 150,
                   },
                   start: i * lineDuration,
                   length: lineDuration,
                   position: "bottom",
-                  offset: { y: 0.05 },
-                  transition: { in: "fade", out: "fade" },
+                  offset: { y: 0.06 },
                 });
               });
             }
