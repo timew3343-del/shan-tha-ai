@@ -391,12 +391,19 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
             <div className="gradient-card rounded-2xl p-4 border border-primary/20">
               <label className="block text-sm font-medium text-primary mb-2 font-myanmar">🎵 သီချင်းအကြောင်းအရာ / စာသား</label>
               <Textarea
-                placeholder="ဥပမာ - ချစ်သူရဲ့ နွေဦးရာသီ အကြောင်း Ballad သီချင်းတစ်ပုဒ် ရေးပေးပါ..."
+                placeholder={`သီချင်းစာသားကို တိုက်ရိုက်ရေးထည့်ပါ (သို့) အကြောင်းအရာတိုတိုရေးပြီး AI ကိုရေးခိုင်းပါ\n\nဥပမာ (စာသားတိုက်ရိုက်):\n[Verse 1]\nနွေဦးလေညင်းသာ တိုက်ခတ်လာ\nစိတ်ထဲက ချစ်သူကို သတိရမိ\n\nဥပမာ (အကြောင်းအရာ):\nချစ်သူရဲ့ နွေဦးရာသီ အကြောင်း Ballad သီချင်းတစ်ပုဒ်`}
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
                 disabled={isLoading}
-                className="min-h-[100px] bg-background/50 border-primary/30 rounded-xl resize-none text-sm font-myanmar"
+                className="min-h-[120px] bg-background/50 border-primary/30 rounded-xl resize-none text-sm font-myanmar"
               />
+              {topic.trim().length > 0 && (
+                <p className="text-xs mt-1.5 font-myanmar text-muted-foreground">
+                  {topic.split("\n").filter(l => l.trim()).length >= 4 || topic.length >= 200
+                    ? "✅ သီချင်းစာသား အနေနဲ့ တိုက်ရိုက်သုံးပါမည်"
+                    : "💡 AI မှ သီချင်းစာသား ရေးပေးပါမည်"}
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
