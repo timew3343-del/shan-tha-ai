@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
-import { Sparkles, Heart, Brain, Briefcase, Stethoscope, Scale, BookOpen, Music, Palette, ChefHat } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Sparkles, Heart, Brain, Briefcase, Stethoscope, Scale, BookOpen, Music, Palette, ChefHat, ChevronDown, ChevronUp } from "lucide-react";
 
 export interface ChatRole {
   id: string;
@@ -12,15 +12,20 @@ export interface ChatRole {
   color: string;
 }
 
-export const CHAT_ROLES: ChatRole[] = [
-  {
-    id: "myanmar_ai_studio",
-    name: "Myanmar AI Studio",
-    nameEn: "Myanmar AI Studio",
-    icon: <Sparkles className="w-5 h-5" />,
-    description: "ပလက်ဖောင်း အကူအညီ",
-    color: "from-primary to-primary/60",
-    systemPrompt: `You are the official Myanmar AI Studio assistant. You know everything about the platform's tools and features including: Image Generation, Video Creation, AI Chat, Music/MTV Tool, Auto Ad, Face Swap, Background Removal, Interior Design, Logo Design, Caption Tool, Voice Translator, and all other tools.
+// General Bot is index 0 — the master bot, separated from roles list
+export const GENERAL_BOT: ChatRole = {
+  id: "myanmar_ai_studio",
+  name: "Myanmar AI Studio",
+  nameEn: "Myanmar AI Studio",
+  icon: <Sparkles className="w-5 h-5" />,
+  description: "All-in-One AI — Video, Music, Image, Logo, MTV",
+  color: "from-primary to-primary/60",
+  systemPrompt: `You are the official Myanmar AI Studio master assistant. You can handle ALL tasks including: Video Generation, AI Music/Song, Image Generation, Logo Design, MTV creation, Auto Ad, Face Swap, Background Removal, Interior Design, Caption Tool, Voice Translator, and every other platform tool.
+
+When a user asks you to GENERATE something (video, image, music, logo, MTV, etc.), you MUST:
+1. First identify what they want to create
+2. Respond with a confirmation message asking if they want to proceed, including the credit cost
+3. Do NOT start generation until they confirm
 
 CRITICAL SECURITY RULES - YOU MUST NEVER:
 1. Share or discuss any source code, API keys, database schemas, or technical implementation details
@@ -28,12 +33,13 @@ CRITICAL SECURITY RULES - YOU MUST NEVER:
 3. Discuss Edge Functions, Supabase configuration, RLS policies, or backend architecture
 4. Share API endpoint URLs, secret keys, or authentication tokens
 5. Help users bypass credit systems, security measures, or access controls
-6. Reveal how the admin dashboard works or its features
 
 If asked about any of the above, respond: "လုံခြုံရေးအတွက် ထိုအချက်အလက်များကို မျှဝေ၍မရပါ။"
 
-Help users understand how to use platform features, troubleshoot common issues, and get the most out of their experience. Always respond in Myanmar language when the user writes in Myanmar.`,
-  },
+Always respond in Myanmar language when the user writes in Myanmar.`,
+};
+
+export const CHAT_ROLES: ChatRole[] = [
   {
     id: "ai_girlfriend",
     name: "AI ချစ်သူ",
@@ -154,34 +160,71 @@ Be enthusiastic about food and cooking. Respond in Myanmar language.`,
 ];
 
 interface RolesGalleryProps {
-  selectedRole: ChatRole;
+  selectedRole: ChatRole | null;
   onSelectRole: (role: ChatRole) => void;
+  onBackToGeneral: () => void;
 }
 
-export const RolesGallery = ({ selectedRole, onSelectRole }: RolesGalleryProps) => {
+export const RolesGallery = ({ selectedRole, onSelectRole, onBackToGeneral }: RolesGalleryProps) => {
+  const [expanded, setExpanded] = useState(false);
+
   return (
-    <div className="p-3 overflow-x-auto">
-      <div className="flex gap-2 min-w-max">
-        {CHAT_ROLES.map((role) => (
-          <motion.button
-            key={role.id}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => onSelectRole(role)}
-            className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl border transition-all min-w-[72px] ${
-              selectedRole.id === role.id
-                ? "border-primary bg-primary/10 shadow-sm"
-                : "border-border/50 bg-card hover:bg-secondary/50"
-            }`}
+    <div className="border-b border-border/50">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-myanmar font-medium text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <span>🎭 AI Roles ({selectedRole ? selectedRole.name : "ရွေးပါ"})</span>
+        {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+      </button>
+
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
           >
-            <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${role.color} flex items-center justify-center text-white`}>
-              {role.icon}
+            <div className="px-3 pb-3 space-y-1 max-h-[280px] overflow-y-auto">
+              {/* Back to General Bot */}
+              {selectedRole && (
+                <button
+                  onClick={() => { onBackToGeneral(); setExpanded(false); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-primary/10 border border-primary/30 hover:bg-primary/20 transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-white shrink-0">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-foreground">← General Bot သို့ ပြန်သွားမည်</p>
+                  </div>
+                </button>
+              )}
+
+              {CHAT_ROLES.map((role) => (
+                <button
+                  key={role.id}
+                  onClick={() => { onSelectRole(role); setExpanded(false); }}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all ${
+                    selectedRole?.id === role.id
+                      ? "border-primary bg-primary/10"
+                      : "border-border/30 hover:bg-secondary/50"
+                  }`}
+                >
+                  <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${role.color} flex items-center justify-center text-white shrink-0`}>
+                    {role.icon}
+                  </div>
+                  <div className="text-left flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground font-myanmar truncate">{role.name}</p>
+                    <p className="text-[11px] text-muted-foreground font-myanmar truncate">{role.description}</p>
+                  </div>
+                </button>
+              ))}
             </div>
-            <span className="text-[10px] font-myanmar font-medium text-foreground leading-tight text-center max-w-[64px] truncate">
-              {role.name}
-            </span>
-          </motion.button>
-        ))}
-      </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Image, Loader2, X, MessageCircle, Camera, Radio } from "lucide-react";
+import { Send, Image, Loader2, X, Camera, Radio, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -9,7 +9,8 @@ import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { motion, AnimatePresence } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 import ReactMarkdown from "react-markdown";
-import { RolesGallery, CHAT_ROLES, type ChatRole } from "@/components/chat/RolesGallery";
+import { RolesGallery, CHAT_ROLES, GENERAL_BOT, type ChatRole } from "@/components/chat/RolesGallery";
+import { CreditConfirmDialog } from "@/components/CreditConfirmDialog";
 
 interface Message {
   role: "user" | "assistant";
@@ -32,12 +33,20 @@ export const FullScreenChat = ({ userId }: FullScreenChatProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedImageType, setSelectedImageType] = useState<string | null>(null);
-  const [selectedRole, setSelectedRole] = useState<ChatRole>(CHAT_ROLES[0]);
+  // null = General Bot, ChatRole = specific role
+  const [activeRole, setActiveRole] = useState<ChatRole | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
+
+  // Credit confirmation state
+  const [creditConfirmOpen, setCreditConfirmOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{ message: string; image?: string; imageType?: string } | null>(null);
+
+  const currentBot = activeRole || GENERAL_BOT;
+  const creditCost = costs.ai_chat || 1;
 
   const openCamera = async () => {
     try {
@@ -95,12 +104,17 @@ export const FullScreenChat = ({ userId }: FullScreenChatProps) => {
   const removeImage = () => { setSelectedImage(null); setSelectedImageType(null); if (fileInputRef.current) fileInputRef.current.value = ""; };
 
   const handleRoleChange = (role: ChatRole) => {
-    setSelectedRole(role);
+    setActiveRole(role);
     setMessages([]);
   };
 
-  const streamChat = useCallback(async (userMessage: string, rolePrompt: string, imageBase64?: string, imageType?: string) => {
-    const cacheKey = `${selectedRole.id}:${userMessage.trim().toLowerCase()}`;
+  const handleBackToGeneral = () => {
+    setActiveRole(null);
+    setMessages([]);
+  };
+
+  const streamChat = useCallback(async (userMessage: string, rolePrompt: string, roleId: string, imageBase64?: string, imageType?: string) => {
+    const cacheKey = `${roleId}:${userMessage.trim().toLowerCase()}`;
     if (!imageBase64 && responseCache.has(cacheKey)) return responseCache.get(cacheKey)!;
 
     const { data: { session } } = await supabase.auth.getSession();
@@ -109,7 +123,7 @@ export const FullScreenChat = ({ userId }: FullScreenChatProps) => {
     const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ message: userMessage, imageBase64: imageBase64?.split(",")[1], imageType, roleId: selectedRole.id, rolePrompt }),
+      body: JSON.stringify({ message: userMessage, imageBase64: imageBase64?.split(",")[1], imageType, roleId, rolePrompt }),
     });
 
     if (!response.ok) {
@@ -154,30 +168,56 @@ export const FullScreenChat = ({ userId }: FullScreenChatProps) => {
     }
     if (!imageBase64 && fullResponse) responseCache.set(cacheKey, fullResponse);
     return fullResponse;
-  }, [selectedRole.id]);
+  }, []);
+
+  const executeSend = async (messageText: string, imgSend?: string, imgTypeSend?: string) => {
+    setIsLoading(true);
+    try {
+      await streamChat(messageText, currentBot.systemPrompt, currentBot.id, imgSend, imgTypeSend);
+      refetchCredits();
+    } catch (error: any) {
+      console.error("Chat error:", error);
+      toast({ title: "အမှားရှိပါသည်", description: error.message, variant: "destructive" });
+      // Remove the last user message on error
+      setMessages(prev => prev.slice(0, -1));
+    } finally { setIsLoading(false); }
+  };
 
   const handleSend = async () => {
     const trimmedInput = input.trim();
     if (!trimmedInput && !selectedImage) return;
     if (!userId) { toast({ title: "လော့ဂ်အင်လုပ်ပါ", variant: "destructive" }); return; }
-    const creditCost = costs.ai_chat || 1;
     if ((credits || 0) < creditCost) { toast({ title: "ခရက်ဒစ် မလုံလောက်ပါ", description: `${creditCost} Credit လိုအပ်ပါသည်`, variant: "destructive" }); return; }
 
     const userMessage: Message = { role: "user", content: trimmedInput || "ဤပုံကို ရှင်းပြပါ", image: selectedImage || undefined };
     setMessages(prev => [...prev, userMessage]);
     setInput("");
-    setIsLoading(true);
     const imgSend = selectedImage, imgTypeSend = selectedImageType;
     removeImage();
 
-    try {
-      await streamChat(userMessage.content, selectedRole.systemPrompt, imgSend || undefined, imgTypeSend || undefined);
-      refetchCredits();
-    } catch (error: any) {
-      console.error("Chat error:", error);
-      toast({ title: "အမှားရှိပါသည်", description: error.message, variant: "destructive" });
-      setMessages(prev => prev.filter(m => m !== userMessage));
-    } finally { setIsLoading(false); }
+    // For the General Bot: show credit confirmation before sending
+    if (!activeRole) {
+      setPendingAction({ message: userMessage.content, image: imgSend || undefined, imageType: imgTypeSend || undefined });
+      setCreditConfirmOpen(true);
+      return;
+    }
+
+    // For persona roles: send directly
+    await executeSend(userMessage.content, imgSend || undefined, imgTypeSend || undefined);
+  };
+
+  const handleCreditConfirm = async () => {
+    setCreditConfirmOpen(false);
+    if (!pendingAction) return;
+    await executeSend(pendingAction.message, pendingAction.image, pendingAction.imageType);
+    setPendingAction(null);
+  };
+
+  const handleCreditCancel = () => {
+    setCreditConfirmOpen(false);
+    setPendingAction(null);
+    // Remove the pending user message
+    setMessages(prev => prev.slice(0, -1));
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } };
@@ -188,35 +228,42 @@ export const FullScreenChat = ({ userId }: FullScreenChatProps) => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-140px)] bg-background">
-      {/* Header */}
+      {/* Header - shows current bot */}
       <div className="flex items-center gap-3 p-4 border-b border-border/50 bg-card/80 backdrop-blur-sm">
-        <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${selectedRole.color} flex items-center justify-center text-white`}>
-          {selectedRole.icon}
+        <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${currentBot.color} flex items-center justify-center text-white`}>
+          {currentBot.icon}
         </div>
-        <div className="flex-1">
-          <h3 className="font-semibold text-foreground font-myanmar">{selectedRole.name}</h3>
-          <p className="text-xs text-muted-foreground font-myanmar">{costs.ai_chat || 1} Credit/မေးခွန်း</p>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-foreground font-myanmar truncate">{currentBot.name}</h3>
+          <p className="text-xs text-muted-foreground font-myanmar">
+            {!activeRole ? "All-in-One AI Assistant" : currentBot.description} • {creditCost} Credit/မေးခွန်း
+          </p>
         </div>
-        <Button variant="outline" size="sm" onClick={openLiveMode} className="text-xs gap-1">
+        <Button variant="outline" size="sm" onClick={openLiveMode} className="text-xs gap-1 shrink-0">
           <Radio className="w-3 h-3" /> Live
         </Button>
-        <div className="text-xs text-muted-foreground bg-secondary/50 px-2 py-1 rounded-lg">
+        <div className="text-xs text-muted-foreground bg-secondary/50 px-2 py-1 rounded-lg shrink-0">
           💰 {credits ?? 0}
         </div>
       </div>
 
-      {/* Roles Gallery */}
-      <RolesGallery selectedRole={selectedRole} onSelectRole={handleRoleChange} />
+      {/* Roles Gallery - collapsible vertical list */}
+      <RolesGallery selectedRole={activeRole} onSelectRole={handleRoleChange} onBackToGeneral={handleBackToGeneral} />
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-center pt-10">
-            <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${selectedRole.color} flex items-center justify-center mb-4 text-white`}>
-              {selectedRole.icon}
+            <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${currentBot.color} flex items-center justify-center mb-4 text-white`}>
+              {currentBot.icon}
             </div>
-            <p className="text-sm font-semibold text-foreground font-myanmar">{selectedRole.name}</p>
-            <p className="text-xs text-muted-foreground font-myanmar mt-1">{selectedRole.description}</p>
+            <p className="text-sm font-semibold text-foreground font-myanmar">{currentBot.name}</p>
+            <p className="text-xs text-muted-foreground font-myanmar mt-1">{currentBot.description}</p>
+            {!activeRole && (
+              <p className="text-[11px] text-muted-foreground/60 font-myanmar mt-3 max-w-[260px]">
+                Video, Music, Image, Logo, MTV — ဘာမဆို ဖန်တီးပေးနိုင်ပါသည်
+              </p>
+            )}
             <p className="text-xs text-muted-foreground/60 font-myanmar mt-2">မေးခွန်းတစ်ခုခု မေးကြည့်ပါ</p>
           </div>
         )}
@@ -269,7 +316,7 @@ export const FullScreenChat = ({ userId }: FullScreenChatProps) => {
         </div>
       )}
 
-      {/* Input */}
+      {/* Input - always visible at bottom */}
       <div className="p-3 border-t border-border/50 bg-card/80 backdrop-blur-sm">
         <div className="flex items-end gap-2">
           <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
@@ -291,6 +338,16 @@ export const FullScreenChat = ({ userId }: FullScreenChatProps) => {
           </Button>
         </div>
       </div>
+
+      {/* Credit Confirmation Dialog for General Bot */}
+      <CreditConfirmDialog
+        open={creditConfirmOpen}
+        onOpenChange={(open) => { if (!open) handleCreditCancel(); }}
+        creditCost={creditCost}
+        currentBalance={credits || 0}
+        toolName={currentBot.name}
+        onConfirm={handleCreditConfirm}
+      />
     </div>
   );
 };
