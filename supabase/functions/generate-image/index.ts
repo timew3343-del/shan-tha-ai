@@ -112,7 +112,9 @@ serve(async (req) => {
     }
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
+    const STABILITY_API_KEY = Deno.env.get("STABILITY_API_KEY");
+    
+    if (!LOVABLE_API_KEY && !STABILITY_API_KEY) {
       return new Response(
         JSON.stringify({ error: "Image generation service not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -121,48 +123,103 @@ serve(async (req) => {
 
     console.log(`Generating image for prompt: "${prompt.substring(0, 50)}..."`);
 
-    const messages: any[] = [];
-    if (referenceImage) {
-      messages.push({
-        role: "user",
-        content: [
-          { type: "text", text: prompt },
-          { type: "image_url", image_url: { url: referenceImage } }
-        ]
-      });
-    } else {
-      messages.push({ role: "user", content: `Generate an image: ${prompt}` });
-    }
+    let generatedImage: string | null = null;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image",
-        messages,
-        modalities: ["image", "text"]
-      }),
-    });
+    // Strategy 1: Stability AI (most reliable for image generation)
+    if (STABILITY_API_KEY && !referenceImage) {
+      try {
+        console.log("Trying Stability AI for image generation...");
+        const fd = new FormData();
+        fd.append("prompt", prompt);
+        fd.append("output_format", "png");
+        fd.append("aspect_ratio", "1:1");
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Lovable AI error:", response.status, errorText);
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        const stabResp = await fetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${STABILITY_API_KEY}`, Accept: "image/*" },
+          body: fd,
+        });
+
+        if (stabResp.ok) {
+          const buf = await stabResp.arrayBuffer();
+          const base64 = btoa(new Uint8Array(buf).reduce((data, byte) => data + String.fromCharCode(byte), ""));
+          generatedImage = `data:image/png;base64,${base64}`;
+          console.log("Stability AI image generated successfully");
+        } else {
+          const errText = await stabResp.text();
+          console.warn(`Stability AI failed: ${stabResp.status} - ${errText.substring(0, 200)}`);
+        }
+      } catch (e: any) {
+        console.warn(`Stability AI error: ${e.message}`);
       }
-      return new Response(JSON.stringify({ error: "Image generation failed" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const data = await response.json();
-    const generatedImage = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-    
+    // Strategy 2: Lovable AI Gateway (Gemini image model) - fallback or for reference images
+    if (!generatedImage && LOVABLE_API_KEY) {
+      try {
+        console.log("Trying Lovable AI Gateway for image generation...");
+        const messages: any[] = [];
+        if (referenceImage) {
+          messages.push({
+            role: "user",
+            content: [
+              { type: "text", text: `Generate an image based on this reference: ${prompt}` },
+              { type: "image_url", image_url: { url: referenceImage } }
+            ]
+          });
+        } else {
+          messages.push({ role: "user", content: `Generate an image: ${prompt}` });
+        }
+
+        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash-image",
+            messages,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log("Lovable AI response keys:", JSON.stringify(Object.keys(data)));
+          
+          // Try multiple response formats
+          const choice = data.choices?.[0]?.message;
+          generatedImage = 
+            choice?.images?.[0]?.image_url?.url ||
+            choice?.images?.[0]?.url ||
+            choice?.image_url ||
+            choice?.content_parts?.find((p: any) => p.type === "image")?.image_url?.url ||
+            null;
+          
+          // Check if content contains base64 image data
+          if (!generatedImage && choice?.content) {
+            const content = choice.content;
+            if (typeof content === "string" && content.startsWith("data:image")) {
+              generatedImage = content;
+            }
+          }
+          
+          if (generatedImage) {
+            console.log("Lovable AI image generated successfully");
+          } else {
+            console.warn("Lovable AI returned no parseable image. Response structure:", JSON.stringify(data).substring(0, 500));
+          }
+        } else {
+          const errText = await response.text();
+          console.warn(`Lovable AI failed: ${response.status} - ${errText.substring(0, 200)}`);
+        }
+      } catch (e: any) {
+        console.warn(`Lovable AI error: ${e.message}`);
+      }
+    }
+
     if (!generatedImage) {
-      return new Response(JSON.stringify({ error: "No image generated" }),
+      return new Response(JSON.stringify({ error: "ပုံထုတ်ခြင်း မအောင်မြင်ပါ။ ထပ်မံကြိုးစားပါ။" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 

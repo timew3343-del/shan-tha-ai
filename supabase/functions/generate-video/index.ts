@@ -10,6 +10,32 @@ interface GenerateVideoRequest {
   prompt: string;
   image?: string;
   speechText?: string;
+  duration?: number;
+  bgMusic?: string;
+}
+
+async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 2): Promise<Response> {
+  let lastError: Error | null = null;
+  for (let i = 0; i <= maxRetries; i++) {
+    try {
+      if (i > 0) {
+        console.log(`Retry attempt ${i}/${maxRetries}...`);
+        await new Promise(r => setTimeout(r, 2000 * i));
+      }
+      const resp = await fetch(url, options);
+      if (resp.status === 429 && i < maxRetries) {
+        await resp.text();
+        console.warn("Rate limited, waiting before retry...");
+        await new Promise(r => setTimeout(r, 5000));
+        continue;
+      }
+      return resp;
+    } catch (e: any) {
+      lastError = e;
+      console.warn(`Fetch attempt ${i} failed: ${e.message}`);
+    }
+  }
+  throw lastError || new Error("All retries failed");
 }
 
 async function setMaintenanceMode(supabaseAdmin: any, enabled: boolean) {
@@ -82,16 +108,8 @@ serve(async (req) => {
     console.log(`User ${userId} requesting video generation, isAdmin=${userIsAdmin}`);
 
     // Parse and validate request body
-    let body: GenerateVideoRequest;
-    try {
-      body = await req.json();
-    } catch {
-      return new Response(
-        JSON.stringify({ error: "Invalid request body" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    const { prompt, image, speechText } = body;
+    const body: GenerateVideoRequest = await req.json();
+    const { prompt, image, speechText, duration, bgMusic } = body;
 
     if (!image || typeof image !== "string") {
       return new Response(
@@ -184,7 +202,7 @@ serve(async (req) => {
 
       console.log("Calling Stability AI Image-to-Video API...");
       
-      const startResponse = await fetch("https://api.stability.ai/v2beta/image-to-video", {
+      const startResponse = await fetchWithRetry("https://api.stability.ai/v2beta/image-to-video", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${STABILITY_API_KEY}`,
@@ -241,13 +259,13 @@ serve(async (req) => {
         
         console.log(`Polling attempt ${attempt + 1}/${maxAttempts}...`);
         
-        const resultResponse = await fetch(`https://api.stability.ai/v2beta/image-to-video/result/${generationId}`, {
+        const resultResponse = await fetchWithRetry(`https://api.stability.ai/v2beta/image-to-video/result/${generationId}`, {
           method: "GET",
           headers: {
             "Authorization": `Bearer ${STABILITY_API_KEY}`,
             "Accept": "video/*",
           },
-        });
+        }, 1);
 
         if (resultResponse.status === 202) {
           console.log("Video still processing...");
@@ -300,6 +318,20 @@ serve(async (req) => {
       }
 
       console.log(`Video generated successfully for user ${userId}, new balance: ${newBalance}`);
+
+      // Save output to user_outputs for Store access
+      try {
+        await supabaseAdmin.from("user_outputs").insert({
+          user_id: userId,
+          tool_id: "video-gen",
+          tool_name: "Image to Video",
+          output_type: "video",
+          file_url: videoData,
+        });
+        console.log("Video output saved to user_outputs");
+      } catch (e) {
+        console.warn("Failed to save video output:", e);
+      }
 
       return new Response(
         JSON.stringify({
