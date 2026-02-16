@@ -79,8 +79,8 @@ serve(async (req) => {
         { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const { data: apiKeySetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "replicate_api_token").maybeSingle();
-    const REPLICATE_API_KEY = apiKeySetting?.value || Deno.env.get("REPLICATE_API_KEY");
+    // Prioritize env secret over DB for security
+    const REPLICATE_API_KEY = Deno.env.get("REPLICATE_API_KEY");
     if (!REPLICATE_API_KEY) {
       return new Response(JSON.stringify({ error: "API not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -146,6 +146,14 @@ serve(async (req) => {
     } else {
       console.log("Admin free access - skipping credit deduction for face swap");
     }
+
+    // Save output to user_outputs
+    try {
+      await supabaseAdmin.from("user_outputs").insert({
+        user_id: userId, tool_id: "face_swap", tool_name: "Face Swap",
+        output_type: "video", file_url: resultUrl,
+      });
+    } catch (e) { console.warn("Failed to save face swap output:", e); }
 
     return new Response(JSON.stringify({ success: true, video: resultUrl, creditsUsed: userIsAdmin ? 0 : creditCost, newBalance }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
