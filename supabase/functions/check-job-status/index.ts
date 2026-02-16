@@ -34,10 +34,14 @@ serve(async (req) => {
     const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const token = authHeader.replace("Bearer ", "");
 
-    // Detect cron mode: anon key or service-role key (not a user JWT)
-    const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
-    const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    const isCronCall = token === ANON_KEY || token === SERVICE_KEY;
+    // Detect cron mode: decode JWT and check role claim
+    // Anon key has role="anon", service role key has role="service_role"
+    let isCronCall = false;
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      isCronCall = payload.role === "anon" || payload.role === "service_role";
+      if (isCronCall) console.log(`Cron detected via JWT role: ${payload.role}`);
+    } catch { isCronCall = false; }
 
     let userIsAdmin = false;
     let userId: string | null = null;
