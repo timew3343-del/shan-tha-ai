@@ -142,17 +142,37 @@ export const GlobalMarginTab = () => {
           <span className="text-2xl font-bold text-primary">{margin}%</span>
         </div>
         
-        <Slider
-          value={[margin]}
-          onValueChange={(val) => !isLocked && setMargin(val[0])}
-          min={10}
-          max={150}
-          step={5}
-          disabled={isLocked}
-          className="mb-4"
-        />
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            disabled={isLocked || margin <= 10}
+            onClick={() => setMargin(Math.max(10, margin - 5))}
+          >
+            <span className="text-lg font-bold">−</span>
+          </Button>
+          <Slider
+            value={[margin]}
+            onValueChange={(val) => !isLocked && setMargin(val[0])}
+            min={10}
+            max={150}
+            step={5}
+            disabled={isLocked}
+            className="flex-1"
+          />
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            disabled={isLocked || margin >= 150}
+            onClick={() => setMargin(Math.min(150, margin + 5))}
+          >
+            <span className="text-lg font-bold">+</span>
+          </Button>
+        </div>
         
-        <div className="flex justify-between text-xs text-muted-foreground">
+        <div className="flex justify-between text-xs text-muted-foreground mt-2">
           <span>10%</span>
           <span>50%</span>
           <span>100%</span>
