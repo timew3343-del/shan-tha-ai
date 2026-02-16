@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Music, Video, Sparkles, Download, Loader2, Upload, X, Mic2 } from "lucide-react";
 import { downloadVideo, downloadAudio } from "@/lib/downloadHelper";
 import { Button } from "@/components/ui/button";
@@ -95,12 +95,14 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState("");
+  const [pollingJobId, setPollingJobId] = useState<string | null>(null);
 
   const [resultAudio, setResultAudio] = useState<string | null>(null);
   const [resultVideo, setResultVideo] = useState<string | null>(null);
   const [resultLyrics, setResultLyrics] = useState<string | null>(null);
 
   const audioInputRef = useRef<HTMLInputElement>(null);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const getCreditCost = () => {
     let base: number;
@@ -111,7 +113,6 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
       case "full_auto": base = Math.ceil((costs.song_mtv || 20) * 2 * durationMin); break;
       default: base = costs.song_mtv || 20;
     }
-    // 15% discount when subtitles are OFF (Logic 1)
     if (!showSubtitles && (serviceOption === "full_auto" || serviceOption === "mtv_only")) {
       base = Math.ceil(base * 0.85);
     }
@@ -119,6 +120,114 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
   };
 
   const creditCost = getCreditCost();
+
+  // Stop polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, []);
+
+  // Poll for job completion
+  const startPolling = useCallback((jobId: string, initialLyrics?: string | null) => {
+    setPollingJobId(jobId);
+    if (initialLyrics) setResultLyrics(initialLyrics);
+
+    let pollCount = 0;
+    const maxPolls = 120; // 10 minutes max (5s intervals)
+
+    const pollStatusMessages = [
+      "သီချင်းဖန်တီးနေပါသည်...",
+      "AI မှ သီချင်းရေးနေပါသည်...",
+      "အသံထုတ်နေပါသည်...",
+      "ခဏစောင့်ပါ, နီးပါပြီ...",
+    ];
+
+    pollingRef.current = setInterval(async () => {
+      pollCount++;
+      
+      // Update progress and status
+      const progressPct = Math.min(10 + (pollCount / maxPolls) * 85, 95);
+      setProgress(progressPct);
+      const statusIdx = Math.min(Math.floor(pollCount / 15), pollStatusMessages.length - 1);
+      setStatusText(pollStatusMessages[statusIdx]);
+
+      if (pollCount >= maxPolls) {
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        pollingRef.current = null;
+        setIsLoading(false);
+        setPollingJobId(null);
+        toast({ title: "အချိန်ကြာလွန်းပါသည်", description: "Store ထဲတွင် ရလဒ်ကို စစ်ဆေးပါ", variant: "destructive" });
+        return;
+      }
+
+      try {
+        const { data: job, error } = await supabase
+          .from("generation_jobs")
+          .select("status, output_url, error_message, thumbnail_url")
+          .eq("id", jobId)
+          .single();
+
+        if (error) {
+          console.warn("Job poll error:", error);
+          return;
+        }
+
+        if (job?.status === "completed") {
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          pollingRef.current = null;
+          setProgress(100);
+          setStatusText("အောင်မြင်ပါပြီ!");
+
+          if (job.output_url) {
+            // Check if it's audio or video based on URL
+            if (job.output_url.includes(".mp3") || job.output_url.includes("audio")) {
+              setResultAudio(job.output_url);
+            } else {
+              setResultVideo(job.output_url);
+            }
+          }
+
+          // Also check for related completed jobs (e.g., MTV after song)
+          const { data: relatedJobs } = await supabase
+            .from("generation_jobs")
+            .select("status, output_url, tool_type")
+            .eq("user_id", userId || "")
+            .in("tool_type", ["song_mtv_video", "song_mtv_full", "song_music"])
+            .eq("status", "completed")
+            .order("created_at", { ascending: false })
+            .limit(5);
+
+          if (relatedJobs) {
+            for (const rj of relatedJobs) {
+              if (rj.output_url) {
+                if (rj.tool_type === "song_mtv_video" && rj.output_url.includes(".mp4")) {
+                  setResultVideo(rj.output_url);
+                } else if ((rj.tool_type === "song_music" || rj.tool_type === "song_mtv_full") && !resultAudio) {
+                  setResultAudio(rj.output_url);
+                }
+              }
+            }
+          }
+
+          refetchCredits();
+          setIsLoading(false);
+          setPollingJobId(null);
+          toast({ title: "အောင်မြင်ပါသည် 🎵", description: "သီချင်း ဖန်တီးပြီးပါပြီ" });
+
+        } else if (job?.status === "failed") {
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          pollingRef.current = null;
+          setIsLoading(false);
+          setPollingJobId(null);
+          toast({ title: "အမှားရှိပါသည်", description: job.error_message || "Generation failed", variant: "destructive" });
+        }
+        // else: still processing, continue polling
+      } catch (err) {
+        console.warn("Poll fetch error:", err);
+      }
+    }, 5000);
+  }, [userId, toast, refetchCredits, resultAudio]);
 
   const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -159,35 +268,14 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
     setResultAudio(null);
     setResultVideo(null);
     setResultLyrics(null);
-    setProgress(0);
-
-    const statusMessages: Record<ServiceOption, string[]> = {
-      song_only: ["စာသားဖန်တီးနေသည်...", "သီချင်းထုတ်နေသည်...", "အပြီးသတ်နေသည်..."],
-      mtv_only: ["ဗီဒီယို ဖန်တီးနေသည်...", "MTV ဗီဒီယို တည်းဖြတ်နေသည်...", "အပြီးသတ်နေသည်..."],
-      full_auto: ["စာသားဖန်တီးနေသည်...", "သီချင်းထုတ်နေသည်...", "MTV ဗီဒီယို တည်းဖြတ်နေသည်...", "အပြီးသတ်နေသည်..."],
-    };
-
-    let statusIdx = 0;
-    const statuses = statusMessages[serviceOption];
-    setStatusText(statuses[0]);
-
-    const progressInterval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 95) return 95;
-        const next = prev + Math.random() * 3;
-        const newIdx = Math.min(Math.floor(next / (100 / statuses.length)), statuses.length - 1);
-        if (newIdx !== statusIdx) {
-          statusIdx = newIdx;
-          setStatusText(statuses[statusIdx]);
-        }
-        return next;
-      });
-    }, 2000);
+    setProgress(5);
+    setStatusText("စာသားဖန်တီးနေသည်...");
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         toast({ title: "အကောင့်ဝင်ရန်လိုအပ်သည်", variant: "destructive" });
+        setIsLoading(false);
         return;
       }
 
@@ -204,64 +292,60 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
         audioBase64: serviceOption === "mtv_only" ? audioFile?.split(",")[1] : undefined,
       });
 
-      // Retry up to 2 times on network failures
-      let response: Response | null = null;
-      let lastErr: Error | null = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        if (attempt > 0) {
-          console.log(`Song generation retry attempt ${attempt}...`);
-          setStatusText("ပြန်လည်ကြိုးစားနေသည်...");
-          await new Promise(r => setTimeout(r, 3000));
-        }
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 300000);
-        try {
-          response = await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-song`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${session.access_token}`,
-              },
-              body: requestBody,
-              signal: controller.signal,
-            }
-          );
-          clearTimeout(timeoutId);
-          break; // success - exit retry loop
-        } catch (fetchErr: any) {
-          clearTimeout(timeoutId);
-          lastErr = fetchErr;
-          if (fetchErr.name === "AbortError") {
-            throw new Error("သီချင်းထုတ်ရန် အချိန်ကြာလွန်းပါသည်။ နောက်တစ်ကြိမ် ထပ်ကြိုးစားပါ။");
-          }
-          console.warn(`Song fetch attempt ${attempt} failed:`, fetchErr.message);
-        }
-      }
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout for initial submit
 
-      if (!response) {
-        throw new Error(lastErr?.message || "ချိတ်ဆက်မှု မအောင်မြင်ပါ။ အင်တာနက် စစ်ဆေးပြီး ထပ်ကြိုးစားပါ။");
-      }
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-song`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: requestBody,
+          signal: controller.signal,
+        }
+      );
+
+      clearTimeout(timeoutId);
 
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Generation failed");
 
+      // New async flow: response contains jobId + lyrics
+      if (result.status === "processing" && result.jobId) {
+        console.log(`Song job submitted: ${result.jobId}`);
+        setProgress(10);
+        setStatusText("သီချင်းဖန်တီးနေပါသည်... ခဏစောင့်ပါ");
+        
+        // Show lyrics immediately if available
+        if (result.lyrics) setResultLyrics(result.lyrics);
+        
+        // Start polling for job completion
+        startPolling(result.jobId, result.lyrics);
+        return; // Don't set isLoading=false yet, polling will handle it
+      }
+
+      // Legacy sync response (shouldn't happen with new code, but just in case)
       if (result.audio) setResultAudio(result.audio);
       if (result.video) setResultVideo(result.video);
       if (result.lyrics) setResultLyrics(result.lyrics);
       setProgress(100);
       refetchCredits();
-      // Server already saves to user_outputs - just refetch store
-      // No need to call saveOutput to avoid duplicates
+      toast({ title: "အောင်မြင်ပါသည် 🎵", description: `${result.creditsUsed || 0} Credits အသုံးပြုပြီးပါပြီ` });
 
-      toast({ title: "အောင်မြင်ပါသည် 🎵", description: `${result.creditsUsed} Credits အသုံးပြုပြီးပါပြီ` });
     } catch (error: any) {
       console.error("Song/MTV error:", error);
-      toast({ title: "အမှားရှိပါသည်", description: error.message, variant: "destructive" });
+      if (error.name === "AbortError") {
+        toast({ title: "အချိန်ကြာလွန်းပါသည်", description: "နောက်တစ်ကြိမ် ထပ်ကြိုးစားပါ", variant: "destructive" });
+      } else {
+        toast({ title: "အမှားရှိပါသည်", description: error.message, variant: "destructive" });
+      }
     } finally {
-      clearInterval(progressInterval);
-      setIsLoading(false);
+      if (!pollingJobId) {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -283,6 +367,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
             key={opt.id}
             onClick={() => setServiceOption(opt.id)}
             whileTap={{ scale: 0.95 }}
+            disabled={isLoading}
             className={`relative p-3 rounded-2xl border-2 transition-all overflow-hidden ${
               serviceOption === opt.id
                 ? "border-primary shadow-gold"
@@ -309,6 +394,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
                 placeholder="ဥပမာ - ချစ်သူရဲ့ နွေဦးရာသီ အကြောင်း Ballad သီချင်းတစ်ပုဒ် ရေးပေးပါ..."
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
+                disabled={isLoading}
                 className="min-h-[100px] bg-background/50 border-primary/30 rounded-xl resize-none text-sm font-myanmar"
               />
             </div>
@@ -316,14 +402,14 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
             <div className="grid grid-cols-2 gap-3">
               <div className="gradient-card rounded-2xl p-4 border border-primary/20">
                 <label className="block text-sm font-medium text-primary mb-2 font-myanmar">🎸 Genre</label>
-                <Select value={genre} onValueChange={setGenre}>
+                <Select value={genre} onValueChange={setGenre} disabled={isLoading}>
                   <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>{GENRE_OPTIONS.map((g) => (<SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>))}</SelectContent>
                 </Select>
               </div>
               <div className="gradient-card rounded-2xl p-4 border border-primary/20">
                 <label className="block text-sm font-medium text-primary mb-2 font-myanmar">🎭 Mood</label>
-                <Select value={mood} onValueChange={setMood}>
+                <Select value={mood} onValueChange={setMood} disabled={isLoading}>
                   <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>{MOOD_OPTIONS.map((m) => (<SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>))}</SelectContent>
                 </Select>
@@ -333,7 +419,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
             <div className="grid grid-cols-2 gap-3">
               <div className="gradient-card rounded-2xl p-4 border border-primary/20">
                 <label className="block text-sm font-medium text-primary mb-2 font-myanmar">🌐 ဘာသာစကား</label>
-                <Select value={language} onValueChange={setLanguage}>
+                <Select value={language} onValueChange={setLanguage} disabled={isLoading}>
                   <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>{LANGUAGE_OPTIONS.map((l) => (<SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>))}</SelectContent>
                 </Select>
@@ -341,7 +427,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
               {(serviceOption === "full_auto") && (
                 <div className="gradient-card rounded-2xl p-4 border border-primary/20">
                   <label className="block text-sm font-medium text-primary mb-2 font-myanmar">🎨 MTV Style</label>
-                  <Select value={mtvStyle} onValueChange={setMtvStyle}>
+                  <Select value={mtvStyle} onValueChange={setMtvStyle} disabled={isLoading}>
                     <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>{MTV_STYLE_OPTIONS.map((s) => (<SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>))}</SelectContent>
                   </Select>
@@ -352,7 +438,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
             {serviceOption === "full_auto" && (
               <div className="gradient-card rounded-2xl p-4 border border-primary/20">
                 <label className="block text-sm font-medium text-primary mb-2 font-myanmar">⏱️ ဗီဒီယို အရှည်</label>
-                <Select value={videoDuration} onValueChange={setVideoDuration}>
+                <Select value={videoDuration} onValueChange={setVideoDuration} disabled={isLoading}>
                   <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>{DURATION_OPTIONS.map((d) => (<SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>))}</SelectContent>
                 </Select>
@@ -368,7 +454,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
                       <p className="text-[10px] text-green-500 font-myanmar">💰 15% discount applied!</p>
                     )}
                   </div>
-                  <button onClick={() => setShowSubtitles(!showSubtitles)} className={`w-12 h-6 rounded-full transition-colors ${showSubtitles ? "bg-primary" : "bg-muted"}`}>
+                  <button onClick={() => setShowSubtitles(!showSubtitles)} disabled={isLoading} className={`w-12 h-6 rounded-full transition-colors ${showSubtitles ? "bg-primary" : "bg-muted"}`}>
                     <div className={`w-5 h-5 bg-white rounded-full transition-transform shadow ${showSubtitles ? "translate-x-6" : "translate-x-0.5"}`} />
                   </button>
                 </div>
@@ -420,7 +506,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
                   </button>
                 </div>
               ) : (
-                <button onClick={() => audioInputRef.current?.click()} className="w-full h-24 border-2 border-dashed border-primary/30 rounded-xl flex flex-col items-center justify-center gap-2 hover:bg-primary/5 transition-colors">
+                <button onClick={() => audioInputRef.current?.click()} disabled={isLoading} className="w-full h-24 border-2 border-dashed border-primary/30 rounded-xl flex flex-col items-center justify-center gap-2 hover:bg-primary/5 transition-colors">
                   <Upload className="w-6 h-6 text-primary" />
                   <span className="text-xs text-muted-foreground font-myanmar">MP3, WAV ဖိုင်ထည့်ရန်</span>
                 </button>
@@ -428,34 +514,31 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
               <input ref={audioInputRef} type="file" accept="audio/*" onChange={handleAudioUpload} className="hidden" />
             </div>
 
-            {/* MTV Style for mtv_only */}
             <div className="grid grid-cols-2 gap-3">
               <div className="gradient-card rounded-2xl p-4 border border-primary/20">
                 <label className="block text-sm font-medium text-primary mb-2 font-myanmar">🎨 MTV Style</label>
-                <Select value={mtvStyle} onValueChange={setMtvStyle}>
+                <Select value={mtvStyle} onValueChange={setMtvStyle} disabled={isLoading}>
                   <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>{MTV_STYLE_OPTIONS.map((s) => (<SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>))}</SelectContent>
                 </Select>
               </div>
               <div className="gradient-card rounded-2xl p-4 border border-primary/20">
                 <label className="block text-sm font-medium text-primary mb-2 font-myanmar">🌐 ဘာသာစကား</label>
-                <Select value={language} onValueChange={setLanguage}>
+                <Select value={language} onValueChange={setLanguage} disabled={isLoading}>
                   <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>{LANGUAGE_OPTIONS.map((l) => (<SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>))}</SelectContent>
                 </Select>
               </div>
             </div>
 
-            {/* Duration selector for MTV only */}
             <div className="gradient-card rounded-2xl p-4 border border-primary/20">
               <label className="block text-sm font-medium text-primary mb-2 font-myanmar">⏱️ ဗီဒီယို အရှည်</label>
-              <Select value={videoDuration} onValueChange={setVideoDuration}>
+              <Select value={videoDuration} onValueChange={setVideoDuration} disabled={isLoading}>
                 <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
                 <SelectContent>{DURATION_OPTIONS.map((d) => (<SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>))}</SelectContent>
               </Select>
             </div>
 
-            {/* Subtitle toggle for MTV only mode */}
             <div className="gradient-card rounded-2xl p-3 border border-primary/20 flex items-center justify-between">
               <div>
                 <label className="text-sm font-medium text-primary font-myanmar">📝 စာတန်းထိုးမည်</label>
@@ -463,7 +546,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
                   <p className="text-[10px] text-green-500 font-myanmar">💰 15% discount applied!</p>
                 )}
               </div>
-              <button onClick={() => setShowSubtitles(!showSubtitles)} className={`w-12 h-6 rounded-full transition-colors ${showSubtitles ? "bg-primary" : "bg-muted"}`}>
+              <button onClick={() => setShowSubtitles(!showSubtitles)} disabled={isLoading} className={`w-12 h-6 rounded-full transition-colors ${showSubtitles ? "bg-primary" : "bg-muted"}`}>
                 <div className={`w-5 h-5 bg-white rounded-full transition-transform shadow ${showSubtitles ? "translate-x-6" : "translate-x-0.5"}`} />
               </button>
             </div>
@@ -512,6 +595,11 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
             <span>{Math.round(progress)}%</span>
           </div>
           <Progress value={progress} className="h-2" />
+          {pollingJobId && (
+            <p className="text-[10px] text-muted-foreground text-center font-myanmar">
+              🔄 နောက်ကွယ်မှ ဖန်တီးနေပါသည်... ဤစာမျက်နှာကို မပိတ်ပါနှင့်
+            </p>
+          )}
         </motion.div>
       )}
 

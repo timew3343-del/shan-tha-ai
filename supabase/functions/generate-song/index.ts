@@ -88,13 +88,13 @@ Rules:
   return lyrics.normalize("NFC");
 }
 
-// Song generation with failover: SunoAPI.org → GoAPI Suno
-async function generateSongWithFailover(
+// Submit song to SunoAPI WITHOUT polling - returns taskId immediately
+async function submitSongTask(
   supabaseAdmin: any,
   songTitle: string,
   songTags: string,
   songLyrics: string
-): Promise<{ audioUrl: string; videoUrl: string | null; provider: string }> {
+): Promise<{ taskId: string; provider: string }> {
   const { data: apiKeys } = await supabaseAdmin.from("app_settings").select("key, value").in("key", [
     "sunoapi_org_key", "goapi_suno_api_key", "api_enabled_sunoapi", "api_enabled_goapi_suno"
   ]);
@@ -103,169 +103,60 @@ async function generateSongWithFailover(
 
   console.log(`Song API keys available: sunoapi=${!!keyMap.sunoapi_org_key}, goapi=${!!keyMap.goapi_suno_api_key}`);
 
-  const providers: { name: string; enabled: boolean; generate: () => Promise<{ audioUrl: string; videoUrl: string | null }> }[] = [];
-
-  // Provider 1: SunoAPI.org
-  if (keyMap.sunoapi_org_key) {
-    providers.push({
-      name: "SunoAPI.org",
-      enabled: keyMap.api_enabled_sunoapi !== "false",
-      generate: async () => {
-        const SUNO_KEY = keyMap.sunoapi_org_key;
-        console.log("Trying SunoAPI.org...");
-        
-        const sunoResponse = await fetch("https://api.sunoapi.org/api/v1/generate", {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${SUNO_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            customMode: true, instrumental: false,
-            title: songTitle, tags: songTags, prompt: songLyrics, model: "V4",
-            callBackUrl: "https://example.com/callback",
-          }),
-        });
-
-        if (!sunoResponse.ok) {
-          const errText = await sunoResponse.text();
-          console.error(`SunoAPI error response: ${errText.substring(0, 500)}`);
-          throw new Error(`SunoAPI ${sunoResponse.status}: ${errText.substring(0, 200)}`);
-        }
-
-        const sunoData = await sunoResponse.json();
-        console.log("SunoAPI response:", JSON.stringify(sunoData).substring(0, 500));
-        const taskId = sunoData.data?.taskId || sunoData.data?.task_id;
-        if (!taskId) throw new Error(`SunoAPI: no task ID in response: ${JSON.stringify(sunoData).substring(0, 200)}`);
-
-        console.log("SunoAPI task:", taskId);
-
-        // Poll for completion with 5-minute timeout (60 polls x 5s)
-        for (let i = 0; i < 60; i++) {
-          await new Promise(r => setTimeout(r, 5000));
-          const res = await fetch(`https://api.sunoapi.org/api/v1/generate/record-info?taskId=${taskId}`, {
-            headers: { "Authorization": `Bearer ${SUNO_KEY}` },
-          });
-          const data = await res.json();
-          const status = data.data?.status;
-          console.log(`SunoAPI poll ${i}: ${status}`);
-
-          if (status === "TEXT_SUCCESS" || status === "FIRST_SUCCESS" || status === "SUCCESS") {
-            const songs = data.data?.data || data.data?.response?.sunoData || [];
-            const songArr = Array.isArray(songs) ? songs : [];
-            
-            console.log(`SunoAPI ${status} songs count: ${songArr.length}, raw:`, JSON.stringify(data.data).substring(0, 800));
-
-            if (songArr.length > 0) {
-              const song = songArr[0];
-              const audioUrl = song?.audio_url || song?.audioUrl || song?.stream_audio_url || song?.source_audio_url || "";
-              const videoUrl = song?.video_url || song?.videoUrl || song?.stream_video_url || song?.source_video_url || null;
-              if (audioUrl) {
-                console.log(`SunoAPI: found audio at ${status}, url length: ${audioUrl.length}`);
-                return { audioUrl, videoUrl };
-              }
-            }
-
-            if (status === "SUCCESS") {
-              throw new Error(`SunoAPI: no audio found in SUCCESS response`);
-            }
-          }
-          if (["CREATE_TASK_FAILED", "GENERATE_AUDIO_FAILED", "CALLBACK_EXCEPTION"].includes(status)) {
-            throw new Error(data.data?.errorMessage || `SunoAPI failed: ${status}`);
-          }
-        }
-        throw new Error("SunoAPI: polling timeout after 5 minutes");
-      },
+  // Try SunoAPI.org first
+  if (keyMap.sunoapi_org_key && keyMap.api_enabled_sunoapi !== "false") {
+    const SUNO_KEY = keyMap.sunoapi_org_key;
+    console.log("Submitting to SunoAPI.org...");
+    
+    const sunoResponse = await fetch("https://api.sunoapi.org/api/v1/generate", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${SUNO_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customMode: true, instrumental: false,
+        title: songTitle, tags: songTags, prompt: songLyrics, model: "V4",
+        callBackUrl: "https://example.com/callback",
+      }),
     });
-  }
 
-  // Provider 2: GoAPI Suno
-  if (keyMap.goapi_suno_api_key) {
-    providers.push({
-      name: "GoAPI Suno",
-      enabled: keyMap.api_enabled_goapi_suno !== "false",
-      generate: async () => {
-        const GOAPI_KEY = keyMap.goapi_suno_api_key;
-        console.log("Trying GoAPI Suno...");
-
-        const goResponse = await fetch("https://api.goapi.ai/api/suno/v1/music", {
-          method: "POST",
-          headers: { "X-API-Key": GOAPI_KEY, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            custom_mode: true, input: { title: songTitle, tags: songTags, prompt: songLyrics },
-          }),
-        });
-
-        if (!goResponse.ok) {
-          const errText = await goResponse.text();
-          console.error(`GoAPI error: ${errText.substring(0, 500)}`);
-          throw new Error(`GoAPI ${goResponse.status}: ${errText.substring(0, 200)}`);
-        }
-
-        const goData = await goResponse.json();
-        const taskId = goData.data?.task_id;
-        if (!taskId) throw new Error("GoAPI: no task ID");
-
-        console.log("GoAPI task:", taskId);
-
-        for (let i = 0; i < 60; i++) {
-          await new Promise(r => setTimeout(r, 5000));
-          const res = await fetch(`https://api.goapi.ai/api/suno/v1/music/${taskId}`, {
-            headers: { "X-API-Key": GOAPI_KEY },
-          });
-          const data = await res.json();
-          const status = data.data?.status;
-          console.log(`GoAPI poll ${i}: ${status}`);
-
-          if (status === "completed") {
-            const clips = data.data?.clips || data.data?.output || [];
-            const clipArr = Array.isArray(clips) ? clips : Object.values(clips);
-            if (clipArr.length > 0) {
-              const audioUrl = (clipArr[0] as any)?.audio_url || "";
-              const videoUrl = (clipArr[0] as any)?.video_url || null;
-              if (!audioUrl) throw new Error("GoAPI: no audio URL");
-              return { audioUrl, videoUrl };
-            }
-            throw new Error("GoAPI: empty clips");
-          }
-          if (status === "failed" || status === "error") {
-            throw new Error(`GoAPI failed: ${data.data?.error || status}`);
-          }
-        }
-        throw new Error("GoAPI: polling timeout");
-      },
-    });
-  }
-
-  const enabledProviders = providers.filter(p => p.enabled);
-  const disabledProviders = providers.filter(p => !p.enabled);
-  const orderedProviders = [...enabledProviders, ...disabledProviders];
-
-  let lastError = "No song generation API keys configured";
-  for (const provider of orderedProviders) {
-    try {
-      const result = await provider.generate();
-      console.log(`Song generated via ${provider.name}`);
-      return { ...result, provider: provider.name };
-    } catch (err: any) {
-      lastError = `${provider.name}: ${err.message}`;
-      console.warn(`Song provider failed - ${lastError}`);
+    if (sunoResponse.ok) {
+      const sunoData = await sunoResponse.json();
+      console.log("SunoAPI response:", JSON.stringify(sunoData).substring(0, 500));
+      const taskId = sunoData.data?.taskId || sunoData.data?.task_id;
+      if (taskId) {
+        console.log(`SunoAPI task submitted: ${taskId}`);
+        return { taskId, provider: "sunoapi_org" };
+      }
     }
+    const errText = await sunoResponse.text();
+    console.warn(`SunoAPI submit failed: ${sunoResponse.status} - ${errText.substring(0, 200)}`);
   }
 
-  throw new Error(`သီချင်း API အားလုံး မအောင်မြင်ပါ။ ${lastError}`);
-}
+  // Fallback: GoAPI Suno
+  if (keyMap.goapi_suno_api_key && keyMap.api_enabled_goapi_suno !== "false") {
+    const GOAPI_KEY = keyMap.goapi_suno_api_key;
+    console.log("Submitting to GoAPI Suno...");
 
-async function uploadToStorage(supabaseAdmin: any, url: string, userId: string, ext: string, contentType: string) {
-  console.log(`Downloading file from: ${url.substring(0, 100)}...`);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to download file: ${res.status}`);
-  const buffer = await res.arrayBuffer();
-  console.log(`Downloaded ${buffer.byteLength} bytes, uploading to storage...`);
-  const fileName = `${userId}/${ext.replace('.', '')}-${Date.now()}${ext}`;
-  const { error: uploadErr } = await supabaseAdmin.storage.from("videos").upload(fileName, buffer, { contentType, upsert: true });
-  if (uploadErr) throw new Error(`Upload failed: ${uploadErr.message}`);
-  const { data: signedData, error: signedErr } = await supabaseAdmin.storage.from("videos").createSignedUrl(fileName, 86400 * 7);
-  if (signedErr) throw new Error(`Signed URL failed: ${signedErr.message}`);
-  console.log(`File uploaded and signed URL created successfully`);
-  return signedData.signedUrl;
+    const goResponse = await fetch("https://api.goapi.ai/api/suno/v1/music", {
+      method: "POST",
+      headers: { "X-API-Key": GOAPI_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        custom_mode: true, input: { title: songTitle, tags: songTags, prompt: songLyrics },
+      }),
+    });
+
+    if (goResponse.ok) {
+      const goData = await goResponse.json();
+      const taskId = goData.data?.task_id;
+      if (taskId) {
+        console.log(`GoAPI task submitted: ${taskId}`);
+        return { taskId, provider: "goapi_suno" };
+      }
+    }
+    const errText = await goResponse.text();
+    console.warn(`GoAPI submit failed: ${goResponse.status} - ${errText.substring(0, 200)}`);
+  }
+
+  throw new Error("သီချင်း API အားလုံး မအောင်မြင်ပါ။ API key များ စစ်ဆေးပါ။");
 }
 
 serve(async (req) => {
@@ -296,7 +187,7 @@ serve(async (req) => {
 
     console.log(`Song/MTV: option=${serviceOption}, genre=${genre}, mood=${mood}, duration=${requestedDurationMin}min`);
 
-    // Calculate credit cost: prioritize credit_cost_song_generation, then profit_margin
+    // Calculate credit cost
     const costKey = serviceOption === "song_only" ? "credit_cost_song_generation" : "credit_cost_song_mtv";
     const { data: costSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", costKey).maybeSingle();
 
@@ -323,16 +214,12 @@ serve(async (req) => {
       console.log(`Admin free access - skipping credit check (would cost ${creditCost})`);
     }
 
-    const STABILITY_API_KEY = Deno.env.get("STABILITY_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-
     if (!LOVABLE_API_KEY) return respond({ error: "AI API key not configured" }, 500);
 
     let lyrics: string | null = null;
-    let audioUrl: string | null = null;
-    let videoUrl: string | null = null;
 
-    // ===== STEP 1: Generate Lyrics =====
+    // ===== STEP 1: Generate Lyrics (fast, ~10-30s) =====
     if (serviceOption === "song_only" || serviceOption === "full_auto") {
       console.log("Step 1: Generating lyrics...");
 
@@ -353,43 +240,73 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
       processedLyrics = await normalizePhonetics(LOVABLE_API_KEY, lyrics, "my");
     }
 
-    // ===== STEP 2: Generate Music =====
-    if (serviceOption === "song_only" || serviceOption === "full_auto") {
-      console.log("Step 2: Generating song...");
-
-      const songTitle = (topic || "AI Song").substring(0, 80);
-      // Inject style tags for better pronunciation and quality
-      const styleTags = "[Clear Vocals], [Native Burmese Accent], [Studio Quality], [High Fidelity]";
-      const songTags = `${genre || "pop"}, ${mood || "happy"}, ${styleTags}`;
-      const songLyrics = processedLyrics || topic || "A beautiful song about life";
-
-      const songResult = await generateSongWithFailover(supabaseAdmin, songTitle, songTags, songLyrics);
-
-      console.log(`Song generated via ${songResult.provider}, uploading to storage...`);
-      audioUrl = await uploadToStorage(supabaseAdmin, songResult.audioUrl, userId, ".mp3", "audio/mpeg");
-
-      if (songResult.videoUrl) {
-        try {
-          videoUrl = await uploadToStorage(supabaseAdmin, songResult.videoUrl, userId, ".mp4", "video/mp4");
-          console.log("Song video uploaded");
-        } catch (e) {
-          console.warn("Failed to upload song video:", e);
-        }
-      }
-    }
-
-    // Clean lyrics for subtitles (needed before Step 3 for subtitle overlay)
     let cleanLyrics: string | null = null;
     if (lyrics) {
       cleanLyrics = lyrics.replace(/\[.*?\]/g, "").replace(/\n{3,}/g, "\n\n").trim();
     }
 
-    // ===== STEP 3: Generate MTV Video via Shotstack =====
-    // For full_auto, always generate MTV video (Suno's video is just a visualizer, not a real MTV)
-    if (serviceOption === "mtv_only" || serviceOption === "full_auto") {
-      console.log("Step 3: Generating MTV video via Shotstack...");
+    // ===== STEP 2: Submit song task (NO polling - returns immediately) =====
+    if (serviceOption === "song_only" || serviceOption === "full_auto") {
+      console.log("Step 2: Submitting song task (async)...");
 
-      if (serviceOption === "mtv_only" && audioBase64) {
+      const songTitle = (topic || "AI Song").substring(0, 80);
+      const styleTags = "[Clear Vocals], [Native Burmese Accent], [Studio Quality], [High Fidelity]";
+      const songTags = `${genre || "pop"}, ${mood || "happy"}, ${styleTags}`;
+      const songLyrics = processedLyrics || topic || "A beautiful song about life";
+
+      const { taskId, provider } = await submitSongTask(supabaseAdmin, songTitle, songTags, songLyrics);
+
+      // Save job to generation_jobs table for background processing
+      const { data: jobData, error: jobError } = await supabaseAdmin.from("generation_jobs").insert({
+        user_id: userId,
+        tool_type: serviceOption === "full_auto" ? "song_mtv_full" : "song_music",
+        status: "processing",
+        external_job_id: taskId,
+        credits_cost: creditCost,
+        credits_deducted: false,
+        input_params: {
+          provider,
+          serviceOption,
+          topic,
+          genre,
+          mood,
+          language,
+          mtvStyle: serviceOption === "full_auto" ? mtvStyle : undefined,
+          showSubtitles: serviceOption === "full_auto" ? showSubtitles : undefined,
+          subtitleColor: serviceOption === "full_auto" ? subtitleColor : undefined,
+          videoDurationMinutes: serviceOption === "full_auto" ? requestedDurationMin : undefined,
+          lyrics,
+          cleanLyrics,
+          processedLyrics: songLyrics,
+          songTitle,
+          songTags,
+          tool_name: "Song & MTV",
+          isAdmin: userIsAdmin,
+        },
+      }).select("id").single();
+
+      if (jobError) {
+        console.error("Failed to create job:", jobError);
+        return respond({ error: "Job creation failed" }, 500);
+      }
+
+      console.log(`Job created: ${jobData.id}, taskId: ${taskId}, provider: ${provider}`);
+
+      // Return immediately with job ID and lyrics
+      return respond({
+        status: "processing",
+        jobId: jobData.id,
+        lyrics,
+        cleanLyrics,
+        message: "သီချင်းဖန်တီးနေပါသည်... ခဏစောင့်ပါ",
+      });
+    }
+
+    // ===== MTV Only mode: handle uploaded audio + Shotstack (also async) =====
+    if (serviceOption === "mtv_only") {
+      let audioUrl: string | null = null;
+
+      if (audioBase64) {
         const audioBytes = Uint8Array.from(atob(audioBase64), c => c.charCodeAt(0));
         const fileName = `uploaded-${userId}-${Date.now()}.mp3`;
         await supabaseAdmin.storage.from("videos").upload(fileName, audioBytes.buffer, { contentType: "audio/mpeg" });
@@ -397,232 +314,48 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
         audioUrl = signedData?.signedUrl || null;
       }
 
-      try {
-        const SHOTSTACK_KEY = Deno.env.get("SHOTSTACK_API_KEY");
-        if (!SHOTSTACK_KEY) throw new Error("Shotstack API key not configured");
+      if (!audioUrl) return respond({ error: "အသံဖိုင် မတွေ့ပါ" }, 400);
 
-        // Generate scene images using Stability AI
-        // Calculate how many scenes we need based on requested duration
-        const totalDurationSec = requestedDurationMin * 60;
-        const sceneDuration = 10; // seconds per scene
-        const numScenesNeeded = Math.ceil(totalDurationSec / sceneDuration);
-        console.log(`MTV: generating ${numScenesNeeded} scenes for ${requestedDurationMin}min video`);
+      // Create a job for MTV generation (check-job-status will handle Shotstack)
+      const { data: jobData, error: jobError } = await supabaseAdmin.from("generation_jobs").insert({
+        user_id: userId,
+        tool_type: "song_mtv_video",
+        status: "processing",
+        external_job_id: null, // Will be set when Shotstack render starts
+        credits_cost: creditCost,
+        credits_deducted: false,
+        input_params: {
+          provider: "shotstack_mtv",
+          serviceOption: "mtv_only",
+          audioUrl,
+          mtvStyle,
+          mood,
+          language,
+          showSubtitles,
+          subtitleColor,
+          videoDurationMinutes: requestedDurationMin,
+          tool_name: "Song & MTV",
+          isAdmin: userIsAdmin,
+          // Mark as needing scene generation first
+          phase: "generate_scenes",
+        },
+      }).select("id").single();
 
-        const sceneImages: string[] = [];
-        const styleDescriptions: Record<string, string> = {
-          cartoon: "colorful cartoon animation style, vibrant 2D animation",
-          "3d": "3D rendered cinematic scene, Pixar quality",
-          realistic: "photorealistic human performers on stage, concert lighting",
-          anime: "anime style illustration, Japanese animation aesthetic",
-          abstract: "abstract art, psychedelic colors, flowing shapes",
-          cinematic: "cinematic widescreen shot, dramatic lighting, film quality",
-        };
-
-        const sceneThemes = [
-          "opening scene, establishing shot",
-          "emotional close-up moment",
-          "climax scene, dramatic emotional moment",
-          "transition scene, movement and energy",
-          "peaceful contemplation scene",
-          "ending scene, resolution and closure",
-        ];
-
-        // Generate scene prompts based on number needed
-        const scenePrompts: string[] = [];
-        for (let i = 0; i < numScenesNeeded; i++) {
-          const theme = sceneThemes[i % sceneThemes.length];
-          scenePrompts.push(`Music video ${theme}, ${styleDescriptions[mtvStyle || "cartoon"]}, ${mood || "romantic"} atmosphere, variation ${i + 1}, 16:9`);
-        }
-
-        if (STABILITY_API_KEY) {
-          for (const prompt of scenePrompts) {
-            try {
-              const fd = new FormData();
-              fd.append("prompt", prompt);
-              fd.append("output_format", "png");
-              fd.append("aspect_ratio", "16:9");
-              const sceneResp = await fetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
-                method: "POST",
-                headers: { Authorization: `Bearer ${STABILITY_API_KEY}`, Accept: "image/*" },
-                body: fd,
-              });
-              if (sceneResp.ok) {
-                const buf = await sceneResp.arrayBuffer();
-                const imgName = `scene-${userId}-${Date.now()}-${sceneImages.length}.png`;
-                await supabaseAdmin.storage.from("videos").upload(imgName, buf, { contentType: "image/png", upsert: true });
-                const { data: imgSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(imgName, 3600);
-                if (imgSigned?.signedUrl) sceneImages.push(imgSigned.signedUrl);
-                console.log(`Scene image ${sceneImages.length}/${numScenesNeeded} generated`);
-              } else {
-                console.warn(`Scene gen failed: ${sceneResp.status}`);
-                await sceneResp.text();
-              }
-            } catch (e) {
-              console.warn("Scene image error:", e);
-            }
-          }
-        }
-
-        if (sceneImages.length === 0) throw new Error("No scene images generated for MTV");
-
-        // Build Shotstack timeline with scenes + audio
-        const clips = sceneImages.map((url, i) => ({
-          asset: { type: "image", src: url },
-          start: i * sceneDuration,
-          length: sceneDuration,
-          effect: i % 2 === 0 ? "zoomIn" : "slideLeft",
-          transition: { in: "fade", out: "fade" },
-        }));
-
-        // Add audio track if available
-        const soundtrack: any[] = [];
-        if (audioUrl) {
-          soundtrack.push({
-            asset: { type: "audio", src: audioUrl, volume: 1 },
-            start: 0,
-            length: sceneImages.length * sceneDuration,
-          });
-        }
-
-        // Add subtitle overlay if enabled
-        const subtitleClips: any[] = [];
-        if (showSubtitles && cleanLyrics) {
-          const lines = cleanLyrics.split("\n").filter(l => l.trim());
-          const lineDuration = (sceneImages.length * sceneDuration) / Math.max(lines.length, 1);
-          lines.forEach((line, i) => {
-            subtitleClips.push({
-              asset: {
-                type: "html",
-                html: `<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;700&display=swap" rel="stylesheet"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:28px;color:${subtitleColor || '#FFFFFF'};text-shadow:2px 2px 4px black;text-align:center;padding:10px;">${line.trim()}</p>`,
-                width: 800,
-                height: 100,
-              },
-              start: i * lineDuration,
-              length: lineDuration,
-              position: "bottom",
-              offset: { y: 0.05 },
-              transition: { in: "fade", out: "fade" },
-            });
-          });
-        }
-
-        const shotstackPayload = {
-          timeline: {
-            background: "#000000",
-            tracks: [
-              ...(subtitleClips.length ? [{ clips: subtitleClips }] : []),
-              { clips }, // video track
-              ...(soundtrack.length ? [{ clips: soundtrack }] : []),
-            ],
-          },
-          output: { format: "mp4", resolution: "hd", aspectRatio: "16:9" },
-        };
-
-        console.log("Sending to Shotstack...");
-        const renderResp = await fetch("https://api.shotstack.io/v1/render", {
-          method: "POST",
-          headers: { "x-api-key": SHOTSTACK_KEY, "Content-Type": "application/json" },
-          body: JSON.stringify(shotstackPayload),
-        });
-
-        if (!renderResp.ok) {
-          const errText = await renderResp.text();
-          console.error("Shotstack render error:", renderResp.status, errText.substring(0, 300));
-          throw new Error(`Shotstack render failed: ${renderResp.status}`);
-        }
-
-        const renderData = await renderResp.json();
-        const renderId = renderData.response?.id;
-        if (!renderId) throw new Error("No render ID from Shotstack");
-        console.log(`Shotstack render started: ${renderId}`);
-
-        // Poll for completion (max 3 minutes)
-        for (let i = 0; i < 36; i++) {
-          await new Promise(r => setTimeout(r, 5000));
-          const checkResp = await fetch(`https://api.shotstack.io/v1/render/${renderId}`, {
-            headers: { "x-api-key": SHOTSTACK_KEY },
-          });
-          const checkData = await checkResp.json();
-          const status = checkData.response?.status;
-          console.log(`Shotstack poll ${i}: ${status}`);
-
-          if (status === "done") {
-            const renderUrl = checkData.response?.url;
-            if (renderUrl) {
-              videoUrl = await uploadToStorage(supabaseAdmin, renderUrl, userId, ".mp4", "video/mp4");
-              console.log("MTV video uploaded successfully");
-            }
-            break;
-          } else if (status === "failed") {
-            console.error("Shotstack render failed:", checkData.response?.error);
-            break;
-          }
-        }
-      } catch (videoErr) {
-        console.error("MTV video generation error:", videoErr);
+      if (jobError) {
+        console.error("Failed to create MTV job:", jobError);
+        return respond({ error: "Job creation failed" }, 500);
       }
+
+      console.log(`MTV job created: ${jobData.id}`);
+
+      return respond({
+        status: "processing",
+        jobId: jobData.id,
+        message: "MTV ဗီဒီယို ဖန်တီးနေပါသည်... ခဏစောင့်ပါ",
+      });
     }
 
-    // Clean lyrics (already computed before Step 3 if needed)
-
-    // Verify we produced something useful
-    if (serviceOption === "song_only" && !audioUrl) throw new Error("Failed to generate music");
-    if (serviceOption === "mtv_only" && !videoUrl) throw new Error("Failed to generate MTV video");
-    if (serviceOption === "full_auto" && !audioUrl) throw new Error("Failed to generate music");
-
-    // Deduct credits only after success (skip for admin)
-    let newBalance = 0;
-    if (!userIsAdmin) {
-      const { data: deductResult } = await supabaseAdmin.rpc("deduct_user_credits", {
-        _user_id: userId, _amount: creditCost, _action: `song_mtv_${serviceOption}`,
-      });
-      newBalance = (deductResult as any)?.new_balance ?? 0;
-
-      await supabaseAdmin.from("credit_audit_log").insert({
-        user_id: userId, amount: -creditCost, credit_type: "deduction", description: `Song/MTV: ${serviceOption}, ${genre}, ${mood}`,
-      });
-    } else {
-      console.log("Admin free access - skipping credit deduction for Song/MTV");
-      const { data: profile } = await supabaseAdmin
-        .from("profiles").select("credit_balance").eq("user_id", userId).single();
-      newBalance = profile?.credit_balance ?? 0;
-    }
-
-    // ===== Save outputs to user_outputs (server-side, so Store always has them) =====
-    if (audioUrl) {
-      await supabaseAdmin.from("user_outputs").insert({
-        user_id: userId,
-        tool_id: "song_mtv",
-        tool_name: "Song & MTV",
-        output_type: "audio",
-        content: cleanLyrics || lyrics || "Song generated",
-        file_url: audioUrl,
-      });
-      console.log("Audio output saved to user_outputs");
-    }
-    if (videoUrl) {
-      await supabaseAdmin.from("user_outputs").insert({
-        user_id: userId,
-        tool_id: "song_mtv",
-        tool_name: "Song & MTV",
-        output_type: "video",
-        content: cleanLyrics || lyrics || "MTV Video",
-        file_url: videoUrl,
-      });
-      console.log("Video output saved to user_outputs");
-    }
-
-    console.log("Song/MTV completed successfully");
-
-    return respond({
-      audio: audioUrl,
-      video: videoUrl,
-      lyrics,
-      cleanLyrics,
-      creditsUsed: userIsAdmin ? 0 : creditCost,
-      newBalance,
-      savedToStore: true,
-    });
+    return respond({ error: "Invalid service option" }, 400);
 
   } catch (error: unknown) {
     console.error("Song/MTV error:", error);
