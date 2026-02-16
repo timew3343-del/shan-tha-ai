@@ -1,217 +1,87 @@
 
-# Master Implementation Plan - Myanmar AI Studio Platform Overhaul
 
-## Overview
-This plan covers all 5 sections of the Master Implementation Prompt. Due to the scale (~15+ major features), implementation will be broken into 5 sequential phases to minimize risk.
+# Song/MTV Tool Fix + Remaining Tools Audit Plan
 
----
+## Root Cause Analysis
 
-## Phase 1: Security, Cleanup & Global Config
+The Song/MTV tool's "Failed to fetch" error is caused by an **edge function timeout**. The `generate-song` function runs everything synchronously:
 
-### 1A. Remove Legacy "Live AI Vision & Voice" Tool
-- Delete `src/components/tools/LiveCameraChatTool.tsx`
-- Delete `src/pages/AILiveCam.tsx`
-- Remove the `livecamera` entry from the tools array in `AIToolsTab.tsx` (line 159)
-- Remove the lazy import for `LiveCameraChatTool` (line 35)
-- Remove the `case "livecamera"` in `renderActiveTool()` (line 250)
-- Remove `"livecamera"` from the `ActiveTool` type union (line 83)
-- Remove the `/ai-live-cam` route from `App.tsx` if present
-- Remove `live_camera_chat` from `useCreditCosts.ts` base costs
+1. Lyrics generation via AI (~30 seconds)
+2. SunoAPI song generation with polling (~2-3 minutes, up to 5 minutes)
+3. Storage upload (~5-10 seconds)
+4. (For MTV/Full Auto) Scene image generation + Shotstack render + polling (~3-5 more minutes)
 
-### 1B. Input Validation Strengthening
-- Add Zod validation schemas in edge functions for all user inputs (message length, duration values, numeric ranges)
-- Add server-side validation in `ai-chat`, `generate-video`, `story-to-video`, `auto-ad` edge functions
-- Sanitize all text inputs before passing to external APIs
+Edge functions have a **~150 second wall-clock limit**. The SunoAPI polling alone (25 polls x 5s = 125s) nearly exceeds this. The server-side logs confirm the function **does complete successfully**, but the HTTP connection is dropped by the gateway before the response reaches the browser, causing "Failed to fetch" on the client.
 
-### 1C. Video Duration Sync for Auto Daily Video
-- In `AutoServiceTab.tsx`, import `useMaxVideoDuration` hook
-- Connect the duration slider's `max` value to the dynamic `maxDuration` from the database
-- Ensure the duration label updates dynamically
+## Fix Strategy: Async Job Architecture
 
----
+Convert `generate-song` from synchronous to a **two-phase async architecture** using the existing `generation_jobs` table.
 
-## Phase 2: UI Overhaul - Full-Screen AI Chat in Bottom Nav
+### Phase 1: Submit (generate-song) - Returns in < 10 seconds
 
-### 2A. Move AI Chat to Bottom Navigation
-- In `BottomNavigation.tsx`, add a new tab at the far-left position:
-  ```
-  { id: "ai-chat", label: "AI", icon: MessageCircle }
-  ```
-- Reorder existing tabs so "ai-chat" is first
+1. Validate inputs and credits
+2. Generate lyrics via AI (fast, ~10-30s)
+3. Submit song to SunoAPI (get taskId back immediately)
+4. Save job to `generation_jobs` table with `status: "processing"`, `external_job_id: taskId`
+5. Return immediately with `{ jobId, lyrics, status: "processing" }`
 
-### 2B. Remove Top "Ask AI" Box
-- In `AIToolsTab.tsx`, remove the `<AIChatbot>` component rendering (around line 329-331)
-- Remove the import of `AIChatbot`
+### Phase 2: Poll (check-job-status) - Runs in background
 
-### 2C. Create Full-Screen Chat Interface
-- Create new component `src/components/FullScreenChat.tsx`
-- Full-screen layout with:
-  - Top header bar with back button and credit display
-  - Scrollable message area with markdown rendering
-  - Bottom input area with image upload, camera, and send button
-  - "Live" button next to camera icon (opens new window for real-time multimodal)
-- Reuse existing streaming logic from `AIChatbot.tsx`
+The existing `check-job-status` cron function will be extended to:
+1. Poll SunoAPI for song completion using the stored `external_job_id`
+2. When complete: download audio, upload to storage, save to `user_outputs`, deduct credits
+3. Update job status to "completed" with `output_url`
 
-### 2D. Integrate into Index.tsx
-- Add `activeTab === "ai-chat"` rendering in the main content area
-- Show `<FullScreenChat>` component when active
+### Phase 3: Frontend Polling (SongMTVTool.tsx)
 
-### 2E. Live Mode Button
-- Add a "Live" button in the chat input area
-- On click, opens `window.open()` to a `/live-chat` route
-- Create `/live-chat` page with Gemini-style interface supporting:
-  - Real-time voice via Web Speech API
-  - Camera vision via getUserMedia
-  - Screen sharing via getDisplayMedia
-  - Uses OpenAI multimodal API through edge function
+1. After receiving `jobId` from Phase 1, start polling every 5 seconds
+2. Call a lightweight status-check endpoint or query `generation_jobs` directly
+3. When status becomes "completed", display the audio/video result
+4. Show real-time progress based on job status
 
 ---
 
-## Phase 3: AI Brain - RAG with pgvector
+## Technical Changes
 
-### 3A. Database Setup
-- Enable the `vector` extension via migration
-- Create `chat_memory` table:
-  ```
-  id (uuid), user_id (uuid), role (text), content (text),
-  embedding (vector(1536)), metadata (jsonb),
-  created_at (timestamptz)
-  ```
-- Create an HNSW index on the embedding column for fast similarity search
-- Add RLS policies: users can read/insert own memories, admins can read all
+### 1. Edge Function: `generate-song/index.ts`
+- Keep lyrics generation (fast enough to run inline)
+- Submit SunoAPI task but DO NOT poll -- return immediately with job ID
+- Save job metadata to `generation_jobs` table
+- For MTV mode: save MTV parameters in `input_params` for Phase 2 processing
 
-### 3B. Embedding Edge Function
-- Create `supabase/functions/embed-text/index.ts`
-- Uses Lovable AI Gateway or OpenAI to generate embeddings for each user message and AI response
-- Stores embeddings in `chat_memory` table
+### 2. Edge Function: `check-job-status/index.ts`
+- Add SunoAPI polling logic (currently only handles Shotstack)
+- When SunoAPI returns SUCCESS: download audio, upload to storage
+- If MTV is requested: trigger Shotstack render and track that as a secondary job
+- Handle credit deduction on completion
 
-### 3C. RAG Query Edge Function
-- Create `supabase/functions/rag-query/index.ts`
-- On each new user message:
-  1. Generate embedding for the query
-  2. Search `chat_memory` for top-5 similar past exchanges using cosine similarity
-  3. Inject relevant context into the system prompt
-  4. Call AI with augmented context
-- Falls back to standard AI if no relevant memories found
+### 3. Frontend: `SongMTVTool.tsx`
+- After initial call returns `jobId`, switch to polling mode
+- Poll `generation_jobs` table via Supabase client every 5 seconds
+- Or subscribe to realtime changes on the job row
+- Display results when job completes
+- Fix the `Select` ref warning (wrap with proper component)
 
-### 3D. Update ai-chat Edge Function
-- Modify `supabase/functions/ai-chat/index.ts` to:
-  1. Call `embed-text` to store the user message
-  2. Call `rag-query` to find relevant context
-  3. Augment the system prompt with retrieved context
-  4. After response, store the AI response embedding
+### 4. Remaining Tools Audit
+After the Song/MTV fix, verify these remaining unaudited edge functions:
+- `embed-text` - Text embedding for RAG (utility, no output needed)
+- `rag-query` - Knowledge base query (utility, no output needed)
+- `auto-service-preview` - Auto service preview generation
+- `auto-service-support` - Auto service support chat
+- `process-referral` - Referral processing
+- `stripe-checkout` / `stripe-webhook` - Payment processing
+- `improve-prompt` - Already fixed
+- `knowledge-query` - Knowledge base search
 
----
-
-## Phase 4: Credit & Daily Free Limit Logic
-
-### 4A. Database: Daily Free Image Tracking
-- Create `daily_free_usage` table:
-  ```
-  id (uuid), user_id (uuid), tool_type (text),
-  usage_date (date), usage_count (integer),
-  created_at (timestamptz)
-  ```
-- Add RLS: users can read/insert own records
-- Create RPC function `check_and_use_free_quota` that atomically checks and increments
-- Default: 5 free image generations per day
-
-### 4B. Admin Configuration
-- Add `daily_free_image_limit` key to `app_settings` (default: 5)
-- Add UI in `AppSettingsTab.tsx` to configure this value
-
-### 4C. Frontend Confirmation Dialog
-- Create `src/components/CreditConfirmDialog.tsx`
-- Shows: "This action will cost [X] Credits. Proceed?" with Confirm/Cancel buttons
-- Burmese translation included
-- Integrate into all tool generation flows (Image, Video, Song, etc.)
-
-### 4D. Dynamic Pricing After Free Limit
-- Update `useDailyFreeUses.ts` to use database-backed tracking instead of localStorage
-- Fetch `daily_free_image_limit` from `app_settings`
-- When free quota exhausted, apply credit costs from Admin Dashboard markup percentages
+These are mostly utility/infrastructure functions that don't generate media outputs, so the audit will focus on error handling and reliability rather than output persistence.
 
 ---
 
-## Phase 5: Tool Fixes & Background Processing
+## Implementation Order
 
-### 5A. Music Tool (SongMTVTool) - Fix "Failed to Fetch"
-- Increase fetch timeout to 300 seconds
-- Add AbortController with proper cleanup
-- Add retry logic (3 attempts with exponential backoff)
-- Ensure Suno API polling handles `TEXT_SUCCESS`, `FIRST_SUCCESS`, `SUCCESS` statuses
+1. Refactor `generate-song` to return immediately after submitting SunoAPI task
+2. Extend `check-job-status` to poll SunoAPI and handle song completion
+3. Update `SongMTVTool.tsx` to use job polling instead of waiting for the full response
+4. Verify and fix the remaining utility edge functions for error handling
+5. Deploy and test end-to-end
 
-### 5B. Auto Ad & MTV - Fix Generation Failures
-- Add comprehensive error handling in `auto-ad` and `generate-video` edge functions
-- Add timeout handling (5-minute max)
-- Add fallback rendering if primary Shotstack call fails
-- Log detailed error messages for debugging
-
-### 5C. Burmese Subtitle Engine
-- Add 10 selectable subtitle color options in video tools UI:
-  - White, Yellow, Cyan, Green, Red, Blue, Orange, Pink, Purple, Black
-- Use Noto Sans Myanmar font in Shotstack timeline to prevent square-box rendering
-- Add font specification in all Shotstack API calls
-
-### 5D. UI Persistence - Players Below Generate Button
-- Ensure all tool components render audio/video players directly below the Generate button
-- Verify Download buttons use the `downloadHelper.ts` utility
-- Add loading states and progress indicators
-
-### 5E. Background Processing & Auto-Store
-- Create `generation_jobs` table:
-  ```
-  id (uuid), user_id (uuid), tool_type (text), status (text),
-  input_params (jsonb), output_url (text), credits_cost (integer),
-  error_message (text), created_at, updated_at
-  ```
-- Create `supabase/functions/check-job-status/index.ts` edge function
-  - Polls external APIs (Shotstack, Suno) for job completion
-  - On completion: deducts credits, saves to `user_outputs`, updates job status
-- Create `supabase/functions/process-job/index.ts` for async job processing
-- Set up pg_cron to poll pending jobs every 60 seconds
-- Frontend: Show "Processing in background..." notification when user navigates away
-- On return, display completed outputs from `user_outputs`
-
----
-
-## Technical Notes
-
-### Files to Create (New)
-- `src/components/FullScreenChat.tsx`
-- `src/components/CreditConfirmDialog.tsx`
-- `src/pages/LiveChat.tsx`
-- `supabase/functions/embed-text/index.ts`
-- `supabase/functions/rag-query/index.ts`
-- `supabase/functions/check-job-status/index.ts`
-- `supabase/functions/process-job/index.ts`
-
-### Files to Delete
-- `src/components/tools/LiveCameraChatTool.tsx`
-- `src/pages/AILiveCam.tsx`
-
-### Files to Modify
-- `src/components/AIToolsTab.tsx` (remove chatbot, remove livecamera)
-- `src/components/BottomNavigation.tsx` (add AI chat tab)
-- `src/pages/Index.tsx` (add chat tab rendering)
-- `src/App.tsx` (add /live-chat route, remove /ai-live-cam)
-- `src/hooks/useDailyFreeUses.ts` (database-backed tracking)
-- `src/hooks/useCreditCosts.ts` (remove live_camera entries)
-- `src/components/admin/AppSettingsTab.tsx` (add daily free limit config)
-- `src/components/AutoServiceTab.tsx` (dynamic video duration)
-- `supabase/functions/ai-chat/index.ts` (RAG integration)
-- `src/components/tools/SongMTVTool.tsx` (fix fetch, subtitle colors)
-- `src/components/tools/AutoAdTool.tsx` (fix generation)
-- `src/components/tools/VideoMultiTool.tsx` (subtitle colors)
-- Multiple video tool files (confirmation dialog integration)
-
-### Database Migrations Required
-1. Enable `vector` extension
-2. Create `chat_memory` table with vector column and HNSW index
-3. Create `daily_free_usage` table
-4. Create `generation_jobs` table
-5. RLS policies for all new tables
-6. RPC functions for atomic free quota checking
-
-### Estimated Implementation Order
-Each phase builds on the previous one. Phase 1 (cleanup) should be done first to reduce code complexity before adding new features.
