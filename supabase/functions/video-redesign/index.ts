@@ -106,7 +106,7 @@ serve(async (req) => {
       creditCost = Math.ceil(BASE_COST * (1 + PROFIT_MARGIN / 100));
     }
 
-    console.log(`Video Redesign credit cost: ${creditCost} (base: ${BASE_COST}, margin: ${PROFIT_MARGIN}%)`);
+    console.log(`Video Redesign credit cost: ${creditCost}`);
 
     // Check user credits
     const { data: profile, error: profileError } = await supabaseAdmin
@@ -133,14 +133,8 @@ serve(async (req) => {
       );
     }
 
-    // Get Replicate API key
-    const { data: apiKeySetting } = await supabaseAdmin
-      .from("app_settings")
-      .select("value")
-      .eq("key", "replicate_api_token")
-      .maybeSingle();
-
-    const REPLICATE_API_KEY = apiKeySetting?.value || Deno.env.get("REPLICATE_API_KEY");
+    // Prioritize env secret over DB for security
+    const REPLICATE_API_KEY = Deno.env.get("REPLICATE_API_KEY");
 
     if (!REPLICATE_API_KEY) {
       console.error("REPLICATE_API_KEY not configured");
@@ -272,6 +266,14 @@ serve(async (req) => {
     }
 
     console.log(`Video redesign successful for user ${userId}, cost: ${creditCost}, new balance: ${newBalance}`);
+
+    // Save output to user_outputs
+    try {
+      await supabaseAdmin.from("user_outputs").insert({
+        user_id: userId, tool_id: "video_redesign", tool_name: "Video Redesign",
+        output_type: "video", file_url: resultUrl,
+      });
+    } catch (e) { console.warn("Failed to save video redesign output:", e); }
 
     return new Response(
       JSON.stringify({

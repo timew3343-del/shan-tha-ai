@@ -120,6 +120,14 @@ serve(async (req) => {
 
     const outputUrl = typeof prediction.output === "string" ? prediction.output : prediction.output?.[0] || prediction.output;
 
+    // Save output to user_outputs
+    try {
+      await supabaseAdmin.from("user_outputs").insert({
+        user_id: userId, tool_id: "interior_design", tool_name: "Interior Design",
+        output_type: "image", file_url: outputUrl,
+      });
+    } catch (e) { console.warn("Failed to save interior design output:", e); }
+
     return new Response(JSON.stringify({ success: true, imageUrl: outputUrl, creditsUsed: userIsAdmin ? 0 : creditCost }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

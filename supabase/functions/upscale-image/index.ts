@@ -83,28 +83,25 @@ serve(async (req) => {
     const BASE_COST = 1; // Base API cost for upscale
     const creditCost = Math.ceil(BASE_COST * (1 + profitMargin / 100));
 
-    // Check user credits first
+    // Check admin
+    const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
+    const userIsAdmin = isAdminData === true;
+
     const { data: profile } = await supabaseAdmin
       .from("profiles")
       .select("credit_balance")
       .eq("user_id", userId)
       .single();
 
-    if (!profile || profile.credit_balance < creditCost) {
+    if (!userIsAdmin && (!profile || profile.credit_balance < creditCost)) {
       return new Response(
         JSON.stringify({ error: "ခရက်ဒစ် မလုံလောက်ပါ", required: creditCost }),
         { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Try to get API key from DB first, then fallback to env
-    const { data: apiKeySetting } = await supabaseAdmin
-      .from("app_settings")
-      .select("value")
-      .eq("key", "replicate_api_token")
-      .maybeSingle();
-    
-    const REPLICATE_API_KEY = apiKeySetting?.value || Deno.env.get("REPLICATE_API_KEY");
+    // Prioritize env secret over DB for security
+    const REPLICATE_API_KEY = Deno.env.get("REPLICATE_API_KEY");
     
     if (!REPLICATE_API_KEY) {
       return new Response(JSON.stringify({ error: "API လက်ကျန်ငွေ မလုံလောက်ပါ သို့မဟုတ် API ချိတ်ဆက်မှု ခေတ္တပြတ်တောက်နေပါသည်။" }), {
@@ -192,19 +189,33 @@ serve(async (req) => {
       });
     }
 
-    // Deduct credits AFTER success
-    const { data: deductResult } = await supabaseAdmin.rpc(
-      "deduct_user_credits",
-      { _user_id: userId, _amount: creditCost, _action: "upscale_image" }
-    );
+    // Deduct credits AFTER success (skip for admin)
+    let newBalance = profile?.credit_balance || 0;
+    if (!userIsAdmin) {
+      const { data: deductResult } = await supabaseAdmin.rpc(
+        "deduct_user_credits",
+        { _user_id: userId, _amount: creditCost, _action: "upscale_image" }
+      );
+      newBalance = deductResult?.new_balance ?? (profile!.credit_balance - creditCost);
+    } else {
+      console.log("Admin free access - skipping credit deduction for upscale");
+    }
 
     console.log("Upscale succeeded!");
+
+    // Save output to user_outputs
+    try {
+      await supabaseAdmin.from("user_outputs").insert({
+        user_id: userId, tool_id: "upscale", tool_name: "Image Upscale",
+        output_type: "image", file_url: result.output,
+      });
+    } catch (e) { console.warn("Failed to save upscale output:", e); }
 
     return new Response(
       JSON.stringify({
         image: result.output,
-        creditsUsed: creditCost,
-        newBalance: deductResult?.new_balance,
+        creditsUsed: userIsAdmin ? 0 : creditCost,
+        newBalance,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
