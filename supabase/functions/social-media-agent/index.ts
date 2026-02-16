@@ -301,11 +301,15 @@ Make each day unique. Include Myanmar and English captions. Create exactly ${act
       enhancedImages.push(enhancedImages[i % imagesToGenerate] || "");
     }
 
-    await supabaseAdmin.rpc("deduct_user_credits", { _user_id: userId, _amount: creditCost, _action: "Social Media Agent" });
-    await supabaseAdmin.from("credit_audit_log").insert({
-      user_id: userId, amount: -creditCost, credit_type: "social_media_agent",
-      description: `${actualDays}-Day Calendar: ${businessDescription.substring(0, 50)}`,
-    });
+    if (!userIsAdmin) {
+      await supabaseAdmin.rpc("deduct_user_credits", { _user_id: userId, _amount: creditCost, _action: "Social Media Agent" });
+      await supabaseAdmin.from("credit_audit_log").insert({
+        user_id: userId, amount: -creditCost, credit_type: "social_media_agent",
+        description: `${actualDays}-Day Calendar: ${businessDescription.substring(0, 50)}`,
+      });
+    } else {
+      console.log("Admin free access - skipping credit deduction for Social Media Calendar");
+    }
 
     console.log(`Social media calendar generated for user ${userId}. Days: ${actualDays}, Credits: ${creditCost}`);
 

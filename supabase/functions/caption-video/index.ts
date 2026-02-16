@@ -292,9 +292,13 @@ RULES: Keep ALL SRT formatting (numbers, timestamps). Only translate text lines.
       }
     }
 
-    // ======== STEP 3: Deduct credits ========
+    // ======== STEP 3: Deduct credits (admin bypass) ========
+    // Check admin
+    const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
+    const userIsAdmin = isAdminData === true;
+
     let newBalance = profile.credit_balance;
-    if (creditCost > 0) {
+    if (creditCost > 0 && !userIsAdmin) {
       const { data: deductResult } = await supabaseAdmin.rpc("deduct_user_credits", {
         _user_id: userId,
         _amount: creditCost,
@@ -302,14 +306,23 @@ RULES: Keep ALL SRT formatting (numbers, timestamps). Only translate text lines.
       });
       newBalance = deductResult?.new_balance ?? (profile.credit_balance - creditCost);
 
-      // Log to audit
       await supabaseAdmin.from("credit_audit_log").insert({
         user_id: userId,
         amount: -creditCost,
         credit_type: "caption_generation",
         description: `Caption: ${videoDuration}s video, ${langName} translation`,
       });
+    } else if (userIsAdmin) {
+      console.log("Admin free access - skipping credit deduction for Caption");
     }
+
+    // Save output to user_outputs
+    try {
+      await supabaseAdmin.from("user_outputs").insert({
+        user_id: userId, tool_id: "caption", tool_name: "AI Caption",
+        output_type: "text", content: translatedSrt,
+      });
+    } catch (e) { console.warn("Failed to save caption output:", e); }
 
     console.log(`Caption completed for user ${userId}. Credits used: ${creditCost}, new balance: ${newBalance}`);
 

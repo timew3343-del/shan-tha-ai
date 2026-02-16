@@ -179,6 +179,14 @@ serve(async (req) => {
       console.log("Admin free access - skipping credit deduction for Virtual Try-On");
     }
 
+    // Save output to user_outputs
+    try {
+      await supabaseAdmin.from("user_outputs").insert({
+        user_id: userId, tool_id: "virtual_tryon", tool_name: "Virtual Try-On",
+        output_type: "image", file_url: resultUrl,
+      });
+    } catch (e) { console.warn("Failed to save virtual try-on output:", e); }
+
     return new Response(JSON.stringify({ success: true, imageUrl: resultUrl, creditsUsed: userIsAdmin ? 0 : creditCost }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
