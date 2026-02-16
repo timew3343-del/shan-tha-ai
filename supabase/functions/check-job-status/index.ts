@@ -25,7 +25,6 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    // Auth check - require authenticated user
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Authentication required" }),
@@ -33,17 +32,29 @@ serve(async (req) => {
     }
 
     const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Invalid token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
 
-    // Only fetch jobs belonging to this user (unless admin)
-    const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: user.id, _role: "admin" });
-    const userIsAdmin = isAdminData === true;
+    // Detect cron mode: anon key or service-role key (not a user JWT)
+    const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
+    const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const isCronCall = token === ANON_KEY || token === SERVICE_KEY;
+
+    let userIsAdmin = false;
+    let userId: string | null = null;
+
+    if (!isCronCall) {
+      // Regular user call - validate JWT
+      const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+      if (userError || !user) {
+        return new Response(JSON.stringify({ error: "Invalid token" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      userId = user.id;
+      const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: user.id, _role: "admin" });
+      userIsAdmin = isAdminData === true;
+    } else {
+      console.log("Cron mode: processing all pending jobs");
+    }
 
     const query = supabaseAdmin
       .from("generation_jobs")
@@ -52,9 +63,9 @@ serve(async (req) => {
       .order("created_at", { ascending: true })
       .limit(20);
 
-    // Non-admin users can only see their own jobs
-    if (!userIsAdmin) {
-      query.eq("user_id", user.id);
+    // Non-admin, non-cron users can only see their own jobs
+    if (!isCronCall && !userIsAdmin && userId) {
+      query.eq("user_id", userId);
     }
 
     const { data: jobs, error } = await query;

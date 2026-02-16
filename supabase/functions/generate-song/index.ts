@@ -219,19 +219,37 @@ serve(async (req) => {
 
     let lyrics: string | null = null;
 
-    // ===== STEP 1: Generate Lyrics (fast, ~10-30s) =====
+    // ===== STEP 1: Lyrics Detection + Generation =====
     if (serviceOption === "song_only" || serviceOption === "full_auto") {
-      console.log("Step 1: Generating lyrics...");
+      const userInput = (topic || "").trim();
+      const lineCount = userInput.split("\n").filter(l => l.trim().length > 0).length;
+      const isDirectLyrics = lineCount >= 4 || userInput.length >= 200;
 
-      const langName = { my: "Myanmar (Burmese)", en: "English", th: "Thai", ko: "Korean", ja: "Japanese", zh: "Chinese" }[language || "my"] || "Myanmar (Burmese)";
+      if (isDirectLyrics) {
+        console.log(`Step 1: Using user-provided lyrics directly (${lineCount} lines, ${userInput.length} chars)`);
+        lyrics = userInput;
+      } else {
+        console.log("Step 1: Generating lyrics from topic...");
+        const langName = { my: "Myanmar (Burmese)", en: "English", th: "Thai", ko: "Korean", ja: "Japanese", zh: "Chinese" }[language || "my"] || "Myanmar (Burmese)";
 
-      const systemPrompt = `You are a professional songwriter. Write creative, emotional song lyrics in ${langName} language.
+        const systemPrompt = `You are a professional songwriter. Write creative, emotional song lyrics in ${langName} language.
 Genre: ${genre}. Mood: ${mood}.
 Format: Write ONLY the lyrics with [Verse 1], [Chorus], [Verse 2], [Bridge], [Chorus] sections.
-Keep it 2-3 minutes of singing length. Do NOT include any production notes or instructions.`;
+Keep it 2-3 minutes of singing length. Do NOT include any production notes or instructions.
+Start DIRECTLY with [Verse 1] - no intro text, no explanations.`;
 
-      lyrics = await callAIWithFailover(LOVABLE_API_KEY, systemPrompt, topic || "Write a beautiful song");
-      if (!lyrics) lyrics = topic || "Song lyrics";
+        lyrics = await callAIWithFailover(LOVABLE_API_KEY, systemPrompt, userInput || "Write a beautiful song");
+        if (!lyrics) lyrics = userInput || "Song lyrics";
+
+        // Strip AI preamble: remove anything before the first section marker
+        if (lyrics) {
+          const sectionMatch = lyrics.match(/(\[(?:Verse|Chorus|Bridge|Intro|Outro|Hook|Pre-Chorus)[^\]]*\])/i);
+          if (sectionMatch && sectionMatch.index && sectionMatch.index > 0) {
+            console.log(`Stripping ${sectionMatch.index} chars of AI preamble`);
+            lyrics = lyrics.substring(sectionMatch.index);
+          }
+        }
+      }
     }
 
     // ===== STEP 1.5: Phonetic Normalization for Burmese =====
