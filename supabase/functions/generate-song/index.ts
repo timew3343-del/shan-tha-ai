@@ -284,10 +284,10 @@ serve(async (req) => {
     const userIsAdmin = await isAdmin(supabaseAdmin, userId);
     console.log(`Song/MTV: user=${userId}, isAdmin=${userIsAdmin}`);
 
-    let parsedBody: { serviceOption?: string; topic?: string; genre?: string; mood?: string; language?: string; mtvStyle?: string; showSubtitles?: boolean; audioBase64?: string; videoDurationMinutes?: number };
+    let parsedBody: { serviceOption?: string; topic?: string; genre?: string; mood?: string; language?: string; mtvStyle?: string; showSubtitles?: boolean; subtitleColor?: string; audioBase64?: string; videoDurationMinutes?: number };
     try { parsedBody = await req.json(); } catch { return respond({ error: "Invalid request body" }, 400); }
 
-    const { serviceOption, topic, genre, mood, language, mtvStyle, showSubtitles, audioBase64, videoDurationMinutes } = parsedBody;
+    const { serviceOption, topic, genre, mood, language, mtvStyle, showSubtitles, subtitleColor, audioBase64, videoDurationMinutes } = parsedBody;
     const requestedDurationMin = Math.min(Math.max(videoDurationMinutes || 1, 1), 10);
 
     if (!serviceOption || !["song_only", "mtv_only", "full_auto"].includes(serviceOption)) {
@@ -493,7 +493,7 @@ Keep it 2-3 minutes of singing length. Do NOT include any production notes or in
             subtitleClips.push({
               asset: {
                 type: "html",
-                html: `<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;700&display=swap" rel="stylesheet"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:28px;color:white;text-shadow:2px 2px 4px black;text-align:center;padding:10px;">${line.trim()}</p>`,
+                html: `<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;700&display=swap" rel="stylesheet"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:28px;color:${subtitleColor || '#FFFFFF'};text-shadow:2px 2px 4px black;text-align:center;padding:10px;">${line.trim()}</p>`,
                 width: 800,
                 height: 100,
               },

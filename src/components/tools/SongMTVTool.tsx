@@ -88,6 +88,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
   const [mtvStyle, setMtvStyle] = useState("cartoon");
   const [videoDuration, setVideoDuration] = useState("1");
   const [showSubtitles, setShowSubtitles] = useState(true);
+  const [subtitleColor, setSubtitleColor] = useState("#FFFFFF");
   const [audioFile, setAudioFile] = useState<string | null>(null);
   const [audioFileName, setAudioFileName] = useState("");
 
@@ -212,6 +213,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
               language,
               mtvStyle,
               showSubtitles,
+              subtitleColor,
               videoDurationMinutes: parseInt(videoDuration) || 1,
               audioBase64: serviceOption === "mtv_only" ? audioFile?.split(",")[1] : undefined,
             }),
@@ -343,17 +345,44 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
             )}
 
             {serviceOption === "full_auto" && (
-              <div className="gradient-card rounded-2xl p-3 border border-primary/20 flex items-center justify-between">
-                <div>
-                  <label className="text-sm font-medium text-primary font-myanmar">📝 စာတန်းထိုးမည်</label>
-                  {!showSubtitles && (
-                    <p className="text-[10px] text-green-500 font-myanmar">💰 15% discount applied!</p>
-                  )}
+              <>
+                <div className="gradient-card rounded-2xl p-3 border border-primary/20 flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-medium text-primary font-myanmar">📝 စာတန်းထိုးမည်</label>
+                    {!showSubtitles && (
+                      <p className="text-[10px] text-green-500 font-myanmar">💰 15% discount applied!</p>
+                    )}
+                  </div>
+                  <button onClick={() => setShowSubtitles(!showSubtitles)} className={`w-12 h-6 rounded-full transition-colors ${showSubtitles ? "bg-primary" : "bg-muted"}`}>
+                    <div className={`w-5 h-5 bg-white rounded-full transition-transform shadow ${showSubtitles ? "translate-x-6" : "translate-x-0.5"}`} />
+                  </button>
                 </div>
-                <button onClick={() => setShowSubtitles(!showSubtitles)} className={`w-12 h-6 rounded-full transition-colors ${showSubtitles ? "bg-primary" : "bg-muted"}`}>
-                  <div className={`w-5 h-5 bg-white rounded-full transition-transform shadow ${showSubtitles ? "translate-x-6" : "translate-x-0.5"}`} />
-                </button>
-              </div>
+                {showSubtitles && (
+                  <div className="gradient-card rounded-2xl p-3 border border-primary/20">
+                    <label className="block text-sm font-medium text-primary mb-2 font-myanmar">🎨 စာတန်း အရောင်</label>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { value: "#FFFFFF", label: "အဖြူ" },
+                        { value: "#FFFF00", label: "အဝါ" },
+                        { value: "#00FFFF", label: "Cyan" },
+                        { value: "#00FF00", label: "အစိမ်း" },
+                        { value: "#FF0000", label: "အနီ" },
+                        { value: "#4488FF", label: "အပြာ" },
+                        { value: "#FF8800", label: "လိမ္မော်" },
+                        { value: "#FF69B4", label: "ပန်းရောင်" },
+                        { value: "#AA55FF", label: "ခရမ်း" },
+                        { value: "#000000", label: "အမည်း" },
+                      ].map(c => (
+                        <button key={c.value} onClick={() => setSubtitleColor(c.value)}
+                          className={`w-8 h-8 rounded-full border-2 transition-all ${subtitleColor === c.value ? "border-primary scale-110 ring-2 ring-primary/30" : "border-border/50"}`}
+                          style={{ backgroundColor: c.value }}
+                          title={c.label}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </motion.div>
         )}
@@ -423,6 +452,31 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
                 <div className={`w-5 h-5 bg-white rounded-full transition-transform shadow ${showSubtitles ? "translate-x-6" : "translate-x-0.5"}`} />
               </button>
             </div>
+            {showSubtitles && (
+              <div className="gradient-card rounded-2xl p-3 border border-primary/20">
+                <label className="block text-sm font-medium text-primary mb-2 font-myanmar">🎨 စာတန်း အရောင်</label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: "#FFFFFF", label: "အဖြူ" },
+                    { value: "#FFFF00", label: "အဝါ" },
+                    { value: "#00FFFF", label: "Cyan" },
+                    { value: "#00FF00", label: "အစိမ်း" },
+                    { value: "#FF0000", label: "အနီ" },
+                    { value: "#4488FF", label: "အပြာ" },
+                    { value: "#FF8800", label: "လိမ္မော်" },
+                    { value: "#FF69B4", label: "ပန်းရောင်" },
+                    { value: "#AA55FF", label: "ခရမ်း" },
+                    { value: "#000000", label: "အမည်း" },
+                  ].map(c => (
+                    <button key={c.value} onClick={() => setSubtitleColor(c.value)}
+                      className={`w-8 h-8 rounded-full border-2 transition-all ${subtitleColor === c.value ? "border-primary scale-110 ring-2 ring-primary/30" : "border-border/50"}`}
+                      style={{ backgroundColor: c.value }}
+                      title={c.label}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
