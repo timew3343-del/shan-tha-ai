@@ -1035,6 +1035,51 @@ export type Database = {
         }
         Relationships: []
       }
+      public_tutorial_videos: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          duration_seconds: number | null
+          facebook_caption: string | null
+          generated_date: string | null
+          hashtags: string[] | null
+          id: string | null
+          is_published: boolean | null
+          thumbnail_url: string | null
+          title: string | null
+          video_type: string | null
+          video_url: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          duration_seconds?: number | null
+          facebook_caption?: string | null
+          generated_date?: string | null
+          hashtags?: string[] | null
+          id?: string | null
+          is_published?: boolean | null
+          thumbnail_url?: string | null
+          title?: string | null
+          video_type?: string | null
+          video_url?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          duration_seconds?: number | null
+          facebook_caption?: string | null
+          generated_date?: string | null
+          hashtags?: string[] | null
+          id?: string | null
+          is_published?: boolean | null
+          thumbnail_url?: string | null
+          title?: string | null
+          video_type?: string | null
+          video_url?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       add_credits_via_service: {
