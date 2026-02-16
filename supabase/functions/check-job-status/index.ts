@@ -10,15 +10,39 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    // Auth check - require authenticated user
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Authentication required" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    // Fetch all pending/processing jobs
-    const { data: jobs, error } = await supabaseAdmin
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: "Invalid token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // Only fetch jobs belonging to this user (unless admin)
+    const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: user.id, _role: "admin" });
+    const userIsAdmin = isAdminData === true;
+
+    const query = supabaseAdmin
       .from("generation_jobs")
       .select("*")
       .in("status", ["pending", "processing"])
       .order("created_at", { ascending: true })
       .limit(20);
+
+    // Non-admin users can only see their own jobs
+    if (!userIsAdmin) {
+      query.eq("user_id", user.id);
+    }
+
+    const { data: jobs, error } = await query;
 
     if (error) {
       console.error("Error fetching jobs:", error);
