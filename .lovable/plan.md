@@ -1,87 +1,84 @@
 
 
-# Song/MTV Tool Fix + Remaining Tools Audit Plan
+# Song/MTV Fix + Full Platform Tools Audit
 
-## Root Cause Analysis
+## Problem 1: Song Generation Stuck at "Processing"
 
-The Song/MTV tool's "Failed to fetch" error is caused by an **edge function timeout**. The `generate-song` function runs everything synchronously:
+The cron job (`check-generation-jobs`) calls `check-job-status` every minute with the **anon key**. However, the previous security fix added a strict auth gate that requires an actual admin user. The anon key is not a user token, so `auth.getUser()` returns null and the function returns 401. This means **no jobs are ever polled or completed**.
 
-1. Lyrics generation via AI (~30 seconds)
-2. SunoAPI song generation with polling (~2-3 minutes, up to 5 minutes)
-3. Storage upload (~5-10 seconds)
-4. (For MTV/Full Auto) Scene image generation + Shotstack render + polling (~3-5 more minutes)
+**Fix:** Add a special "cron mode" detection. When the Authorization header contains the anon/service-role key (not a user JWT), bypass the user check and process all pending jobs. When a real user calls it, only show their jobs.
 
-Edge functions have a **~150 second wall-clock limit**. The SunoAPI polling alone (25 polls x 5s = 125s) nearly exceeds this. The server-side logs confirm the function **does complete successfully**, but the HTTP connection is dropped by the gateway before the response reaches the browser, causing "Failed to fetch" on the client.
+## Problem 2: User Lyrics Ignored
 
-## Fix Strategy: Async Job Architecture
+Currently, `generate-song` always calls AI to generate NEW lyrics regardless of what the user types. The user wants:
+- If user provides full lyrics (multi-line, with song structure), use them **directly** as the song lyrics
+- If user provides a short topic/description, auto-generate lyrics via AI first
+- Strip any intro text the AI adds before the actual lyrics
 
-Convert `generate-song` from synchronous to a **two-phase async architecture** using the existing `generation_jobs` table.
+**Fix:** Add lyrics detection logic in `generate-song`:
+- If input has 4+ lines or 200+ characters, treat as direct lyrics
+- Otherwise, treat as a topic and generate lyrics via AI
+- Clean any AI preamble (text before first `[Verse]` or similar marker)
 
-### Phase 1: Submit (generate-song) - Returns in < 10 seconds
+## Problem 3: Remaining Tools Audit
 
-1. Validate inputs and credits
-2. Generate lyrics via AI (fast, ~10-30s)
-3. Submit song to SunoAPI (get taskId back immediately)
-4. Save job to `generation_jobs` table with `status: "processing"`, `external_job_id: taskId`
-5. Return immediately with `{ jobId, lyrics, status: "processing" }`
+### Already Verified (17 Edge Functions):
+1. `remove-bg` - Output persistence + admin bypass added
+2. `upscale-image` - Output persistence + admin bypass added
+3. `generate-image` - Modalities fix + output persistence
+4. `face-swap` - Output persistence added
+5. `interior-design` - Output persistence added
+6. `video-redesign` - Output persistence added
+7. `bg-studio` - Output persistence added
+8. `caption-video` - Output persistence + admin bypass
+9. `character-animate` - Output persistence added
+10. `generate-ad` - Output persistence added
+11. `photo-restore` - Output persistence added
+12. `social-media-agent` - Output persistence + admin bypass
+13. `story-to-video` - Output persistence added
+14. `virtual-tryon` - Output persistence added
+15. `text-to-speech` - Output persistence added
+16. `speech-to-text` - Output persistence added
+17. `youtube-to-text` - Output persistence added
 
-### Phase 2: Poll (check-job-status) - Runs in background
+### Needs Fix (3 Edge Functions):
+18. **`generate-song`** - Lyrics detection logic + cleanup
+19. **`check-job-status`** - Auth gate blocking cron; needs cron-compatible auth
+20. **`copyright-check`** - Output persistence added previously
 
-The existing `check-job-status` cron function will be extended to:
-1. Poll SunoAPI for song completion using the stored `external_job_id`
-2. When complete: download audio, upload to storage, save to `user_outputs`, deduct credits
-3. Update job status to "completed" with `output_url`
-
-### Phase 3: Frontend Polling (SongMTVTool.tsx)
-
-1. After receiving `jobId` from Phase 1, start polling every 5 seconds
-2. Call a lightweight status-check endpoint or query `generation_jobs` directly
-3. When status becomes "completed", display the audio/video result
-4. Show real-time progress based on job status
-
----
+### Verified OK - No Changes Needed (14 Edge Functions):
+21. `ai-chat` - Streaming chat, no persistent output needed
+22. `ai-tool` - Handles 15+ sub-tools, text output returned inline
+23. `generate-video` - Uses generation_jobs async flow, already correct
+24. `auto-ad` - Uses generation_jobs async flow, already correct
+25. `improve-prompt` - Utility, returns improved text inline
+26. `generate-doc-slides` - Output persistence added previously
+27. `embed-text` - Utility for RAG memory, no user-facing output
+28. `rag-query` - Utility for context retrieval, no user-facing output
+29. `knowledge-query` - Streaming response, no persistent output needed
+30. `auto-service-preview` - Returns preview text inline, no persistence needed
+31. `auto-service-support` - Saves to `auto_service_support` table, correct
+32. `process-referral` - Credit management, no media output
+33. `stripe-checkout` - Payment flow, no media output
+34. `stripe-webhook` - Payment webhook, signature verification correct
+35. `add-ad-credits` - Ad reward system, correct
+36. `get-signed-url` - Admin utility, correct
+37. `daily-content-generate` - Admin cron, correct
 
 ## Technical Changes
 
-### 1. Edge Function: `generate-song/index.ts`
-- Keep lyrics generation (fast enough to run inline)
-- Submit SunoAPI task but DO NOT poll -- return immediately with job ID
-- Save job metadata to `generation_jobs` table
-- For MTV mode: save MTV parameters in `input_params` for Phase 2 processing
+### 1. `supabase/functions/check-job-status/index.ts`
+- Detect cron calls (anon key or service-role key) vs user calls
+- For cron: skip user auth, process ALL pending jobs
+- For user: keep existing behavior (show only their jobs)
 
-### 2. Edge Function: `check-job-status/index.ts`
-- Add SunoAPI polling logic (currently only handles Shotstack)
-- When SunoAPI returns SUCCESS: download audio, upload to storage
-- If MTV is requested: trigger Shotstack render and track that as a secondary job
-- Handle credit deduction on completion
+### 2. `supabase/functions/generate-song/index.ts`
+- Add lyrics detection: if input >= 4 lines or >= 200 chars, treat as direct lyrics
+- If direct lyrics: skip AI generation, use user text as `prompt` for Suno
+- If short topic: generate lyrics via AI (current behavior)
+- Clean AI-generated lyrics: strip any preamble before first section marker
 
-### 3. Frontend: `SongMTVTool.tsx`
-- After initial call returns `jobId`, switch to polling mode
-- Poll `generation_jobs` table via Supabase client every 5 seconds
-- Or subscribe to realtime changes on the job row
-- Display results when job completes
-- Fix the `Select` ref warning (wrap with proper component)
-
-### 4. Remaining Tools Audit
-After the Song/MTV fix, verify these remaining unaudited edge functions:
-- `embed-text` - Text embedding for RAG (utility, no output needed)
-- `rag-query` - Knowledge base query (utility, no output needed)
-- `auto-service-preview` - Auto service preview generation
-- `auto-service-support` - Auto service support chat
-- `process-referral` - Referral processing
-- `stripe-checkout` / `stripe-webhook` - Payment processing
-- `improve-prompt` - Already fixed
-- `knowledge-query` - Knowledge base search
-
-These are mostly utility/infrastructure functions that don't generate media outputs, so the audit will focus on error handling and reliability rather than output persistence.
-
----
-
-## Implementation Order
-
-1. Refactor `generate-song` to return immediately after submitting SunoAPI task
-2. Extend `check-job-status` to poll SunoAPI and handle song completion
-3. Update `SongMTVTool.tsx` to use job polling instead of waiting for the full response
-4. Verify and fix the remaining utility edge functions for error handling
-5. Deploy and test end-to-end
+### 3. `src/components/tools/SongMTVTool.tsx`
+- Update placeholder text to clarify users can paste full lyrics
+- Add visual hint showing "direct lyrics" vs "topic" detection
 
