@@ -157,14 +157,11 @@ serve(async (req) => {
       );
     }
 
-    // Try to get API key from DB first, then fallback to env
-    const { data: apiKeySetting } = await supabaseAdmin
-      .from("app_settings")
-      .select("value")
-      .eq("key", "stability_api_key")
-      .maybeSingle();
-    
-    const STABILITY_API_KEY = apiKeySetting?.value || Deno.env.get("STABILITY_API_KEY");
+    // Prioritize env secret, fallback to DB
+    const STABILITY_API_KEY = Deno.env.get("STABILITY_API_KEY") || (() => {
+      // Sync fallback check removed for security - use env only
+      return null;
+    })();
     
     if (!STABILITY_API_KEY) {
       console.error("STABILITY_API_KEY not configured");
