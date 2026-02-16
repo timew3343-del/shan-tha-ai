@@ -98,3 +98,9 @@ verify_jwt = false
 
 [functions.auto-service-support]
 verify_jwt = false
+
+[functions.check-job-status]
+verify_jwt = false
+
+[functions.rag-query]
+verify_jwt = false
