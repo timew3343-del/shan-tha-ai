@@ -206,6 +206,20 @@ If the content appears original and safe, give a high score with minor suggestio
       console.log("Admin free access - skipping credit deduction for Copyright Check");
     }
 
+    // Save to user_outputs
+    try {
+      await supabaseAdmin.from("user_outputs").insert({
+        user_id: userId,
+        tool_id: "copyright-check",
+        tool_name: "Copyright Checker",
+        output_type: "text",
+        content: JSON.stringify(analysisResult).substring(0, 2000),
+      });
+      console.log("Copyright check output saved to user_outputs");
+    } catch (e) {
+      console.warn("Failed to save copyright check output:", e);
+    }
+
     return new Response(JSON.stringify({ success: true, analysis: analysisResult, creditCost, newBalance: profile.credit_balance - (userIsAdmin ? 0 : creditCost) }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error: any) {

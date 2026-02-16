@@ -106,6 +106,20 @@ serve(async (req) => {
       console.log("Admin free access - skipping credit deduction for YouTube-to-text");
     }
 
+    // Save to user_outputs
+    try {
+      await supabaseAdmin.from("user_outputs").insert({
+        user_id: userId,
+        tool_id: "youtube-to-text",
+        tool_name: "YouTube → Text",
+        output_type: "text",
+        content: transcribedText.substring(0, 2000),
+      });
+      console.log("YouTube-to-text output saved to user_outputs");
+    } catch (e) {
+      console.warn("Failed to save YouTube-to-text output:", e);
+    }
+
     return new Response(JSON.stringify({ success: true, text: transcribedText, creditsUsed: userIsAdmin ? 0 : creditCost, newBalance }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error: any) {

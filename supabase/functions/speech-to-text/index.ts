@@ -110,6 +110,20 @@ serve(async (req) => {
       console.log("Admin free access - skipping credit deduction for STT");
     }
 
+    // Save to user_outputs
+    try {
+      await supabaseAdmin.from("user_outputs").insert({
+        user_id: userId,
+        tool_id: "speech-to-text",
+        tool_name: "Speech to Text",
+        output_type: "text",
+        content: transcribedText.substring(0, 2000),
+      });
+      console.log("STT output saved to user_outputs");
+    } catch (e) {
+      console.warn("Failed to save STT output:", e);
+    }
+
     return new Response(JSON.stringify({ success: true, text: transcribedText, language, creditsUsed: userIsAdmin ? 0 : creditCost, newBalance }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (error: any) {

@@ -191,43 +191,58 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
         return;
       }
 
-      // 5-minute timeout to accommodate long song generation polling
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 300000);
+      const requestBody = JSON.stringify({
+        serviceOption,
+        topic: topic.trim(),
+        genre,
+        mood,
+        language,
+        mtvStyle,
+        showSubtitles,
+        subtitleColor,
+        videoDurationMinutes: parseInt(videoDuration) || 1,
+        audioBase64: serviceOption === "mtv_only" ? audioFile?.split(",")[1] : undefined,
+      });
 
-      let response: Response;
-      try {
-        response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-song`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({
-              serviceOption,
-              topic: topic.trim(),
-              genre,
-              mood,
-              language,
-              mtvStyle,
-              showSubtitles,
-              subtitleColor,
-              videoDurationMinutes: parseInt(videoDuration) || 1,
-              audioBase64: serviceOption === "mtv_only" ? audioFile?.split(",")[1] : undefined,
-            }),
-            signal: controller.signal,
-          }
-        );
-      } catch (fetchErr: any) {
-        clearTimeout(timeoutId);
-        if (fetchErr.name === "AbortError") {
-          throw new Error("သီချင်းထုတ်ရန် အချိန်ကြာလွန်းပါသည်။ နောက်တစ်ကြိမ် ထပ်ကြိုးစားပါ။");
+      // Retry up to 2 times on network failures
+      let response: Response | null = null;
+      let lastErr: Error | null = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) {
+          console.log(`Song generation retry attempt ${attempt}...`);
+          setStatusText("ပြန်လည်ကြိုးစားနေသည်...");
+          await new Promise(r => setTimeout(r, 3000));
         }
-        throw fetchErr;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 300000);
+        try {
+          response = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-song`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${session.access_token}`,
+              },
+              body: requestBody,
+              signal: controller.signal,
+            }
+          );
+          clearTimeout(timeoutId);
+          break; // success - exit retry loop
+        } catch (fetchErr: any) {
+          clearTimeout(timeoutId);
+          lastErr = fetchErr;
+          if (fetchErr.name === "AbortError") {
+            throw new Error("သီချင်းထုတ်ရန် အချိန်ကြာလွန်းပါသည်။ နောက်တစ်ကြိမ် ထပ်ကြိုးစားပါ။");
+          }
+          console.warn(`Song fetch attempt ${attempt} failed:`, fetchErr.message);
+        }
       }
-      clearTimeout(timeoutId);
+
+      if (!response) {
+        throw new Error(lastErr?.message || "ချိတ်ဆက်မှု မအောင်မြင်ပါ။ အင်တာနက် စစ်ဆေးပြီး ထပ်ကြိုးစားပါ။");
+      }
 
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Generation failed");
