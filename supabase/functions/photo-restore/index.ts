@@ -133,6 +133,16 @@ serve(async (req) => {
       console.log("Admin free access - skipping credit deduction for Photo Restoration");
     }
 
+    // Save outputs to user_outputs
+    for (const imgUrl of successfulResults) {
+      try {
+        await supabaseAdmin.from("user_outputs").insert({
+          user_id: userId, tool_id: "photo_restore", tool_name: "AI Photo Restore",
+          output_type: "image", file_url: imgUrl,
+        });
+      } catch (e) { console.warn("Failed to save photo restore output:", e); }
+    }
+
     // Legacy single-image response format compatibility
     if (body.imageBase64 && !body.images) {
       return new Response(JSON.stringify({ 

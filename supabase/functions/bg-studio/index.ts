@@ -147,6 +147,14 @@ serve(async (req) => {
       console.log("Admin free access - skipping credit deduction for BG Studio");
     }
 
+    // Save output to user_outputs
+    try {
+      await supabaseAdmin.from("user_outputs").insert({
+        user_id: userId, tool_id: "bg_studio", tool_name: "BG Studio",
+        output_type: "image", file_url: finalImage,
+      });
+    } catch (e) { console.warn("Failed to save BG Studio output:", e); }
+
     return new Response(JSON.stringify({
       image: finalImage,
       creditsUsed: userIsAdmin ? 0 : creditCost,

@@ -330,6 +330,18 @@ Respond with ONLY valid JSON:
 
     console.log(`Story-to-Video complete: ${generatedScenes.filter(s => s.image).length}/${clampedScenes} scenes`);
 
+    // Save first scene image to user_outputs as representative output
+    const firstImageScene = generatedScenes.find(s => s.image);
+    if (firstImageScene) {
+      try {
+        await supabaseAdmin.from("user_outputs").insert({
+          user_id: userId, tool_id: "story_video", tool_name: "Story → Video",
+          output_type: "image", file_url: firstImageScene.image,
+          content: story.substring(0, 500),
+        });
+      } catch (e) { console.warn("Failed to save story-video output:", e); }
+    }
+
     return new Response(JSON.stringify({
       success: true,
       characterId: storyboard.characterId,

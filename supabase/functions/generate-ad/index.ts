@@ -467,6 +467,22 @@ Guidelines:
 
     console.log(`Ad generated for user ${userId}. Credits: ${userIsAdmin ? 0 : creditCost}, Balance: ${newBalance}`);
 
+    // Save outputs to user_outputs
+    try {
+      if (enhancedImageBase64) {
+        await supabaseAdmin.from("user_outputs").insert({
+          user_id: userId, tool_id: "ad_generator", tool_name: "AI Ad Generator",
+          output_type: "image", file_url: enhancedImageBase64,
+        });
+      }
+      if (videoData) {
+        await supabaseAdmin.from("user_outputs").insert({
+          user_id: userId, tool_id: "ad_generator", tool_name: "AI Ad Generator",
+          output_type: "video", file_url: videoData,
+        });
+      }
+    } catch (e) { console.warn("Failed to save ad output:", e); }
+
     return new Response(
       JSON.stringify({
         success: true,

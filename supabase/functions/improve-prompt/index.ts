@@ -34,25 +34,7 @@ serve(async (req) => {
     const openaiEnabled = configMap["api_enabled_openai"] !== "false";
     const openaiKey = configMap["openai_api_key"];
 
-    if (!openaiEnabled || !openaiKey) {
-      return new Response(JSON.stringify({ error: "OpenAI API is not enabled or key is missing. Admin settings စစ်ဆေးပါ။" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${openaiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "system",
-            content: `You are a professional video prompt engineer for Myanmaraistudio.com's Auto Daily Video service. Your ONLY job is to take a user's simple idea and rewrite it as a professional, detailed video production prompt.
+    const systemContent = `You are a professional video prompt engineer for Myanmaraistudio.com's Auto Daily Video service. Your ONLY job is to take a user's simple idea and rewrite it as a professional, detailed video production prompt.
 
 RULES:
 - Output ONLY the improved prompt. No explanations, no greetings, no extra text.
@@ -60,40 +42,56 @@ RULES:
 - Include specific details: voice style, background music mood, visual quality, video tone.
 - Keep it concise but professional (2-4 sentences max).
 - Never mention any other website or domain. Only reference Myanmaraistudio.com if needed.
-- Do NOT have a conversation. Just return the improved prompt text.
+- Do NOT have a conversation. Just return the improved prompt text.`;
 
-EXAMPLE:
-User input: "အောင်မြင်ရေး"
-Output: "စိတ်ဓာတ်ခွန်အားဖြစ်စေမည့် အောင်မြင်ရေးလမ်းပြ ဗီဒီယို (Burmese voice, motivational background music, high-quality visuals, cinematic text animations)"
+    const messages = [
+      { role: "system", content: systemContent },
+      { role: "user", content: userPrompt.trim() },
+    ];
 
-EXAMPLE:
-User input: "cooking"  
-Output: "Step-by-step cooking tutorial with clear narration, close-up food shots, warm kitchen ambiance, upbeat background music, professional food photography style visuals"`,
-          },
-          {
-            role: "user",
-            content: userPrompt.trim(),
-          },
-        ],
-        temperature: 0.7,
-        max_tokens: 500,
-      }),
-    });
+    let improvedPrompt = "";
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("OpenAI error:", response.status, errText);
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded. ခဏစောင့်ပြီး ပြန်ကြိုးစားပါ။" }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // Try OpenAI first if available
+    if (openaiEnabled && openaiKey) {
+      try {
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${openaiKey}` },
+          body: JSON.stringify({ model: "gpt-4o", messages, temperature: 0.7, max_tokens: 500 }),
         });
+        if (response.ok) {
+          const data = await response.json();
+          improvedPrompt = data.choices?.[0]?.message?.content?.trim() || "";
+        } else {
+          console.warn("OpenAI failed:", response.status);
+        }
+      } catch (e: any) {
+        console.warn("OpenAI error:", e.message);
       }
-      throw new Error(`OpenAI error: ${response.status}`);
     }
 
-    const data = await response.json();
-    const improvedPrompt = data.choices?.[0]?.message?.content?.trim() || "";
+    // Fallback to Lovable AI
+    if (!improvedPrompt) {
+      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+      if (!LOVABLE_API_KEY) {
+        return new Response(JSON.stringify({ error: "AI service not configured" }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages, temperature: 0.7, max_tokens: 500 }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        improvedPrompt = data.choices?.[0]?.message?.content?.trim() || "";
+      } else {
+        const errText = await response.text();
+        console.error("Lovable AI error:", response.status, errText);
+        throw new Error("AI service error");
+      }
+    }
 
     if (!improvedPrompt) {
       throw new Error("AI returned empty response");

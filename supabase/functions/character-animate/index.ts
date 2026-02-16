@@ -224,6 +224,14 @@ serve(async (req) => {
 
     console.log("Animation complete:", videoUrl);
 
+    // Save output to user_outputs
+    try {
+      await supabaseAdmin.from("user_outputs").insert({
+        user_id: userId, tool_id: "character_animate", tool_name: "Character Animation",
+        output_type: "video", file_url: videoUrl,
+      });
+    } catch (e) { console.warn("Failed to save character animation output:", e); }
+
     return new Response(
       JSON.stringify({ 
         success: true, video_url: videoUrl, prediction_id: prediction.id,
