@@ -121,7 +121,43 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Generating image for prompt: "${prompt.substring(0, 50)}..."`);
+    // Intent-based prompting: short input → AI enhances, long/detailed input → use directly
+    let finalPrompt = prompt.trim();
+    const lineCount = finalPrompt.split("\n").filter(l => l.trim()).length;
+    const isDetailedPrompt = lineCount >= 3 || finalPrompt.length >= 200;
+
+    if (!isDetailedPrompt && LOVABLE_API_KEY) {
+      try {
+        console.log(`Short prompt detected (${finalPrompt.length} chars), enhancing with AI...`);
+        const enhanceResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash-lite",
+            messages: [
+              { role: "system", content: "You are an expert image prompt engineer. Given a short description, expand it into a detailed, vivid image generation prompt. Include art style, lighting, composition, color palette, and mood details. Output ONLY the enhanced prompt, nothing else. Max 300 words." },
+              { role: "user", content: finalPrompt },
+            ],
+            max_tokens: 500,
+            temperature: 0.7,
+          }),
+        });
+        if (enhanceResp.ok) {
+          const enhanceData = await enhanceResp.json();
+          const enhanced = enhanceData.choices?.[0]?.message?.content?.trim();
+          if (enhanced && enhanced.length > finalPrompt.length) {
+            console.log(`Prompt enhanced: ${finalPrompt.length} → ${enhanced.length} chars`);
+            finalPrompt = enhanced;
+          }
+        }
+      } catch (e: any) {
+        console.warn(`Prompt enhancement failed (using original): ${e.message}`);
+      }
+    } else {
+      console.log(`Using detailed prompt directly (${finalPrompt.length} chars, ${lineCount} lines)`);
+    }
+
+    console.log(`Generating image for prompt: "${finalPrompt.substring(0, 50)}..."`);
 
     let generatedImage: string | null = null;
 
@@ -130,7 +166,7 @@ serve(async (req) => {
       try {
         console.log("Trying Stability AI for image generation...");
         const fd = new FormData();
-        fd.append("prompt", prompt);
+        fd.append("prompt", finalPrompt);
         fd.append("output_format", "png");
         fd.append("aspect_ratio", "1:1");
 
@@ -163,12 +199,12 @@ serve(async (req) => {
           messages.push({
             role: "user",
             content: [
-              { type: "text", text: `Generate an image based on this reference: ${prompt}` },
+              { type: "text", text: `Generate an image based on this reference: ${finalPrompt}` },
               { type: "image_url", image_url: { url: referenceImage } }
             ]
           });
         } else {
-          messages.push({ role: "user", content: `Generate an image: ${prompt}` });
+          messages.push({ role: "user", content: `Generate an image: ${finalPrompt}` });
         }
 
         const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
