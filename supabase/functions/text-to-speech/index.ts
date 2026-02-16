@@ -183,6 +183,20 @@ serve(async (req) => {
         }
         base64Audio = btoa(base64Audio);
 
+        // Save to user_outputs
+        try {
+          await supabaseAdmin.from("user_outputs").insert({
+            user_id: userId,
+            tool_id: "text-to-speech",
+            tool_name: "Text to Speech",
+            output_type: "audio",
+            content: text.substring(0, 500),
+          });
+          console.log("TTS output saved to user_outputs");
+        } catch (e) {
+          console.warn("Failed to save TTS output:", e);
+        }
+
         return new Response(
           JSON.stringify({
             success: true,

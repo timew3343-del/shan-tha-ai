@@ -192,6 +192,20 @@ Respond in this exact JSON format:
         description: `Doc/Slide text analysis - ${sections.length} sections`,
       });
 
+      // Save to user_outputs
+      try {
+        await supabaseAdmin.from("user_outputs").insert({
+          user_id: userId,
+          tool_id: "doc-slides",
+          tool_name: "Doc & Slides",
+          output_type: "document",
+          content: sections.map((s: Section) => `${s.title}: ${s.description}`).join("\n").substring(0, 2000),
+        });
+        console.log("Doc/Slides output saved to user_outputs");
+      } catch (e) {
+        console.warn("Failed to save Doc/Slides output:", e);
+      }
+
       return new Response(JSON.stringify({ success: true, sections }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
