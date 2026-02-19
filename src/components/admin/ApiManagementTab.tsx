@@ -109,8 +109,6 @@ const EXTRA_KEYS = [
   { settingKey: "stripe_publishable_key", label: "Stripe Publishable Key" },
   { settingKey: "stripe_secret_key", label: "Stripe Secret Key" },
   { settingKey: "acrcloud_access_secret", label: "ACRCloud Access Secret" },
-  { settingKey: "rapidapi_host", label: "RapidAPI Host (X-RapidAPI-Host)" },
-  { settingKey: "rapidapi_base_url", label: "RapidAPI Base URL (Downloader)" },
 ];
 
 // ─── Component ───────────────────────────────────────────────
