@@ -1,68 +1,95 @@
 
 
-# Song/MTV Audio Output Fix + Full Tools Verification
+# Video Multi-Tool: 85% Crash Fix + Background Fallback + Duration Label Update
 
-## Root Cause Found
+## ပြဿနာ အကျဉ်းချုပ် (Problem Summary)
 
-The `check-job-status` function's cron detection is broken. It compares the incoming token against `Deno.env.get("SUPABASE_ANON_KEY")`, but this comparison silently fails (likely the env var value doesn't match or has encoding differences). As a result:
+Video processing သည် 85% တွင် crash ဖြစ်ပြီး UI reset ဖြစ်သွားသည်။ Output video မထွက်ပါ။ ဤအချက်များကြောင့် ဖြစ်ပါသည်:
 
-1. Cron calls every minute with the anon key
-2. Function treats it as a regular user call
-3. `auth.getUser(anonKey)` returns error (anon key is not a user JWT)
-4. Function returns 401 "Invalid token"
-5. **All 3 pending song jobs are stuck forever at "processing"**
+1. **FFmpeg dual filter_complex bug**: Logo overlay နှင့် TTS audio နှစ်ခုလုံး ဖွင့်ထားပါက `-filter_complex` flag နှစ်ခု ထည့်မိ၍ FFmpeg crash ဖြစ်သည်
+2. **Memory overload**: Intro + Outro + Logo + TTS + main video အားလုံးကို browser memory ထဲ တပြိုင်နက်တင်ရသဖြင့် 100MB+ ဖိုင်များတွင် crash ဖြစ်သည်
+3. **Progress reset bug**: Error ဖြစ်လျှင် `finally` block က progress ကို 0 သို့ reset လုပ်ပြီး error message ပျောက်သွားသည်
+4. **No server fallback**: FFmpeg crash ဖြစ်လျှင် original video ကိုပင် save မလုပ်ဘဲ ပျက်စီးသွားသည်
+5. **Duration label**: "အများဆုံး ၃ မိနစ်" ဟု ပြနေပြီး "၅ မိနစ်" ဖြစ်ရမည်
 
-Evidence: There are 3 jobs stuck in `processing` status with valid `external_job_id` values from SunoAPI, meaning the songs were successfully submitted but never polled for completion.
+## ပြင်ဆင်ချက်များ (Fixes)
 
-## Fix Strategy
+### Fix 1: FFmpeg Filter Chain Bug (Critical - 85% crash root cause)
+**File:** `src/components/tools/VideoMultiTool.tsx` (lines 476-514)
 
-Instead of fragile string comparison, decode the JWT and check the `role` claim. The anon key has `"role": "anon"` and the service role key has `"role": "service_role"` in their JWT payloads.
-
-## Technical Changes
-
-### 1. `supabase/functions/check-job-status/index.ts` - Fix Cron Auth Detection
-
-Replace the string comparison approach with JWT payload decoding:
+Logo overlay + TTS audio ကို အတူသုံးသောအခါ `-filter_complex` နှစ်ခါ ထည့်မိနေသည်ကို single unified filter_complex အဖြစ် ပြောင်းမည်။
 
 ```text
-// Current (broken):
-const isCronCall = token === ANON_KEY || token === SERVICE_KEY;
+BEFORE (crashes):
+  cmd: -i input.mp4 -i tts.mp3 -i logo.png
+       -filter_complex "[0:v]hflip[base];[2:v]scale=80:80[logo];[base][logo]overlay=..."
+       -filter_complex "[0:a]volume=0.3[orig];[1:a]volume=1.0[tts];[orig][tts]amix=..."  <-- DUPLICATE!
 
-// Fixed approach:
-// Decode the JWT payload (base64) and check if role is "anon" or "service_role"
-try {
-  const payload = JSON.parse(atob(token.split(".")[1]));
-  isCronCall = payload.role === "anon" || payload.role === "service_role";
-} catch { isCronCall = false; }
+AFTER (fixed):
+  cmd: -i input.mp4 -i tts.mp3 -i logo.png
+       -filter_complex "[0:v]hflip[base];[2:v]scale=80:80[logo];[base][logo]overlay=...[vout];
+                         [0:a]volume=0.3[orig];[1:a]volume=1.0[tts];[orig][tts]amix=...[aout]"
+       -map "[vout]" -map "[aout]"
 ```
 
-This is robust regardless of env var availability.
+### Fix 2: Server-side Fallback for Large Files
+**File:** `src/components/tools/VideoMultiTool.tsx`
 
-### 2. Reset Stuck Jobs
+FFmpeg crash ဖြစ်လျှင် (85% timeout / memory error):
+- Original video ကို storage သို့ save လုပ်ပြီး user_outputs ထဲ ထည့်မည်
+- "Effects apply မရပါ - original video ကို Store တွင် ထည့်ပြီးပါပြီ" message ပြမည်
+- Credits ကို effects မပါဘဲ base cost သာ deduct လုပ်မည်
 
-Run a query to reset the 3 stuck jobs back to "processing" status so the cron picks them up on the next cycle (they are already "processing" but older than 30 min, so the timeout handler may mark them failed - need to handle this).
+### Fix 3: Progress Reset Bug
+**File:** `src/components/tools/VideoMultiTool.tsx` (line 874)
 
-### 3. `generate-song/index.ts` - Already Working
+`finally` block ထဲရှိ `if (!result) { setProgress(0); }` ကို ဖြုတ်ပြီး error ဖြစ်လျှင် error detail ကိုသာ ပြမည်။ User က "ပိတ်မည်" နှိပ်မှသာ reset လုပ်မည်။
 
-From logs, the generate-song function is working correctly:
-- Lyrics generation via AI succeeds
-- SunoAPI task submission succeeds (taskId returned)
-- Job saved to generation_jobs table
-- Returns immediately to client
+### Fix 4: Duration Label Update
+**File:** `src/components/VideoLimitWarning.tsx`
 
-No changes needed here.
+Video Multi-Tool သည် 5 မိနစ် (300 စက္ကန့်) ကို hardcode အသုံးပြုမည်။ `useMaxVideoDuration` hook (180s default) ကို မသုံးတော့ဘဲ 300s ကို တိုက်ရိုက်ပြမည်။ Generate button အောက်ရှိ text ကို "အများဆုံး ၅ မိနစ် (၃၀၀ စက္ကန့်)" ဟု ပြောင်းမည်။
 
-### 4. `src/components/tools/SongMTVTool.tsx` - Already Working
+### Fix 5: Memory Optimization for Concat
+**File:** `src/components/tools/VideoMultiTool.tsx`
 
-Frontend polling logic is correct. It polls generation_jobs every 5 seconds and shows results when status becomes "completed". No changes needed.
+Intro/Outro concat step ကို main encoding ပြီးမှ sequentially လုပ်ပြီး intermediate files ကို ချက်ချင်း cleanup လုပ်မည်။ Memory pressure လျှော့ရန် re-encode step ကို skip လုပ်ပြီး concat demuxer ကိုသာ သုံးမည်။
 
-## Summary
+---
 
-Only ONE code change is needed: fix the cron auth detection in `check-job-status/index.ts` by decoding the JWT role claim instead of comparing raw token strings. This single fix will unblock all song generation jobs and allow the background cron to:
-- Poll SunoAPI for audio completion
-- Download and store the audio file
-- Update job status to "completed"
-- Save output to user_outputs (Store)
+## Technical Details
 
-The frontend will then automatically detect the completed job and display the audio player.
+### Changed Files
+
+| File | Change |
+|------|--------|
+| `src/components/tools/VideoMultiTool.tsx` | Fix dual filter_complex, add fallback, fix progress reset, memory optimization |
+| `src/components/VideoLimitWarning.tsx` | Accept optional `maxSeconds` prop, default 300 for Video Multi-Tool |
+
+### FFmpeg Command Fix (Detailed)
+
+The core bug is in `handleGenerate` -> `runFFmpegProcessing` where the command builder adds:
+1. A `-filter_complex` for video filters + logo overlay (line 495)
+2. A second `-filter_complex` for audio mixing (line 508)
+
+FFmpeg only accepts ONE `-filter_complex` per command. The fix merges both into a single graph with named outputs `[vout]` and `[aout]`, then maps them explicitly.
+
+### Fallback Flow
+
+```text
+FFmpeg starts -> crashes at 85%
+  |
+  v
+Catch FFMPEG_PROCESS_FAIL error
+  |
+  v
+Check if videoSignedUrl exists (from download or upload step)
+  |-- Yes -> uploadAndSave(original video) -> show result with warning
+  |-- No  -> show error message only
+```
+
+### Duration Display
+- VideoLimitWarning component will accept an optional `maxSeconds` prop
+- VideoMultiTool passes `maxSeconds={300}` (5 minutes)
+- Display: "အများဆုံး ၅ မိနစ် (၃၀၀ စက္ကန့်) အထိသာ ထုပ်ယူနိုင်ပါသည်"
 
