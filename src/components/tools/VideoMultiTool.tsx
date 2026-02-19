@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Loader2, Download, Upload, Video, Film, Type, Image as ImageIcon,
   Play, Scissors, FlipHorizontal, Palette, Globe, Mic, User,
-  LayoutGrid, EyeOff, Plus, X, Check, ChevronDown, Copy, FileVideo, FileText
+  LayoutGrid, EyeOff, Plus, X, Check, ChevronDown, Copy, FileVideo, FileText, AlertTriangle
 } from "lucide-react";
 import { downloadVideo } from "@/lib/downloadHelper";
 import { Button } from "@/components/ui/button";
@@ -104,6 +104,8 @@ const Section = ({ title, emoji, children, defaultOpen = false }: SectionProps) 
 };
 
 // ─── FFmpeg helpers ───────────────────────────────────────
+const MAX_FFMPEG_FILE_SIZE = 100 * 1024 * 1024; // 100MB limit for browser FFmpeg
+
 async function loadFFmpeg() {
   const { FFmpeg } = await import("@ffmpeg/ffmpeg");
   const { fetchFile, toBlobURL } = await import("@ffmpeg/util");
@@ -125,18 +127,14 @@ function buildFFmpegFilters(opts: {
   watermarkPosition: string;
 }): string[] {
   const filters: string[] = [];
-
   if (opts.flipVideo) filters.push("hflip");
-
   if (opts.copyrightBypass) {
     filters.push("scale=iw*1.04:ih*1.04");
     filters.push("hue=h=5");
   }
-
   if (opts.autoColorGrade) {
     filters.push("eq=contrast=1.1:brightness=0.03:saturation=1.15");
   }
-
   if (opts.aspectRatio === "9:16") {
     filters.push("crop=ih*9/16:ih");
   } else if (opts.aspectRatio === "16:9") {
@@ -144,7 +142,6 @@ function buildFFmpegFilters(opts: {
   } else if (opts.aspectRatio === "1:1") {
     filters.push("crop=min(iw\\,ih):min(iw\\,ih)");
   }
-
   if (opts.watermarkText) {
     const posMap: Record<string, string> = {
       "bottom-left": "x=20:y=h-th-20",
@@ -156,7 +153,6 @@ function buildFFmpegFilters(opts: {
     const safeText = opts.watermarkText.replace(/'/g, "\\'").replace(/:/g, "\\:");
     filters.push(`drawtext=text='${safeText}':fontsize=24:fontcolor=white@0.7:${pos}`);
   }
-
   return filters;
 }
 
@@ -216,9 +212,11 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressMsg, setProgressMsg] = useState("");
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [srtContent, setSrtContent] = useState<string | null>(null);
+  const [ttsAudioUrl, setTtsAudioUrl] = useState<string | null>(null);
 
   // Job polling
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
@@ -247,7 +245,8 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
 
   const hasFFmpegEffect = copyrightBypass || autoColorGrade || flipVideo || textWatermark || logoOverlay || aspectRatio !== "original";
   const hasAIFeature = autoSubtitles || ttsEnabled || objectRemoval;
-  const hasAnyEffect = hasFFmpegEffect || hasAIFeature || !!introFile || !!outroFile || characterEnabled;
+  const hasConcat = !!introFile || !!outroFile;
+  const hasAnyEffect = hasFFmpegEffect || hasAIFeature || hasConcat || characterEnabled;
 
   const handleImageUpload = (setter: (v: string | null) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -269,8 +268,8 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
     const videoEl = document.createElement("video");
     videoEl.preload = "metadata";
     videoEl.onloadedmetadata = () => {
-      if (videoEl.duration > maxDuration) {
-        toast({ title: "ဗီဒီယို ရှည်လွန်းပါသည်", description: `အများဆုံး ${maxLabel} အထိသာ ထုပ်ယူနိုင်ပါသည်`, variant: "destructive" });
+      if (videoEl.duration > 300) { // 5 minutes hard limit
+        toast({ title: "ဗီဒီယို ရှည်လွန်းပါသည်", description: "အများဆုံး ၅ မိနစ် အထိသာ ထုပ်ယူနိုင်ပါသည်", variant: "destructive" });
         URL.revokeObjectURL(url);
         return;
       }
@@ -285,22 +284,17 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
   };
 
   useEffect(() => {
-    return () => {
-      if (uploadedPreview) URL.revokeObjectURL(uploadedPreview);
-    };
+    return () => { if (uploadedPreview) URL.revokeObjectURL(uploadedPreview); };
   }, [uploadedPreview]);
 
-  // Cleanup polling on unmount
   useEffect(() => {
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
   const hasSource = sourceMode === "url" ? videoUrl.trim().length > 0 : !!uploadedFile;
 
   // ─── Poll job status ──────────────────────────────────
-  const startJobPolling = useCallback((jobId: string, onComplete: (job: any) => void) => {
+  const startJobPolling = useCallback((jobId: string, onComplete: (job: any) => void, onFail?: (err: string) => void) => {
     if (pollRef.current) clearInterval(pollRef.current);
     setActiveJobId(jobId);
 
@@ -316,17 +310,15 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
 
         if (!job) return;
 
-        // Update progress based on poll count (simulate)
         const simulatedProgress = Math.min(20 + pollCount * 3, 85);
         setProgress(simulatedProgress);
 
         if (pollCount % 3 === 0) {
-          // Rotate status messages
           const msgs = [
-            "AI စာတန်းထိုး ပြုလုပ်နေသည်...",
-            "Whisper ASR ခွဲခြမ်းနေသည်...",
-            "ဘာသာပြန်နေသည်...",
-            "အချက်အလက် စစ်ဆေးနေသည်...",
+            "🎯 AI ပြုလုပ်နေသည်...",
+            "🔄 ဆက်လက် လုပ်ဆောင်နေသည်...",
+            "📡 Server-side processing...",
+            "⏳ နောက်ထပ် ခဏ စောင့်ပါ...",
           ];
           setProgressMsg(msgs[Math.floor(pollCount / 3) % msgs.length]);
         }
@@ -340,18 +332,19 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
           clearInterval(pollRef.current!);
           pollRef.current = null;
           setActiveJobId(null);
-          throw new Error(job.error_message || "AI processing failed");
+          const errMsg = job.error_message || "AI processing failed";
+          if (onFail) onFail(errMsg);
+          else throw new Error(errMsg);
         }
       } catch (e: any) {
         clearInterval(pollRef.current!);
         pollRef.current = null;
         setActiveJobId(null);
+        setErrorDetail(e.message);
         toast({ title: "AI processing error", description: e.message, variant: "destructive" });
         setIsProcessing(false);
-        setProgress(0);
-        setProgressMsg("");
       }
-    }, 5000); // Poll every 5 seconds
+    }, 5000);
   }, [toast]);
 
   // ─── Upload file to storage and get URL ──────────────
@@ -369,80 +362,211 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
     return signedData.signedUrl;
   };
 
-  // ─── Run FFmpeg processing ───────────────────────────
-  const runFFmpegProcessing = async (videoBlob: Blob): Promise<Blob> => {
-    setProgressMsg("FFmpeg ဖွင့်နေသည်...");
-    const { ffmpeg, fetchFile } = await loadFFmpeg();
-
-    setProgressMsg("Effects ထည့်နေသည်...");
-    const inputData = await fetchFile(videoBlob instanceof File ? videoBlob : new File([videoBlob], "input.mp4"));
-    await ffmpeg.writeFile("input.mp4", inputData);
-
-    // Write logo file if needed
-    let hasLogoFile = false;
-    if (logoOverlay && logoImage) {
-      try {
-        const logoResp = await fetch(logoImage);
-        const logoBlob = await logoResp.blob();
-        const logoData = await fetchFile(new File([logoBlob], "logo.png"));
-        await ffmpeg.writeFile("logo.png", logoData);
-        hasLogoFile = true;
-      } catch (e) {
-        console.warn("Failed to load logo:", e);
-      }
+  // ─── Run FFmpeg processing (with memory optimization) ──
+  const runFFmpegProcessing = async (
+    videoBlob: Blob,
+    ttsAudio?: string | null,
+    intro?: File | null,
+    outro?: File | null
+  ): Promise<Blob> => {
+    // Check file size - if too large for browser, throw with specific error
+    if (videoBlob.size > MAX_FFMPEG_FILE_SIZE) {
+      throw new Error(`FFMPEG_MEMORY_LIMIT:ဗီဒီယို ဖိုင် (${(videoBlob.size / 1024 / 1024).toFixed(0)}MB) သည် browser FFmpeg အတွက် ကြီးလွန်းပါသည်။ ဖိုင်အရွယ်အစား 100MB အောက် သုံးပါ။`);
     }
 
-    const filters = buildFFmpegFilters({
-      flipVideo,
-      aspectRatio,
-      autoColorGrade,
-      copyrightBypass,
-      watermarkText: textWatermark ? watermarkText : "",
-      watermarkPosition,
+    setProgressMsg("FFmpeg ဖွင့်နေသည်...");
+    console.log(`[FFmpeg] Loading... Video size: ${(videoBlob.size / 1024 / 1024).toFixed(1)}MB`);
+
+    let ffmpeg: any;
+    let fetchFile: any;
+    try {
+      const loaded = await loadFFmpeg();
+      ffmpeg = loaded.ffmpeg;
+      fetchFile = loaded.fetchFile;
+    } catch (e: any) {
+      console.error("[FFmpeg] Load failed:", e);
+      throw new Error(`FFMPEG_LOAD_FAIL:FFmpeg WASM ဖွင့်၍မရပါ: ${e.message}`);
+    }
+
+    // Set up progress logging
+    ffmpeg.on("progress", ({ progress: p, time }: any) => {
+      const pct = Math.round(p * 100);
+      console.log(`[FFmpeg] Progress: ${pct}% (time: ${time})`);
+      // Map FFmpeg progress (0-100) to our progress range (40-85)
+      setProgress(40 + Math.round(pct * 0.45));
     });
 
-    const cmd: string[] = ["-i", "input.mp4"];
-
-    if (hasLogoFile) {
-      cmd.push("-i", "logo.png");
-      // Build filter_complex combining video filters + logo overlay
-      const posMap: Record<string, string> = {
-        "bottom-left": "20:H-h-20",
-        "bottom-right": "W-w-20:H-h-20",
-        "top-left": "20:20",
-        "top-right": "W-w-20:20",
-        "center": "(W-w)/2:(H-h)/2",
-      };
-      const logoPos = posMap[logoPosition] || posMap["top-right"];
-      const scaleLogoFilter = "scale=80:80";
-
-      if (filters.length > 0) {
-        // Combine: apply video filters first, then overlay logo
-        cmd.push("-filter_complex", `[0:v]${filters.join(",")}[base];[1:v]${scaleLogoFilter}[logo];[base][logo]overlay=${logoPos}`);
-      } else {
-        cmd.push("-filter_complex", `[1:v]${scaleLogoFilter}[logo];[0:v][logo]overlay=${logoPos}`);
+    ffmpeg.on("log", ({ message }: any) => {
+      // Only log important messages
+      if (message.includes("Error") || message.includes("error") || message.includes("failed")) {
+        console.error(`[FFmpeg LOG] ${message}`);
       }
-    } else if (filters.length > 0) {
-      cmd.push("-vf", filters.join(","));
+    });
+
+    try {
+      setProgressMsg("ဗီဒီယို ဖတ်နေသည်...");
+      console.log("[FFmpeg] Writing input file...");
+      const inputData = await fetchFile(videoBlob instanceof File ? videoBlob : new File([videoBlob], "input.mp4"));
+      await ffmpeg.writeFile("input.mp4", inputData);
+
+      // Write logo file if needed
+      let hasLogoFile = false;
+      if (logoOverlay && logoImage) {
+        try {
+          const logoResp = await fetch(logoImage);
+          const logoBlob = await logoResp.blob();
+          const logoData = await fetchFile(new File([logoBlob], "logo.png"));
+          await ffmpeg.writeFile("logo.png", logoData);
+          hasLogoFile = true;
+          console.log("[FFmpeg] Logo file written");
+        } catch (e) {
+          console.warn("[FFmpeg] Failed to load logo:", e);
+        }
+      }
+
+      // Write TTS audio if available
+      let hasTtsAudio = false;
+      if (ttsAudio) {
+        try {
+          setProgressMsg("TTS audio ထည့်နေသည်...");
+          const audioResp = await fetch(ttsAudio);
+          const audioBlob = await audioResp.blob();
+          const audioData = await fetchFile(new File([audioBlob], "tts.mp3"));
+          await ffmpeg.writeFile("tts.mp3", audioData);
+          hasTtsAudio = true;
+          console.log("[FFmpeg] TTS audio written");
+        } catch (e) {
+          console.warn("[FFmpeg] Failed to load TTS audio:", e);
+        }
+      }
+
+      // Write intro/outro files
+      let hasIntro = false, hasOutro = false;
+      if (intro) {
+        try {
+          setProgressMsg("Intro video ထည့်နေသည်...");
+          const introData = await fetchFile(intro);
+          await ffmpeg.writeFile("intro.mp4", introData);
+          hasIntro = true;
+          console.log("[FFmpeg] Intro file written");
+        } catch (e) { console.warn("[FFmpeg] Failed to load intro:", e); }
+      }
+      if (outro) {
+        try {
+          setProgressMsg("Outro video ထည့်နေသည်...");
+          const outroData = await fetchFile(outro);
+          await ffmpeg.writeFile("outro.mp4", outroData);
+          hasOutro = true;
+          console.log("[FFmpeg] Outro file written");
+        } catch (e) { console.warn("[FFmpeg] Failed to load outro:", e); }
+      }
+
+      const filters = buildFFmpegFilters({
+        flipVideo,
+        aspectRatio,
+        autoColorGrade,
+        copyrightBypass,
+        watermarkText: textWatermark ? watermarkText : "",
+        watermarkPosition,
+      });
+
+      setProgressMsg("Effects ထည့်နေသည်...");
+
+      // ─── Step A: Apply visual effects to main video ───
+      const mainOutputName = (hasIntro || hasOutro) ? "main_processed.mp4" : "output.mp4";
+      const cmd: string[] = ["-i", "input.mp4"];
+
+      if (hasTtsAudio) {
+        cmd.push("-i", "tts.mp3");
+      }
+
+      if (hasLogoFile) {
+        cmd.push("-i", "logo.png");
+        const logoInputIdx = hasTtsAudio ? 2 : 1;
+        const posMap: Record<string, string> = {
+          "bottom-left": "20:H-h-20",
+          "bottom-right": "W-w-20:H-h-20",
+          "top-left": "20:20",
+          "top-right": "W-w-20:20",
+          "center": "(W-w)/2:(H-h)/2",
+        };
+        const logoPos = posMap[logoPosition] || posMap["top-right"];
+        if (filters.length > 0) {
+          cmd.push("-filter_complex", `[0:v]${filters.join(",")}[base];[${logoInputIdx}:v]scale=80:80[logo];[base][logo]overlay=${logoPos}`);
+        } else {
+          cmd.push("-filter_complex", `[${logoInputIdx}:v]scale=80:80[logo];[0:v][logo]overlay=${logoPos}`);
+        }
+      } else if (filters.length > 0) {
+        cmd.push("-vf", filters.join(","));
+      }
+
+      // Memory-optimized encoding settings
+      cmd.push("-c:v", "libx264", "-preset", "ultrafast", "-crf", "28");
+
+      if (hasTtsAudio) {
+        // Mix original audio with TTS: lower original volume, add TTS
+        cmd.push("-filter_complex", `[0:a]volume=0.3[orig];[1:a]volume=1.0[tts];[orig][tts]amix=inputs=2:duration=longest[aout]`);
+        cmd.push("-map", "0:v", "-map", "[aout]");
+      } else {
+        cmd.push("-c:a", "aac", "-b:a", "128k");
+      }
+
+      cmd.push("-movflags", "+faststart", "-y", mainOutputName);
+
+      console.log("[FFmpeg] Running main encode:", cmd.join(" "));
+      setProgressMsg("ဗီဒီယို တည်းဖြတ်နေသည်...");
+      await ffmpeg.exec(cmd);
+
+      // ─── Step B: Concat intro + main + outro if needed ───
+      if (hasIntro || hasOutro) {
+        setProgressMsg("Intro/Outro ပေါင်းနေသည်...");
+        console.log("[FFmpeg] Concatenating intro/outro...");
+
+        // Re-encode intro/outro to same format first
+        if (hasIntro) {
+          await ffmpeg.exec(["-i", "intro.mp4", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-c:a", "aac", "-b:a", "128k", "-y", "intro_norm.mp4"]);
+        }
+        if (hasOutro) {
+          await ffmpeg.exec(["-i", "outro.mp4", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-c:a", "aac", "-b:a", "128k", "-y", "outro_norm.mp4"]);
+        }
+
+        // Build concat list
+        let concatList = "";
+        if (hasIntro) concatList += "file 'intro_norm.mp4'\n";
+        concatList += `file '${mainOutputName}'\n`;
+        if (hasOutro) concatList += "file 'outro_norm.mp4'\n";
+
+        const encoder = new TextEncoder();
+        await ffmpeg.writeFile("concat.txt", encoder.encode(concatList));
+        await ffmpeg.exec(["-f", "concat", "-safe", "0", "-i", "concat.txt", "-c", "copy", "-y", "output.mp4"]);
+      }
+
+      setProgressMsg("Output ဖိုင် ပြင်ဆင်နေသည်...");
+      const outputData = await ffmpeg.readFile("output.mp4");
+      const outputBlob = new Blob([(outputData as any)], { type: "video/mp4" });
+      console.log(`[FFmpeg] Output ready: ${(outputBlob.size / 1024 / 1024).toFixed(1)}MB`);
+
+      // Cleanup
+      try {
+        await ffmpeg.deleteFile("input.mp4");
+        if (hasLogoFile) await ffmpeg.deleteFile("logo.png");
+        if (hasTtsAudio) await ffmpeg.deleteFile("tts.mp3");
+        if (hasIntro) { await ffmpeg.deleteFile("intro.mp4"); await ffmpeg.deleteFile("intro_norm.mp4"); }
+        if (hasOutro) { await ffmpeg.deleteFile("outro.mp4"); await ffmpeg.deleteFile("outro_norm.mp4"); }
+      } catch { /* ignore cleanup errors */ }
+
+      return outputBlob;
+    } catch (e: any) {
+      console.error("[FFmpeg] Processing error:", e);
+      // Re-throw with context
+      if (e.message?.startsWith("FFMPEG_")) throw e;
+      throw new Error(`FFMPEG_PROCESS_FAIL:FFmpeg processing failed at ${progress}%: ${e.message}`);
     }
-
-    cmd.push("-c:v", "libx264", "-preset", "fast", "-crf", "23");
-    cmd.push("-c:a", "copy");
-    cmd.push("-movflags", "+faststart");
-    cmd.push("-y", "output.mp4");
-
-    setProgressMsg("ဗီဒီယို တည်းဖြတ်နေသည်...");
-    await ffmpeg.exec(cmd);
-
-    setProgressMsg("Output ဖိုင် ပြင်ဆင်နေသည်...");
-    const outputData = await ffmpeg.readFile("output.mp4");
-    return new Blob([(outputData as any)], { type: "video/mp4" });
   };
 
   // ─── Upload output and save to gallery ───────────────
   const uploadAndSave = async (blob: Blob): Promise<string> => {
     if (!userId) throw new Error("Not authenticated");
-
     const fileName = `${userId}/video-multi-${Date.now()}.mp4`;
     const { error: uploadErr } = await supabase.storage
       .from("videos")
@@ -459,7 +583,6 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
       finalUrl = signedData?.signedUrl || URL.createObjectURL(blob);
     }
 
-    // Save to gallery
     try {
       await supabase.from("user_outputs").insert({
         user_id: userId,
@@ -494,6 +617,9 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
     setResult(null);
     setAiAnalysis(null);
     setSrtContent(null);
+    setTtsAudioUrl(null);
+    setErrorDetail(null);
+    setProgress(0);
 
     try {
       let videoBlob: Blob | null = null;
@@ -507,14 +633,13 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
         const { data: dlData, error: dlError } = await supabase.functions.invoke("video-download", {
           body: { videoUrl, platform },
         });
-        if (dlError) throw dlError;
+        if (dlError) throw new Error(`Download error: ${dlError.message}`);
         if (dlData?.error) throw new Error(dlData.error);
 
         setProgress(25);
         setProgressMsg("ဒေါင်းလုဒ် ပြီးပါပြီ...");
         videoSignedUrl = dlData?.fileUrl;
 
-        // If no effects at all, just use downloaded file
         if (!hasAnyEffect) {
           setProgress(100);
           setResult(dlData?.fileUrl || videoUrl);
@@ -525,12 +650,11 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
         }
 
         // Fetch blob for FFmpeg processing
-        if (hasFFmpegEffect || logoOverlay) {
+        if (hasFFmpegEffect || logoOverlay || hasConcat) {
           try {
             const resp = await fetch(dlData?.fileUrl);
             if (resp.ok) videoBlob = await resp.blob();
           } catch {
-            // If can't fetch for processing, return as-is
             if (!hasAIFeature) {
               setResult(dlData?.fileUrl || videoUrl);
               refetch();
@@ -540,12 +664,10 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
           }
         }
       } else {
-        // File upload mode
         videoBlob = uploadedFile!;
         setProgress(5);
         setProgressMsg("ဗီဒီယို ဖိုင် ဖတ်နေသည်...");
 
-        // If AI features needed, upload to storage first
         if (hasAIFeature) {
           setProgress(10);
           setProgressMsg("Storage သို့ တင်နေသည်...");
@@ -554,31 +676,25 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
         }
       }
 
-      // ── Step 2: AI features (subtitles, etc.) via background job ──
+      // ── Step 2: AI Subtitles (background job) ──
       if (autoSubtitles && videoSignedUrl) {
         setProgress(25);
         setProgressMsg("AI စာတန်းထိုး စတင်နေသည်...");
 
-        const subtitleCreditCost = autoSubtitles ? 3 : 0;
+        const subtitleCreditCost = 3;
         const { data: startData, error: startError } = await supabase.functions.invoke("video-multi-start", {
-          body: {
-            videoUrl: videoSignedUrl,
-            autoSubtitles: true,
-            subtitleLanguage,
-            creditCost: subtitleCreditCost,
-          },
+          body: { videoUrl: videoSignedUrl, autoSubtitles: true, subtitleLanguage, creditCost: subtitleCreditCost },
         });
 
-        if (startError) throw startError;
+        if (startError) throw new Error(`Subtitle start error: ${startError.message}`);
         if (startData?.error) throw new Error(startData.error);
 
         const jobId = startData?.jobId;
-        if (!jobId) throw new Error("Job ID not returned");
+        if (!jobId) throw new Error("Subtitle Job ID not returned");
 
         setProgress(30);
         setProgressMsg("Whisper ASR ခွဲခြမ်းနေသည်... (၁-၃ မိနစ် ကြာနိုင်ပါသည်)");
 
-        // Wait for job completion via polling
         await new Promise<void>((resolve, reject) => {
           startJobPolling(jobId, (completedJob) => {
             const params = completedJob.input_params as any;
@@ -587,31 +703,118 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
               setAiAnalysis(`✅ စာတန်းထိုး ပြီးပါပြီ!\n\n🌐 ရှာတွေ့သောဘာသာ: ${params.detectedLanguage || "auto"}\n📝 ဘာသာပြန်: ${params.translatedTo || subtitleLanguage}\n📄 SRT စာကြောင်း: ${(params.srtContent || "").split("\n").filter((l: string) => l.trim()).length} ကြောင်း`);
             }
             resolve();
-          });
+          }, (errMsg) => reject(new Error(errMsg)));
 
-          // Safety timeout (10 minutes)
           setTimeout(() => {
-            if (pollRef.current) {
-              clearInterval(pollRef.current);
-              pollRef.current = null;
-            }
-            reject(new Error("Subtitle generation timed out after 10 minutes"));
+            if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+            reject(new Error("Subtitle generation timed out (10 min)"));
           }, 10 * 60 * 1000);
         });
       }
 
-      // ── Step 3: FFmpeg processing (if needed) ──
+      // ── Step 3: TTS Audio (server-side) ──
+      let generatedTtsUrl: string | null = null;
+      if (ttsEnabled && srtContent) {
+        setProgress(55);
+        setProgressMsg("🔊 TTS Voice ထုတ်နေသည်...");
+
+        const { data: ttsData, error: ttsError } = await supabase.functions.invoke("video-multi-process", {
+          body: {
+            action: "tts",
+            srtText: srtContent,
+            voice,
+            language,
+            creditCost: 3,
+          },
+        });
+
+        if (ttsError) throw new Error(`TTS error: ${ttsError.message}`);
+        if (ttsData?.error) throw new Error(ttsData.error);
+
+        generatedTtsUrl = ttsData?.audioUrl;
+        setTtsAudioUrl(generatedTtsUrl);
+        console.log("[TTS] Audio generated:", generatedTtsUrl);
+      }
+
+      // ── Step 4: Object Removal (background job) ──
+      if (objectRemoval && videoSignedUrl) {
+        setProgress(60);
+        setProgressMsg("🧹 Object removal AI processing...");
+
+        const { data: orData, error: orError } = await supabase.functions.invoke("video-multi-process", {
+          body: {
+            action: "object_removal",
+            videoUrl: videoSignedUrl,
+            creditCost: 2,
+          },
+        });
+
+        if (orError) throw new Error(`Object removal error: ${orError.message}`);
+        if (orData?.error) throw new Error(orData.error);
+
+        if (orData?.jobId) {
+          setProgressMsg("🧹 Object removal processing... (Background)");
+          await new Promise<void>((resolve, reject) => {
+            startJobPolling(orData.jobId, (completedJob) => {
+              if (completedJob.output_url) {
+                videoSignedUrl = completedJob.output_url;
+                setAiAnalysis((prev) => (prev || "") + "\n\n✅ Object removal ပြီးပါပြီ!");
+              }
+              resolve();
+            }, (errMsg) => {
+              // Don't fail entire pipeline, just note the error
+              setAiAnalysis((prev) => (prev || "") + `\n\n⚠️ Object removal: ${errMsg}`);
+              resolve();
+            });
+
+            setTimeout(() => {
+              if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+              resolve(); // Don't fail, just skip
+            }, 10 * 60 * 1000);
+          });
+        }
+      }
+
+      // ── Step 5: FFmpeg processing (if needed) ──
       let finalUrl: string | null = null;
 
-      if (videoBlob && hasFFmpegEffect) {
-        setProgress(70);
-        const outputBlob = await runFFmpegProcessing(videoBlob);
+      if (videoBlob && (hasFFmpegEffect || hasConcat || generatedTtsUrl)) {
+        setProgress(40);
+        setProgressMsg("FFmpeg Effects ထည့်နေသည်...");
 
-        setProgress(90);
-        setProgressMsg("Storage သို့ တင်နေသည်...");
-        finalUrl = await uploadAndSave(outputBlob);
-      } else if (videoBlob && !hasFFmpegEffect) {
-        // No FFmpeg needed, just upload raw
+        try {
+          const outputBlob = await runFFmpegProcessing(
+            videoBlob,
+            generatedTtsUrl,
+            introFile,
+            outroFile
+          );
+
+          setProgress(90);
+          setProgressMsg("Storage သို့ တင်နေသည်...");
+          finalUrl = await uploadAndSave(outputBlob);
+        } catch (ffmpegErr: any) {
+          const errMsg = ffmpegErr.message || "";
+          console.error("[FFmpeg] Error caught:", errMsg);
+
+          if (errMsg.startsWith("FFMPEG_MEMORY_LIMIT:") || errMsg.startsWith("FFMPEG_PROCESS_FAIL:")) {
+            const userMsg = errMsg.split(":").slice(1).join(":");
+            setErrorDetail(`⚠️ Browser FFmpeg Error: ${userMsg}\n\n💡 ဖိုင်အရွယ်အစား သေးသေး သုံးပါ သို့မဟုတ် Effects လျှော့ပါ`);
+            toast({
+              title: "FFmpeg Error",
+              description: userMsg,
+              variant: "destructive",
+            });
+            // Still try to return the raw video if available
+            if (videoSignedUrl) {
+              finalUrl = videoSignedUrl;
+              setAiAnalysis((prev) => (prev || "") + "\n\n⚠️ FFmpeg effects apply မရပါ - original video ပြပါမည်");
+            }
+          } else {
+            throw ffmpegErr;
+          }
+        }
+      } else if (videoBlob && !hasFFmpegEffect && !hasConcat && !generatedTtsUrl) {
         setProgress(90);
         setProgressMsg("Storage သို့ တင်နေသည်...");
         finalUrl = await uploadAndSave(videoBlob);
@@ -619,27 +822,17 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
         finalUrl = videoSignedUrl;
       }
 
-      // ── Step 4: Deduct credits for non-AI parts (upload mode) ──
-      if (sourceMode === "upload" && !autoSubtitles) {
-        // AI subtitle credits already deducted server-side
-        const ffmpegCost = cost - (autoSubtitles ? 3 : 0) - (ttsEnabled ? 3 : 0);
-        if (ffmpegCost > 0) {
+      // ── Step 6: Deduct credits ──
+      if (sourceMode === "upload") {
+        const aiCostAlready = (autoSubtitles ? 3 : 0) + (ttsEnabled && generatedTtsUrl ? 3 : 0) + (objectRemoval ? 2 : 0);
+        const remainingCost = cost - aiCostAlready;
+        if (remainingCost > 0) {
           const { error: deductErr } = await supabase.rpc("deduct_user_credits", {
             _user_id: userId,
-            _amount: ffmpegCost,
+            _amount: remainingCost,
             _action: `Video Multi-Tool (Upload + Effects)`,
           });
           if (deductErr) console.warn("Credit deduction failed:", deductErr);
-        }
-      } else if (sourceMode === "upload" && autoSubtitles) {
-        // Only deduct FFmpeg portion, subtitles already deducted
-        const ffmpegOnlyCost = extraCost - (autoSubtitles ? 3 : 0) - (ttsEnabled ? 3 : 0);
-        if (ffmpegOnlyCost > 0) {
-          await supabase.rpc("deduct_user_credits", {
-            _user_id: userId,
-            _amount: baseCost + ffmpegOnlyCost,
-            _action: `Video Multi-Tool (Upload + FFmpeg Effects)`,
-          });
         }
       }
 
@@ -651,7 +844,7 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
       }
       refetch();
 
-      const appliedEffects = [];
+      const appliedEffects: string[] = [];
       if (flipVideo) appliedEffects.push("Flip");
       if (aspectRatio !== "original") appliedEffects.push(`Aspect ${aspectRatio}`);
       if (copyrightBypass) appliedEffects.push("© Bypass");
@@ -659,6 +852,10 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
       if (textWatermark && watermarkText) appliedEffects.push("Watermark");
       if (logoOverlay) appliedEffects.push("Logo");
       if (autoSubtitles) appliedEffects.push("Subtitles");
+      if (ttsEnabled && generatedTtsUrl) appliedEffects.push("TTS Voice");
+      if (introFile) appliedEffects.push("Intro");
+      if (outroFile) appliedEffects.push("Outro");
+      if (objectRemoval) appliedEffects.push("Object Remove");
 
       toast({
         title: "✅ ဗီဒီယို ပြီးပါပြီ!",
@@ -669,11 +866,12 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
 
     } catch (e: any) {
       console.error("Video Multi-Tool error:", e);
-      toast({ title: "အမှားရှိပါသည်", description: e.message || "Processing failed", variant: "destructive" });
+      const errorMsg = e.message || "Processing failed";
+      setErrorDetail(`❌ Error: ${errorMsg}`);
+      toast({ title: "အမှားရှိပါသည်", description: errorMsg, variant: "destructive" });
     } finally {
       setIsProcessing(false);
-      setProgress(0);
-      setProgressMsg("");
+      if (!result) { setProgress(0); setProgressMsg(""); }
       if (pollRef.current) {
         clearInterval(pollRef.current);
         pollRef.current = null;
@@ -695,22 +893,18 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-3 p-4 pb-24">
       <ToolHeader title="AI Video Multi-Tool" subtitle="ဗီဒီယို ဘက်စုံတည်းဖြတ်ခြင်း (FFmpeg + AI)" onBack={onBack} />
-      <p className="text-[10px] text-muted-foreground font-myanmar text-center -mt-2 mb-1">လင့်ထည့် သို့ ဗီဒီယို တင်ပြီး Effects ထည့်</p>
+      <p className="text-[10px] text-muted-foreground font-myanmar text-center -mt-2 mb-1">လင့်ထည့် သို့ ဗီဒီယို တင်ပြီး Effects ထည့် (Max 5 min, 100MB)</p>
       <FirstOutputGuide toolName="Video Multi-Tool" show={showGuide} steps={["Video URL ထည့်ပါ သို့ ဖိုင်တင်ပါ", "Effects/Settings များ ရွေးပါ", "Generate Video နှိပ်ပါ"]} />
 
       {/* 1. Source Input */}
       <Section title="Video Source" emoji="📥" defaultOpen={true}>
         <div className="flex gap-1.5 p-0.5 bg-secondary/30 rounded-xl">
-          <button
-            onClick={() => setSourceMode("url")}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all ${sourceMode === "url" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-primary/10"}`}
-          >
+          <button onClick={() => setSourceMode("url")}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all ${sourceMode === "url" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-primary/10"}`}>
             <Globe className="w-3.5 h-3.5" /> URL Link
           </button>
-          <button
-            onClick={() => setSourceMode("upload")}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all ${sourceMode === "upload" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-primary/10"}`}
-          >
+          <button onClick={() => setSourceMode("upload")}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all ${sourceMode === "upload" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-primary/10"}`}>
             <Upload className="w-3.5 h-3.5" /> ဖိုင်တင်မည်
           </button>
         </div>
@@ -753,16 +947,14 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
                   </div>
                 </div>
               ) : (
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full h-28 border-2 border-dashed border-primary/30 rounded-2xl flex flex-col items-center justify-center gap-2 hover:bg-primary/5 hover:border-primary/50 transition-all"
-                >
+                <button onClick={() => fileInputRef.current?.click()}
+                  className="w-full h-28 border-2 border-dashed border-primary/30 rounded-2xl flex flex-col items-center justify-center gap-2 hover:bg-primary/5 hover:border-primary/50 transition-all">
                   <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
                     <Upload className="w-5 h-5 text-primary" />
                   </div>
                   <div className="text-center">
                     <p className="text-xs font-medium text-foreground">ဗီဒီယို ဖိုင် ရွေးပါ</p>
-                    <p className="text-[10px] text-muted-foreground">MP4, MOV, WebM (500MB max, {maxLabel})</p>
+                    <p className="text-[10px] text-muted-foreground">MP4, MOV, WebM (100MB max, 5 min)</p>
                   </div>
                 </button>
               )}
@@ -818,7 +1010,7 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2">
             <div className="bg-purple-500/10 rounded-xl p-2 border border-purple-500/20">
               <p className="text-[10px] text-purple-400 font-myanmar">
-                🔊 စာတန်းထိုး ပါမှ TTS ထည့်နိုင်ပါသည်။ Subtitles ကို ဖွင့်ထားပါ။
+                🔊 Subtitle text ကို OpenAI TTS-1-HD ဖြင့် voice narration ထုတ်ပြီး video ထဲ ထည့်ပေးပါမည်။ Subtitles ကို ဖွင့်ထားပါ။
               </p>
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -951,14 +1143,15 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
       {/* 7. Object/Text Removal */}
       <Section title="Object/Text Removal" emoji="🧹">
         <div className="flex items-center justify-between">
-          <Label className="text-xs font-myanmar">Text/Logo ဖယ်ရှားခြင်း</Label>
+          <Label className="text-xs font-myanmar">Text/Logo ဖယ်ရှားခြင်း (AI)</Label>
           <Switch checked={objectRemoval} onCheckedChange={setObjectRemoval} />
         </div>
         {objectRemoval && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <div className="bg-amber-500/10 rounded-xl p-3 text-xs text-amber-400 font-myanmar space-y-1 border border-amber-500/20">
-              <p>📌 ဗီဒီယိုမှ Text/Logo များကို AI ဖြင့် ဖယ်ရှားပေးပါမည်</p>
-              <p>⚠️ ဤ feature သည် Beta အဆင့်ဖြစ်ပြီး ရလဒ် အပြည့်အဝ မရနိုင်ပါ</p>
+              <p>📌 ဗီဒီယိုမှ Text/Logo များကို Replicate AI ဖြင့် ဖယ်ရှားပေးပါမည်</p>
+              <p>⏱️ Background job အဖြစ် server-side တွင် process ပြုလုပ်ပါမည်</p>
+              <p>⚠️ Beta - ရလဒ် အပြည့်အဝ မရနိုင်ပါ</p>
             </div>
           </motion.div>
         )}
@@ -966,6 +1159,11 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
 
       {/* 8. Intro & Outro */}
       <Section title="Intro & Outro Videos" emoji="🎬">
+        <div className="bg-green-500/10 rounded-xl p-2 border border-green-500/20 mb-2">
+          <p className="text-[10px] text-green-400 font-myanmar">
+            🎬 Intro/Outro ကို FFmpeg concat ဖြင့် ဗီဒီယို အစ/အဆုံးတွင် ပေါင်းပေးပါမည်
+          </p>
+        </div>
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1.5">
             <Label className="text-[10px] font-myanmar">Intro Video</Label>
@@ -1011,9 +1209,9 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
             {autoColorGrade && <span className="px-2 py-0.5 bg-primary/15 rounded-full text-[10px] text-primary">Color Grade</span>}
             {textWatermark && <span className="px-2 py-0.5 bg-primary/15 rounded-full text-[10px] text-primary">Watermark</span>}
             {logoOverlay && <span className="px-2 py-0.5 bg-primary/15 rounded-full text-[10px] text-primary">Logo</span>}
-            {objectRemoval && <span className="px-2 py-0.5 bg-amber-500/15 rounded-full text-[10px] text-amber-500">Object Remove (Beta)</span>}
-            {introFile && <span className="px-2 py-0.5 bg-primary/15 rounded-full text-[10px] text-primary">Intro</span>}
-            {outroFile && <span className="px-2 py-0.5 bg-primary/15 rounded-full text-[10px] text-primary">Outro</span>}
+            {objectRemoval && <span className="px-2 py-0.5 bg-amber-500/15 rounded-full text-[10px] text-amber-500">Object Remove</span>}
+            {introFile && <span className="px-2 py-0.5 bg-green-500/15 rounded-full text-[10px] text-green-500">Intro</span>}
+            {outroFile && <span className="px-2 py-0.5 bg-green-500/15 rounded-full text-[10px] text-green-500">Outro</span>}
             {autoSubtitles && <span className="px-2 py-0.5 bg-blue-500/15 rounded-full text-[10px] text-blue-500">AI Subtitles</span>}
             {ttsEnabled && <span className="px-2 py-0.5 bg-purple-500/15 rounded-full text-[10px] text-purple-500">TTS Voice</span>}
             {characterEnabled && <span className="px-2 py-0.5 bg-primary/15 rounded-full text-[10px] text-primary">Character</span>}
@@ -1041,6 +1239,22 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
         </motion.div>
       )}
 
+      {/* Error Detail */}
+      {errorDetail && !isProcessing && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="gradient-card rounded-2xl p-4 border border-destructive/30 space-y-2">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-semibold text-destructive font-myanmar">Processing Error</p>
+              <p className="text-[10px] text-muted-foreground font-myanmar whitespace-pre-wrap mt-1">{errorDetail}</p>
+            </div>
+          </div>
+          <Button onClick={() => setErrorDetail(null)} variant="outline" size="sm" className="text-xs w-full">
+            <X className="w-3 h-3 mr-1" /> ပိတ်မည်
+          </Button>
+        </motion.div>
+      )}
+
       {/* Generate Button */}
       <Button onClick={handleGenerate} disabled={isProcessing || !hasSource || credits < cost} className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-2xl py-5 text-sm font-semibold">
         {isProcessing ? (
@@ -1050,6 +1264,17 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
         )}
       </Button>
       <VideoLimitWarning />
+
+      {/* TTS Audio Result */}
+      {ttsAudioUrl && (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="gradient-card rounded-2xl p-4 border border-purple-500/30 space-y-3">
+          <h3 className="text-sm font-semibold text-purple-400 font-myanmar flex items-center gap-2">
+            <Mic className="w-4 h-4" /> 🔊 TTS Voice Narration
+          </h3>
+          <audio src={ttsAudioUrl} controls className="w-full" />
+          <p className="text-[10px] text-muted-foreground font-myanmar">✅ TTS audio ကို video ထဲ ထည့်ပြီးပါပြီ</p>
+        </motion.div>
+      )}
 
       {/* SRT Subtitle Result */}
       {srtContent && (
@@ -1097,10 +1322,11 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
       {/* Feature Summary */}
       <div className="bg-secondary/10 rounded-xl p-3 border border-primary/10">
         <p className="text-[10px] text-muted-foreground font-myanmar text-center leading-relaxed">
-          ⚡ FFmpeg.wasm (Flip, Crop, Color, Watermark, Logo) •
+          ⚡ FFmpeg.wasm (Flip, Crop, Color, Watermark, Logo, Intro/Outro) •
           🤖 AI Subtitles (Whisper + ဘာသာပြန်) •
-          🔊 TTS Voice Narration •
-          📤 ဖိုင်တင် / URL Link
+          🔊 TTS Voice (OpenAI TTS-1-HD) •
+          🧹 Object Removal (Replicate AI) •
+          📤 ဖိုင်တင် / URL Link (Max 5 min)
         </p>
       </div>
     </motion.div>
