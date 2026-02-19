@@ -215,58 +215,23 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
         await new Promise(r => setTimeout(r, 800));
       }
 
-      // Call edge function for AI processing (subtitle generation, etc.)
-      const { data, error } = await supabase.functions.invoke("ai-tool", {
-        body: {
-          toolType: "video_multi_tool",
-          userId,
-          inputs: {
-            videoUrl,
-            platform,
-            voice,
-            language,
-            aspectRatio,
-            characterEnabled,
-            characterPosition,
-            copyrightBypass,
-            autoColorGrade,
-            flipVideo,
-            textWatermark: textWatermark ? watermarkText : null,
-            watermarkPosition,
-            logoOverlay,
-            logoPosition,
-            objectRemoval,
-            hasIntro: !!introFile,
-            hasOutro: !!outroFile,
-            autoSubtitles,
-            subtitleColor,
-            subtitleLanguage,
-          },
-        },
+      // Download video via RapidAPI edge function (credits deducted server-side)
+      const { data: dlData, error: dlError } = await supabase.functions.invoke("video-download", {
+        body: { videoUrl, platform },
       });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
-      // Deduct credits
-      const { error: creditError } = await supabase.rpc("deduct_user_credits", {
-        _user_id: userId,
-        _amount: cost,
-        _action: "Video Multi-Tool Processing",
-      });
-      if (creditError) throw creditError;
+      if (dlError) throw dlError;
+      if (dlData?.error) throw new Error(dlData.error);
 
       setProgress(100);
       refetch();
 
-      // Store AI analysis text and video URL separately
-      const analysisText = data?.result || data?.reply || "";
-      const outputUrl = data?.videoUrl || videoUrl;
-      setAiAnalysis(analysisText);
+      const outputUrl = dlData?.fileUrl || videoUrl;
+      setAiAnalysis(null);
       setResult(outputUrl);
-      if (analysisText) saveOutput("text", analysisText);
 
-      toast({ title: "ဗီဒီယို တည်းဖြတ်ပြီးပါပြီ!", description: `${cost} Credits သုံးစွဲပါပြီ` });
+      const used = dlData?.creditsUsed ?? cost;
+
+      toast({ title: "ဗီဒီယို Output ထွက်ပြီးပါပြီ!", description: `${used} Credits သုံးစွဲပါပြီ` });
     } catch (e: any) {
       console.error("Video Multi-Tool error:", e);
       toast({ title: "အမှားရှိပါသည်", description: e.message, variant: "destructive" });
