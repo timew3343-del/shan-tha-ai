@@ -128,9 +128,9 @@ function buildFFmpegFilters(opts: {
   // Flip
   if (opts.flipVideo) filters.push("hflip");
 
-  // Copyright bypass: slight zoom + color shift
+  // Copyright bypass: slight scale + color shift (zoompan not supported in WASM)
   if (opts.copyrightBypass) {
-    filters.push("zoompan=z='1.04':d=1:s=iw*1.04xih*1.04");
+    filters.push("scale=iw*1.04:ih*1.04");
     filters.push("hue=h=5");
   }
 
@@ -139,17 +139,13 @@ function buildFFmpegFilters(opts: {
     filters.push("eq=contrast=1.1:brightness=0.03:saturation=1.15");
   }
 
-  // Aspect ratio crop/pad
-  if (opts.aspectRatio !== "original") {
-    const ratioMap: Record<string, string> = {
-      "9:16": "9/16",
-      "16:9": "16/9",
-      "1:1": "1/1",
-    };
-    const r = ratioMap[opts.aspectRatio];
-    if (r) {
-      filters.push(`crop='if(gt(a,${r}),ih*${r},iw)':'if(gt(a,${r}),ih,iw/(${r}))'`);
-    }
+  // Aspect ratio crop — use simple expressions compatible with FFmpeg WASM
+  if (opts.aspectRatio === "9:16") {
+    filters.push("crop=ih*9/16:ih");
+  } else if (opts.aspectRatio === "16:9") {
+    filters.push("crop=iw:iw*9/16");
+  } else if (opts.aspectRatio === "1:1") {
+    filters.push("crop=min(iw\\,ih):min(iw\\,ih)");
   }
 
   // Watermark text (drawtext)
@@ -257,6 +253,8 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
     }
   };
 
+  const { maxDuration, maxLabel } = useMaxVideoDuration();
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -264,8 +262,24 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
       toast({ title: "ဖိုင် ကြီးလွန်းပါသည်", description: "500MB ထက်မကျော်ရပါ", variant: "destructive" });
       return;
     }
-    setUploadedFile(file);
-    setUploadedPreview(URL.createObjectURL(file));
+    // Validate duration
+    const url = URL.createObjectURL(file);
+    const videoEl = document.createElement("video");
+    videoEl.preload = "metadata";
+    videoEl.onloadedmetadata = () => {
+      if (videoEl.duration > maxDuration) {
+        toast({ title: "ဗီဒီယို ရှည်လွန်းပါသည်", description: `အများဆုံး ${maxLabel} အထိသာ ထုပ်ယူနိုင်ပါသည်`, variant: "destructive" });
+        URL.revokeObjectURL(url);
+        return;
+      }
+      setUploadedFile(file);
+      setUploadedPreview(url);
+    };
+    videoEl.onerror = () => {
+      setUploadedFile(file);
+      setUploadedPreview(url);
+    };
+    videoEl.src = url;
   };
 
   // Cleanup preview URL
@@ -417,13 +431,14 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
         finalUrl = signedData?.signedUrl || URL.createObjectURL(outputBlob);
       }
 
-      // Deduct credits for file upload mode (URL mode already deducted server-side)
+      // Deduct credits ONLY after successful processing + upload (upload mode)
       if (sourceMode === "upload") {
-        await supabase.rpc("deduct_user_credits", {
+        const { data: deductResult, error: deductErr } = await supabase.rpc("deduct_user_credits", {
           _user_id: userId,
           _amount: cost,
           _action: `Video Multi-Tool (Upload + ${filters.length} effects)`,
         });
+        if (deductErr) console.warn("Credit deduction failed:", deductErr);
       }
 
       // Save to gallery
