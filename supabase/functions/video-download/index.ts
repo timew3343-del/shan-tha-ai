@@ -155,15 +155,23 @@ serve(async (req) => {
     const json = await dlResp.json().catch(() => ({}));
     console.log("RapidAPI response keys:", Object.keys(json));
 
+    // Check if the API itself returned an error (e.g. video not found, expired link)
+    if (json?.error === true || json?.status === 404) {
+      const apiMsg = json?.message || "Video not found";
+      console.error("RapidAPI returned error:", JSON.stringify(json).slice(0, 500));
+      return new Response(JSON.stringify({
+        error: `ဗီဒီယို ရှာမတွေ့ပါ။ Link မှားနေခြင်း (သို့) သက်တမ်းကုန်နေခြင်း ဖြစ်နိုင်ပါသည်။`,
+        detail: apiMsg,
+      }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     // Extract download URL from response — try multiple known paths
     let downloadUrl: string | null = null;
 
     // The API returns medias[] array with quality options
     if (Array.isArray(json?.medias) && json.medias.length > 0) {
-      // Pick highest quality video
       const videos = json.medias.filter((m: any) => m.type === "video" || m.videoAvailable);
       if (videos.length > 0) {
-        // Sort by quality descending
         videos.sort((a: any, b: any) => (b.quality || "").localeCompare(a.quality || ""));
         downloadUrl = videos[0]?.url || null;
       }
@@ -178,9 +186,10 @@ serve(async (req) => {
     }
 
     if (!downloadUrl || typeof downloadUrl !== "string") {
-      console.error("No download URL found in response:", JSON.stringify(json).slice(0, 500));
+      console.error("No download URL in response:", JSON.stringify(json).slice(0, 500));
       return new Response(JSON.stringify({
-        error: "ဗီဒီယို download URL ရှာမတွေ့ပါ", response_keys: Object.keys(json),
+        error: "ဗီဒီယို download URL ရှာမတွေ့ပါ",
+        response_keys: Object.keys(json),
       }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
