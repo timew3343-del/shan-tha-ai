@@ -569,128 +569,249 @@ serve(async (req) => {
           }
         }
 
-        // ===== VIDEO MULTI SUBTITLE JOBS (Whisper + Translate) =====
-        if (job.tool_type === "video_multi_subtitle" && job.external_job_id) {
-          console.log(`Polling Whisper for video_multi_subtitle job ${job.id}, predictionId: ${job.external_job_id}`);
+        // ===== VIDEO MULTI SUBTITLE JOBS (OpenAI Whisper + Translate) =====
+        if (job.tool_type === "video_multi_subtitle") {
+          const whisperProvider = params?.whisperProvider;
 
-          if (!REPLICATE_KEY) {
-            console.warn("No Replicate key for subtitle job");
-          } else {
-            const pollResp = await fetch(`https://api.replicate.com/v1/predictions/${job.external_job_id}`, {
-              headers: { Authorization: `Bearer ${REPLICATE_KEY}` },
-            });
+          // NEW: OpenAI Whisper direct processing (no external_job_id needed)
+          if (whisperProvider === "openai" || !job.external_job_id) {
+            const openaiKey = configMap["api_enabled_openai"] !== "false" ? configMap["openai_api_key"] : null;
+            if (!openaiKey) {
+              console.error("No OpenAI key for Whisper transcription");
+              await supabaseAdmin.from("generation_jobs").update({
+                status: "failed",
+                error_message: "OpenAI API key not configured for transcription",
+              }).eq("id", job.id);
+              processed++;
+              continue;
+            }
 
-            if (pollResp.ok) {
-              const pollData = await pollResp.json();
-              console.log(`Whisper status: ${pollData.status}`);
+            try {
+              const videoUrl = params?.videoUrl;
+              if (!videoUrl) throw new Error("No video URL in job params");
 
-              if (pollData.status === "succeeded") {
-                let srtContent = pollData.output?.transcription || pollData.output?.srt || "";
-                const detectedLang = pollData.output?.detected_language || "unknown";
-                const targetLang = params?.subtitleLanguage || "my";
+              console.log(`Downloading video for OpenAI Whisper: ${videoUrl.substring(0, 80)}...`);
+              const videoResp = await fetch(videoUrl);
+              if (!videoResp.ok) throw new Error(`Video download failed: ${videoResp.status}`);
 
-                console.log(`Whisper done. Detected: ${detectedLang}, SRT length: ${srtContent.length}`);
+              const videoBuffer = await videoResp.arrayBuffer();
+              const videoSize = videoBuffer.byteLength;
+              console.log(`Video downloaded: ${(videoSize / 1024 / 1024).toFixed(1)}MB`);
 
-                // Translate if needed
-                const LANG_NAMES: Record<string, string> = {
-                  my: "Myanmar (Burmese)", en: "English", th: "Thai", zh: "Chinese",
-                  ja: "Japanese", ko: "Korean", hi: "Hindi",
-                };
-                const langName = LANG_NAMES[targetLang] || targetLang;
-
-                if (targetLang && targetLang !== "original" && srtContent) {
-                  console.log(`Translating subtitles to ${langName}...`);
-                  const translateMessages = [
-                    { role: "system", content: "You are a professional subtitle translator. Translate SRT content accurately. Keep ALL SRT formatting (numbers, timestamps). Only translate text lines. Return ONLY translated SRT." },
-                    { role: "user", content: `Translate the following SRT subtitle content to ${langName}:\n\n${srtContent}` },
-                  ];
-
-                  // Try OpenAI first
-                  const openaiKey = configMap["api_enabled_openai"] !== "false" ? configMap["openai_api_key"] : null;
-                  let translated = "";
-
-                  if (openaiKey) {
-                    try {
-                      const resp = await fetch("https://api.openai.com/v1/chat/completions", {
-                        method: "POST",
-                        headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
-                        body: JSON.stringify({ model: "gpt-4o", messages: translateMessages, temperature: 0.3, max_tokens: 8192 }),
-                      });
-                      if (resp.ok) {
-                        const data = await resp.json();
-                        translated = data.choices?.[0]?.message?.content?.trim() || "";
-                      } else { await resp.text(); }
-                    } catch (e: any) { console.warn("OpenAI translate error:", e.message); }
-                  }
-
-                  // Fallback to Lovable AI
-                  if (!translated && LOVABLE_API_KEY) {
-                    try {
-                      const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-                        method: "POST",
-                        headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-                        body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages: translateMessages, temperature: 0.3, max_tokens: 8192 }),
-                      });
-                      if (resp.ok) {
-                        const data = await resp.json();
-                        translated = data.choices?.[0]?.message?.content?.trim() || "";
-                      } else { await resp.text(); }
-                    } catch (e: any) { console.warn("Lovable AI translate error:", e.message); }
-                  }
-
-                  if (translated) srtContent = translated;
-                }
-
-                // Deduct credits
-                const isAdminUser = params?.isAdmin === true;
-                if (!isAdminUser && !job.credits_deducted && job.credits_cost > 0) {
-                  await supabaseAdmin.rpc("deduct_user_credits", {
-                    _user_id: job.user_id,
-                    _amount: job.credits_cost,
-                    _action: "Video Multi-Tool (Auto Subtitles)",
-                  });
-                  await supabaseAdmin.from("credit_audit_log").insert({
-                    user_id: job.user_id,
-                    amount: -job.credits_cost,
-                    credit_type: "video_multi_subtitle",
-                    description: `Auto Subtitles: ${langName}`,
-                  });
-                }
-
-                // Save SRT to user_outputs
-                await supabaseAdmin.from("user_outputs").insert({
-                  user_id: job.user_id,
-                  tool_id: "video_multi",
-                  tool_name: "Video Multi-Tool (Subtitles)",
-                  output_type: "text",
-                  content: srtContent,
-                });
-
-                // Complete the job - store SRT in input_params for client retrieval
-                await supabaseAdmin.from("generation_jobs").update({
-                  status: "completed",
-                  credits_deducted: true,
-                  output_url: "srt_ready",
-                  input_params: {
-                    ...params,
-                    srtContent,
-                    detectedLanguage: detectedLang,
-                    translatedTo: langName,
-                  },
-                }).eq("id", job.id);
-
-                console.log(`Subtitle job ${job.id} completed! SRT length: ${srtContent.length}`);
-                processed++;
-              } else if (pollData.status === "failed" || pollData.status === "canceled") {
-                await supabaseAdmin.from("generation_jobs").update({
-                  status: "failed",
-                  error_message: pollData.error || `Whisper ${pollData.status}`,
-                }).eq("id", job.id);
-                processed++;
+              // OpenAI Whisper has 25MB limit
+              if (videoSize > 25 * 1024 * 1024) {
+                throw new Error("Video too large for transcription (max 25MB). Use a shorter or lower-quality video.");
               }
-              // else: still processing, leave for next poll
+
+              // Send to OpenAI Whisper API
+              console.log("Sending to OpenAI Whisper API...");
+              const formData = new FormData();
+              formData.append("file", new Blob([videoBuffer], { type: "video/mp4" }), "video.mp4");
+              formData.append("model", "whisper-1");
+              formData.append("response_format", "srt");
+
+              const whisperResp = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${openaiKey}` },
+                body: formData,
+              });
+
+              if (!whisperResp.ok) {
+                const errText = await whisperResp.text();
+                console.error("OpenAI Whisper error:", whisperResp.status, errText.substring(0, 300));
+                throw new Error(`Whisper transcription failed: ${whisperResp.status}`);
+              }
+
+              let srtContent = await whisperResp.text();
+              console.log(`Whisper transcription done. SRT length: ${srtContent.length}`);
+
+              // Translate if needed
+              const targetLang = params?.subtitleLanguage || "my";
+              const LANG_NAMES: Record<string, string> = {
+                my: "Myanmar (Burmese)", en: "English", th: "Thai", zh: "Chinese",
+                ja: "Japanese", ko: "Korean", hi: "Hindi",
+              };
+              const langName = LANG_NAMES[targetLang] || targetLang;
+
+              if (targetLang && targetLang !== "original" && srtContent) {
+                console.log(`Translating subtitles to ${langName}...`);
+                const translateMessages = [
+                  { role: "system", content: "You are a professional subtitle translator. Translate SRT content accurately. Keep ALL SRT formatting (numbers, timestamps). Only translate text lines. Return ONLY translated SRT." },
+                  { role: "user", content: `Translate the following SRT subtitle content to ${langName}:\n\n${srtContent}` },
+                ];
+
+                let translated = "";
+                // Try OpenAI GPT-4o
+                try {
+                  const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({ model: "gpt-4o", messages: translateMessages, temperature: 0.3, max_tokens: 8192 }),
+                  });
+                  if (resp.ok) {
+                    const data = await resp.json();
+                    translated = data.choices?.[0]?.message?.content?.trim() || "";
+                  } else { await resp.text(); }
+                } catch (e: any) { console.warn("OpenAI translate error:", e.message); }
+
+                // Fallback to Lovable AI
+                if (!translated && LOVABLE_API_KEY) {
+                  try {
+                    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                      method: "POST",
+                      headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+                      body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages: translateMessages, temperature: 0.3, max_tokens: 8192 }),
+                    });
+                    if (resp.ok) {
+                      const data = await resp.json();
+                      translated = data.choices?.[0]?.message?.content?.trim() || "";
+                    } else { await resp.text(); }
+                  } catch (e: any) { console.warn("Lovable AI translate error:", e.message); }
+                }
+
+                if (translated) srtContent = translated;
+              }
+
+              // Deduct credits
+              const isAdminUser = params?.isAdmin === true;
+              if (!isAdminUser && !job.credits_deducted && job.credits_cost > 0) {
+                await supabaseAdmin.rpc("deduct_user_credits", {
+                  _user_id: job.user_id,
+                  _amount: job.credits_cost,
+                  _action: "Video Multi-Tool (Auto Subtitles)",
+                });
+                await supabaseAdmin.from("credit_audit_log").insert({
+                  user_id: job.user_id,
+                  amount: -job.credits_cost,
+                  credit_type: "video_multi_subtitle",
+                  description: `Auto Subtitles: ${langName}`,
+                });
+              }
+
+              // Save SRT to user_outputs
+              await supabaseAdmin.from("user_outputs").insert({
+                user_id: job.user_id,
+                tool_id: "video_multi",
+                tool_name: "Video Multi-Tool (Subtitles)",
+                output_type: "text",
+                content: srtContent,
+              });
+
+              // Complete the job
+              await supabaseAdmin.from("generation_jobs").update({
+                status: "completed",
+                credits_deducted: true,
+                output_url: "srt_ready",
+                input_params: {
+                  ...params,
+                  srtContent,
+                  detectedLanguage: "auto",
+                  translatedTo: langName,
+                },
+              }).eq("id", job.id);
+
+              console.log(`Subtitle job ${job.id} completed via OpenAI Whisper! SRT length: ${srtContent.length}`);
+              processed++;
+            } catch (whisperErr: any) {
+              console.error(`OpenAI Whisper error for job ${job.id}:`, whisperErr.message);
+              await supabaseAdmin.from("generation_jobs").update({
+                status: "failed",
+                error_message: whisperErr.message || "Whisper transcription failed",
+              }).eq("id", job.id);
+              processed++;
+            }
+            continue;
+          }
+
+          // LEGACY: Replicate Whisper polling (for old jobs with external_job_id)
+          if (job.external_job_id) {
+            console.log(`Polling Replicate Whisper for job ${job.id}, predictionId: ${job.external_job_id}`);
+
+            if (!REPLICATE_KEY) {
+              console.warn("No Replicate key for subtitle job");
             } else {
-              await pollResp.text();
+              const pollResp = await fetch(`https://api.replicate.com/v1/predictions/${job.external_job_id}`, {
+                headers: { Authorization: `Bearer ${REPLICATE_KEY}` },
+              });
+
+              if (pollResp.ok) {
+                const pollData = await pollResp.json();
+                console.log(`Whisper status: ${pollData.status}`);
+
+                if (pollData.status === "succeeded") {
+                  let srtContent = pollData.output?.transcription || pollData.output?.srt || "";
+                  const detectedLang = pollData.output?.detected_language || "unknown";
+                  const targetLang = params?.subtitleLanguage || "my";
+
+                  const LANG_NAMES: Record<string, string> = {
+                    my: "Myanmar (Burmese)", en: "English", th: "Thai", zh: "Chinese",
+                    ja: "Japanese", ko: "Korean", hi: "Hindi",
+                  };
+                  const langName = LANG_NAMES[targetLang] || targetLang;
+
+                  if (targetLang && targetLang !== "original" && srtContent) {
+                    const translateMessages = [
+                      { role: "system", content: "You are a professional subtitle translator. Translate SRT content accurately. Keep ALL SRT formatting (numbers, timestamps). Only translate text lines. Return ONLY translated SRT." },
+                      { role: "user", content: `Translate the following SRT subtitle content to ${langName}:\n\n${srtContent}` },
+                    ];
+                    const openaiKey2 = configMap["api_enabled_openai"] !== "false" ? configMap["openai_api_key"] : null;
+                    let translated = "";
+                    if (openaiKey2) {
+                      try {
+                        const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+                          method: "POST",
+                          headers: { Authorization: `Bearer ${openaiKey2}`, "Content-Type": "application/json" },
+                          body: JSON.stringify({ model: "gpt-4o", messages: translateMessages, temperature: 0.3, max_tokens: 8192 }),
+                        });
+                        if (resp.ok) {
+                          const data = await resp.json();
+                          translated = data.choices?.[0]?.message?.content?.trim() || "";
+                        } else { await resp.text(); }
+                      } catch (e: any) { console.warn("OpenAI translate error:", e.message); }
+                    }
+                    if (!translated && LOVABLE_API_KEY) {
+                      try {
+                        const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                          method: "POST",
+                          headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+                          body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages: translateMessages, temperature: 0.3, max_tokens: 8192 }),
+                        });
+                        if (resp.ok) {
+                          const data = await resp.json();
+                          translated = data.choices?.[0]?.message?.content?.trim() || "";
+                        } else { await resp.text(); }
+                      } catch (e: any) { console.warn("Lovable AI translate error:", e.message); }
+                    }
+                    if (translated) srtContent = translated;
+                  }
+
+                  const isAdminUser = params?.isAdmin === true;
+                  if (!isAdminUser && !job.credits_deducted && job.credits_cost > 0) {
+                    await supabaseAdmin.rpc("deduct_user_credits", {
+                      _user_id: job.user_id,
+                      _amount: job.credits_cost,
+                      _action: "Video Multi-Tool (Auto Subtitles)",
+                    });
+                  }
+
+                  await supabaseAdmin.from("user_outputs").insert({
+                    user_id: job.user_id, tool_id: "video_multi",
+                    tool_name: "Video Multi-Tool (Subtitles)", output_type: "text", content: srtContent,
+                  });
+
+                  await supabaseAdmin.from("generation_jobs").update({
+                    status: "completed", credits_deducted: true, output_url: "srt_ready",
+                    input_params: { ...params, srtContent, detectedLanguage: detectedLang, translatedTo: langName },
+                  }).eq("id", job.id);
+                  processed++;
+                } else if (pollData.status === "failed" || pollData.status === "canceled") {
+                  await supabaseAdmin.from("generation_jobs").update({
+                    status: "failed",
+                    error_message: pollData.error || `Whisper ${pollData.status}`,
+                  }).eq("id", job.id);
+                  processed++;
+                }
+              } else { await pollResp.text(); }
             }
           }
         }
