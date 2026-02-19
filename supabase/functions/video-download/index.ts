@@ -81,9 +81,19 @@ serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const videoUrl = body?.videoUrl;
     const platform = body?.platform || "unknown";
+    const maxDurationSeconds = body?.maxDuration || 300; // 5 minutes default
 
     if (!videoUrl || typeof videoUrl !== "string") {
       return new Response(JSON.stringify({ error: "Video URL is required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Validate URL format
+    try {
+      new URL(videoUrl);
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid URL format" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
