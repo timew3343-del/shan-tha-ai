@@ -145,14 +145,13 @@ serve(async (req) => {
     // ======== STEP 1: Transcribe with Replicate Whisper ========
     console.log("Step 1: Starting Whisper transcription...");
 
-    const whisperResponse = await fetch("https://api.replicate.com/v1/predictions", {
+    const whisperResponse = await fetch("https://api.replicate.com/v1/models/openai/whisper/predictions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${REPLICATE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        version: "4d50797290df275329f202e48c76360b3f22b08d28c65c07c8d445c1eeae2a65",
         input: {
           audio: videoUrl,
           model: "large-v3",
@@ -160,12 +159,6 @@ serve(async (req) => {
           translate: false,
           temperature: 0,
           transcription: "srt",
-          suppress_tokens: "-1",
-          logprob_threshold: -1,
-          no_speech_threshold: 0.6,
-          condition_on_previous_text: true,
-          compression_ratio_threshold: 2.4,
-          temperature_increment_on_fallback: 0.2,
         },
       }),
     });
