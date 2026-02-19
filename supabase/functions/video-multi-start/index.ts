@@ -80,44 +80,41 @@ serve(async (req) => {
     let toolType = "video_multi_subtitle";
 
     if (autoSubtitles) {
-      // Start Whisper transcription via Replicate
+      // Start Whisper transcription via Replicate (using official model endpoint)
       console.log(`Starting Whisper for: ${videoUrl.substring(0, 80)}...`);
-      const whisperResp = await fetch("https://api.replicate.com/v1/predictions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${REPLICATE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          version: "4d50797290df275329f202e48c76360b3f22b08d28c65c07c8d445c1eeae2a65",
-          input: {
-            audio: videoUrl,
-            model: "large-v3",
-            language: "auto",
-            translate: false,
-            temperature: 0,
-            transcription: "srt",
-            suppress_tokens: "-1",
-            logprob_threshold: -1,
-            no_speech_threshold: 0.6,
-            condition_on_previous_text: true,
-            compression_ratio_threshold: 2.4,
-            temperature_increment_on_fallback: 0.2,
+      try {
+        const whisperResp = await fetch("https://api.replicate.com/v1/models/openai/whisper/predictions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${REPLICATE_API_KEY}`,
+            "Content-Type": "application/json",
           },
-        }),
-      });
-
-      if (!whisperResp.ok) {
-        const errText = await whisperResp.text();
-        console.error("Whisper start error:", whisperResp.status, errText);
-        return new Response(JSON.stringify({ error: "Whisper transcription failed to start" }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            input: {
+              audio: videoUrl,
+              model: "large-v3",
+              language: "auto",
+              translate: false,
+              temperature: 0,
+              transcription: "srt",
+            },
+          }),
         });
-      }
 
-      const whisperData = await whisperResp.json();
-      externalJobId = whisperData.id;
-      console.log(`Whisper prediction started: ${externalJobId}`);
+        if (!whisperResp.ok) {
+          const errText = await whisperResp.text();
+          console.error("Whisper start error:", whisperResp.status, errText);
+          // Don't crash — continue without subtitles
+          console.warn("Whisper failed, continuing without auto-subtitles");
+        } else {
+          const whisperData = await whisperResp.json();
+          externalJobId = whisperData.id;
+          console.log(`Whisper prediction started: ${externalJobId}`);
+        }
+      } catch (whisperErr: any) {
+        console.error("Whisper exception:", whisperErr.message);
+        console.warn("Whisper failed, continuing without auto-subtitles");
+      }
     }
 
     // Create generation job
