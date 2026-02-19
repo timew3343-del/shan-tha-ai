@@ -176,7 +176,7 @@ serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          version: "2ac0d3a4e1a5d6e5c00c5a58e2ed8e3e7bf15c4a2acee3e05b7c028e61f0a3a1",
+          model: "facebook/propainter",
           input: {
             video: videoUrl,
             ...(maskImageBase64 ? { mask: maskImageBase64 } : {}),
