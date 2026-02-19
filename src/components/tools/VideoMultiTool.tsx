@@ -1,15 +1,14 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Loader2, Download, Upload, Video, Film, Type, Image as ImageIcon,
   Play, Scissors, FlipHorizontal, Palette, Globe, Mic, User,
-  LayoutGrid, EyeOff, Plus, X, Check, ChevronDown, Copy
+  LayoutGrid, EyeOff, Plus, X, Check, ChevronDown, Copy, FileVideo
 } from "lucide-react";
 import { downloadVideo } from "@/lib/downloadHelper";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
@@ -73,6 +72,8 @@ const SUBTITLE_COLORS = [
   { value: "#00FFFF", label: "Cyan", color: "bg-cyan-400" },
 ];
 
+type SourceMode = "url" | "upload";
+
 interface SectionProps {
   title: string;
   emoji: string;
@@ -101,15 +102,86 @@ const Section = ({ title, emoji, children, defaultOpen = false }: SectionProps) 
   );
 };
 
+// ─── FFmpeg helpers ───────────────────────────────────────
+async function loadFFmpeg() {
+  const { FFmpeg } = await import("@ffmpeg/ffmpeg");
+  const { fetchFile, toBlobURL } = await import("@ffmpeg/util");
+  const ffmpeg = new FFmpeg();
+  const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd";
+  await ffmpeg.load({
+    coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+  });
+  return { ffmpeg, fetchFile };
+}
+
+function buildFFmpegFilters(opts: {
+  flipVideo: boolean;
+  aspectRatio: string;
+  autoColorGrade: boolean;
+  copyrightBypass: boolean;
+  watermarkText: string;
+  watermarkPosition: string;
+}): string[] {
+  const filters: string[] = [];
+
+  // Flip
+  if (opts.flipVideo) filters.push("hflip");
+
+  // Copyright bypass: slight zoom + color shift
+  if (opts.copyrightBypass) {
+    filters.push("zoompan=z='1.04':d=1:s=iw*1.04xih*1.04");
+    filters.push("hue=h=5");
+  }
+
+  // Color grade
+  if (opts.autoColorGrade) {
+    filters.push("eq=contrast=1.1:brightness=0.03:saturation=1.15");
+  }
+
+  // Aspect ratio crop/pad
+  if (opts.aspectRatio !== "original") {
+    const ratioMap: Record<string, string> = {
+      "9:16": "9/16",
+      "16:9": "16/9",
+      "1:1": "1/1",
+    };
+    const r = ratioMap[opts.aspectRatio];
+    if (r) {
+      filters.push(`crop='if(gt(a,${r}),ih*${r},iw)':'if(gt(a,${r}),ih,iw/(${r}))'`);
+    }
+  }
+
+  // Watermark text (drawtext)
+  if (opts.watermarkText) {
+    const posMap: Record<string, string> = {
+      "bottom-left": "x=20:y=h-th-20",
+      "bottom-right": "x=w-tw-20:y=h-th-20",
+      "top-left": "x=20:y=20",
+      "top-right": "x=w-tw-20:y=20",
+    };
+    const pos = posMap[opts.watermarkPosition] || posMap["bottom-right"];
+    const safeText = opts.watermarkText.replace(/'/g, "\\'").replace(/:/g, "\\:");
+    filters.push(`drawtext=text='${safeText}':fontsize=24:fontcolor=white@0.7:${pos}`);
+  }
+
+  return filters;
+}
+
+// ─── Component ───────────────────────────────────────────
 export const VideoMultiTool = ({ userId, onBack }: Props) => {
   const { toast } = useToast();
   const { credits, refetch } = useCredits(userId);
   const { costs } = useCreditCosts();
   const { showGuide, saveOutput } = useToolOutput("video_multi", "Video Multi-Tool");
 
-  // Source
+  // Source mode
+  const [sourceMode, setSourceMode] = useState<SourceMode>("url");
   const [videoUrl, setVideoUrl] = useState("");
   const [platform, setPlatform] = useState("youtube");
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadedPreview, setUploadedPreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Voice & Language
   const [voice, setVoice] = useState("male_1");
@@ -149,6 +221,7 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
   // Processing
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [progressMsg, setProgressMsg] = useState("");
   const [result, setResult] = useState<string | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
 
@@ -157,9 +230,9 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
   const introRef = useRef<HTMLInputElement>(null);
   const outroRef = useRef<HTMLInputElement>(null);
 
-  // Dynamic credit cost based on selected features
+  // Dynamic credit cost
   const baseCost = (costs as any).video_multi || 10;
-  const extraCost = 
+  const extraCost =
     (copyrightBypass ? 1 : 0) +
     (autoColorGrade ? 1 : 0) +
     (flipVideo ? 1 : 0) +
@@ -172,6 +245,9 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
     (characterEnabled ? 2 : 0);
   const cost = baseCost + extraCost;
 
+  const hasAnyEffect = copyrightBypass || autoColorGrade || flipVideo || textWatermark || logoOverlay ||
+    objectRemoval || !!introFile || !!outroFile || autoSubtitles || characterEnabled || aspectRatio !== "original";
+
   const handleImageUpload = (setter: (v: string | null) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -181,9 +257,30 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
     }
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 500 * 1024 * 1024) {
+      toast({ title: "ဖိုင် ကြီးလွန်းပါသည်", description: "500MB ထက်မကျော်ရပါ", variant: "destructive" });
+      return;
+    }
+    setUploadedFile(file);
+    setUploadedPreview(URL.createObjectURL(file));
+  };
+
+  // Cleanup preview URL
+  useEffect(() => {
+    return () => {
+      if (uploadedPreview) URL.revokeObjectURL(uploadedPreview);
+    };
+  }, [uploadedPreview]);
+
+  const hasSource = sourceMode === "url" ? videoUrl.trim().length > 0 : !!uploadedFile;
+
+  // ─── Main Generate Handler ─────────────────────────────
   const handleGenerate = async () => {
-    if (!videoUrl.trim()) {
-      toast({ title: "Video URL ထည့်ပါ", description: "YouTube/TikTok/Facebook Video URL ထည့်ပါ", variant: "destructive" });
+    if (!hasSource) {
+      toast({ title: sourceMode === "url" ? "Video URL ထည့်ပါ" : "Video ဖိုင် ရွေးပါ", variant: "destructive" });
       return;
     }
     if (!userId) {
@@ -200,70 +297,258 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
     setAiAnalysis(null);
 
     try {
-      // Simulate progress stages
-      const stages = [
-        { pct: 10, msg: "Video ဒေါင်းလုဒ်လုပ်နေသည်..." },
-        { pct: 25, msg: "AI ခွဲခြမ်းစိတ်ဖြာနေသည်..." },
-        { pct: 45, msg: "FFmpeg ဖြင့် တည်းဖြတ်နေသည်..." },
-        { pct: 65, msg: "Effects ထည့်နေသည်..." },
-        { pct: 80, msg: "Subtitle/Audio ထည့်နေသည်..." },
-        { pct: 95, msg: "Final render..." },
-      ];
+      let videoBlob: Blob | null = null;
 
-      for (const stage of stages) {
-        setProgress(stage.pct);
-        await new Promise(r => setTimeout(r, 800));
+      // ── Step 1: Get raw video data ──
+      if (sourceMode === "url") {
+        setProgress(5);
+        setProgressMsg("Video ဒေါင်းလုဒ်လုပ်နေသည်...");
+
+        const { data: dlData, error: dlError } = await supabase.functions.invoke("video-download", {
+          body: { videoUrl, platform },
+        });
+        if (dlError) throw dlError;
+        if (dlData?.error) throw new Error(dlData.error);
+
+        setProgress(30);
+        setProgressMsg("ဒေါင်းလုဒ် ပြီးပါပြီ...");
+
+        // If no effects selected, just use the downloaded file directly
+        if (!hasAnyEffect) {
+          setProgress(100);
+          setResult(dlData?.fileUrl || videoUrl);
+          refetch();
+          saveOutput("video", dlData?.fileUrl || videoUrl, undefined, dlData?.fileUrl);
+          toast({ title: "✅ ဗီဒီယို ဒေါင်းလုဒ် ပြီးပါပြီ!", description: `${dlData?.creditsUsed ?? cost} Credits သုံးစွဲပါပြီ` });
+          return;
+        }
+
+        // Fetch blob for FFmpeg processing
+        try {
+          const resp = await fetch(dlData?.fileUrl);
+          if (resp.ok) videoBlob = await resp.blob();
+        } catch {
+          // If can't fetch for processing, return as-is
+          setResult(dlData?.fileUrl || videoUrl);
+          refetch();
+          toast({ title: "✅ ဗီဒီယို ရပြီး (Effects မထည့်နိုင်ပါ)", description: "CORS ကြောင့် Effects မထည့်နိုင်ပါ" });
+          return;
+        }
+      } else {
+        // File upload mode
+        videoBlob = uploadedFile!;
+        setProgress(10);
+        setProgressMsg("ဗီဒီယို ဖိုင် ဖတ်နေသည်...");
       }
 
-      // Download video via RapidAPI edge function (credits deducted server-side)
-      const { data: dlData, error: dlError } = await supabase.functions.invoke("video-download", {
-        body: { videoUrl, platform },
+      if (!videoBlob) throw new Error("Video data မရှိပါ");
+
+      // ── Step 2: Process with FFmpeg ──
+      setProgress(35);
+      setProgressMsg("FFmpeg ဖွင့်နေသည်...");
+
+      const { ffmpeg, fetchFile } = await loadFFmpeg();
+
+      setProgress(45);
+      setProgressMsg("Effects ထည့်နေသည်...");
+
+      // Write input
+      const inputData = await fetchFile(videoBlob instanceof File ? videoBlob : new File([videoBlob], "input.mp4"));
+      await ffmpeg.writeFile("input.mp4", inputData);
+
+      // Build filter chain
+      const filters = buildFFmpegFilters({
+        flipVideo,
+        aspectRatio,
+        autoColorGrade,
+        copyrightBypass,
+        watermarkText: textWatermark ? watermarkText : "",
+        watermarkPosition,
       });
-      if (dlError) throw dlError;
-      if (dlData?.error) throw new Error(dlData.error);
+
+      // Build FFmpeg command
+      const cmd: string[] = ["-i", "input.mp4"];
+
+      if (filters.length > 0) {
+        cmd.push("-vf", filters.join(","));
+      }
+
+      // Re-encode
+      cmd.push("-c:v", "libx264", "-preset", "fast", "-crf", "23");
+      cmd.push("-c:a", "copy");
+      cmd.push("-movflags", "+faststart");
+      cmd.push("-y", "output.mp4");
+
+      setProgress(55);
+      setProgressMsg("ဗီဒီယို တည်းဖြတ်နေသည်...");
+
+      await ffmpeg.exec(cmd);
+
+      setProgress(80);
+      setProgressMsg("Output ဖိုင် ပြင်ဆင်နေသည်...");
+
+      const outputData = await ffmpeg.readFile("output.mp4");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const outputBlob = new Blob([(outputData as any)], { type: "video/mp4" });
+
+      // ── Step 3: Upload processed video to storage ──
+      setProgress(85);
+      setProgressMsg("Storage သို့ တင်နေသည်...");
+
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      if (!token) throw new Error("Authentication required");
+
+      // Upload via storage
+      const fileName = `${userId}/video-multi-${Date.now()}.mp4`;
+      const { error: uploadErr } = await supabase.storage
+        .from("videos")
+        .upload(fileName, outputBlob, { contentType: "video/mp4", upsert: true });
+
+      let finalUrl: string;
+      if (uploadErr) {
+        // Fallback: create blob URL
+        console.warn("Storage upload failed:", uploadErr);
+        finalUrl = URL.createObjectURL(outputBlob);
+      } else {
+        const { data: signedData } = await supabase.storage
+          .from("videos")
+          .createSignedUrl(fileName, 86400 * 7);
+        finalUrl = signedData?.signedUrl || URL.createObjectURL(outputBlob);
+      }
+
+      // Deduct credits for file upload mode (URL mode already deducted server-side)
+      if (sourceMode === "upload") {
+        await supabase.rpc("deduct_user_credits", {
+          _user_id: userId,
+          _amount: cost,
+          _action: `Video Multi-Tool (Upload + ${filters.length} effects)`,
+        });
+      }
+
+      // Save to gallery
+      try {
+        await supabase.from("user_outputs").insert({
+          user_id: userId,
+          tool_id: "video_multi",
+          tool_name: "Video Multi-Tool",
+          output_type: "video",
+          file_url: finalUrl,
+        });
+      } catch (e) {
+        console.warn("Failed to save to gallery:", e);
+      }
 
       setProgress(100);
+      setProgressMsg("ပြီးပါပြီ!");
+      setResult(finalUrl);
       refetch();
+      saveOutput("video", finalUrl, undefined, finalUrl);
 
-      const outputUrl = dlData?.fileUrl || videoUrl;
-      setAiAnalysis(null);
-      setResult(outputUrl);
+      const appliedEffects = [];
+      if (flipVideo) appliedEffects.push("Flip");
+      if (aspectRatio !== "original") appliedEffects.push(`Aspect ${aspectRatio}`);
+      if (copyrightBypass) appliedEffects.push("Copyright Bypass");
+      if (autoColorGrade) appliedEffects.push("Color Grade");
+      if (textWatermark && watermarkText) appliedEffects.push("Watermark");
 
-      const used = dlData?.creditsUsed ?? cost;
+      toast({
+        title: "✅ ဗီဒီယို ပြီးပါပြီ!",
+        description: appliedEffects.length > 0
+          ? `Effects: ${appliedEffects.join(", ")} | ${cost} Credits`
+          : `${cost} Credits သုံးစွဲပါပြီ`,
+      });
 
-      toast({ title: "ဗီဒီယို Output ထွက်ပြီးပါပြီ!", description: `${used} Credits သုံးစွဲပါပြီ` });
     } catch (e: any) {
       console.error("Video Multi-Tool error:", e);
-      toast({ title: "အမှားရှိပါသည်", description: e.message, variant: "destructive" });
+      toast({ title: "အမှားရှိပါသည်", description: e.message || "Processing failed", variant: "destructive" });
     } finally {
       setIsProcessing(false);
       setProgress(0);
+      setProgressMsg("");
     }
   };
 
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-3 p-4 pb-24">
       <ToolHeader title="AI Video Multi-Tool" subtitle="ဗီဒီယို ဘက်စုံတည်းဖြတ်ခြင်း (FFmpeg + AI)" onBack={onBack} />
-      <p className="text-[10px] text-muted-foreground font-myanmar text-center -mt-2 mb-1">လင့်ထည့် အော်တို vedio ထုပ်</p>
-      <FirstOutputGuide toolName="Video Multi-Tool" show={showGuide} steps={["Video URL ထည့်ပါ", "Settings များ ရွေးပါ", "Generate Video နှိပ်ပါ"]} />
+      <p className="text-[10px] text-muted-foreground font-myanmar text-center -mt-2 mb-1">လင့်ထည့် သို့ ဗီဒီယို တင်ပြီး Effects ထည့်</p>
+      <FirstOutputGuide toolName="Video Multi-Tool" show={showGuide} steps={["Video URL ထည့်ပါ သို့ ဖိုင်တင်ပါ", "Effects/Settings များ ရွေးပါ", "Generate Video နှိပ်ပါ"]} />
 
       {/* 1. Source Input */}
       <Section title="Video Source" emoji="📥" defaultOpen={true}>
-        <div className="space-y-2">
-          <Label className="text-xs font-myanmar">Video URL</Label>
-          <Input value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://youtube.com/watch?v=... or TikTok/FB link" className="text-xs rounded-xl" />
+        {/* Source mode toggle */}
+        <div className="flex gap-1.5 p-0.5 bg-secondary/30 rounded-xl">
+          <button
+            onClick={() => setSourceMode("url")}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all ${sourceMode === "url" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-primary/10"}`}
+          >
+            <Globe className="w-3.5 h-3.5" /> URL Link
+          </button>
+          <button
+            onClick={() => setSourceMode("upload")}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all ${sourceMode === "upload" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-primary/10"}`}
+          >
+            <Upload className="w-3.5 h-3.5" /> ဖိုင်တင်မည်
+          </button>
         </div>
-        <div className="space-y-2">
-          <Label className="text-xs font-myanmar">Platform</Label>
-          <div className="flex gap-1.5">
-            {PLATFORMS.map(p => (
-              <button key={p.value} onClick={() => setPlatform(p.value)}
-                className={`flex-1 flex items-center justify-center gap-1 py-2 rounded-xl text-xs font-medium transition-all ${platform === p.value ? "bg-primary text-primary-foreground" : "bg-secondary/30 text-muted-foreground hover:bg-primary/10"}`}>
-                {p.emoji} {p.label}
-              </button>
-            ))}
-          </div>
-        </div>
+
+        <AnimatePresence mode="wait">
+          {sourceMode === "url" ? (
+            <motion.div key="url" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="space-y-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-myanmar">Video URL</Label>
+                <Input value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://youtube.com/watch?v=... or TikTok/FB link" className="text-xs rounded-xl" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-myanmar">Platform</Label>
+                <div className="flex gap-1.5">
+                  {PLATFORMS.map(p => (
+                    <button key={p.value} onClick={() => setPlatform(p.value)}
+                      className={`flex-1 flex items-center justify-center gap-1 py-2 rounded-xl text-xs font-medium transition-all ${platform === p.value ? "bg-primary text-primary-foreground" : "bg-secondary/30 text-muted-foreground hover:bg-primary/10"}`}>
+                      {p.emoji} {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div key="upload" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} className="space-y-2">
+              {uploadedFile ? (
+                <div className="space-y-2">
+                  {/* Preview */}
+                  {uploadedPreview && (
+                    <video src={uploadedPreview} controls className="w-full rounded-xl border border-primary/20 max-h-[200px]" />
+                  )}
+                  <div className="flex items-center gap-2 bg-primary/10 rounded-xl px-3 py-2">
+                    <FileVideo className="w-4 h-4 text-primary flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-primary truncate">{uploadedFile.name}</p>
+                      <p className="text-[10px] text-muted-foreground">{(uploadedFile.size / 1024 / 1024).toFixed(1)} MB</p>
+                    </div>
+                    <button onClick={() => { setUploadedFile(null); setUploadedPreview(null); }} className="p-1 hover:bg-destructive/10 rounded-lg">
+                      <X className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full h-28 border-2 border-dashed border-primary/30 rounded-2xl flex flex-col items-center justify-center gap-2 hover:bg-primary/5 hover:border-primary/50 transition-all"
+                >
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Upload className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs font-medium text-foreground">ဗီဒီယို ဖိုင် ရွေးပါ</p>
+                    <p className="text-[10px] text-muted-foreground">MP4, MOV, WebM (500MB max)</p>
+                  </div>
+                </button>
+              )}
+              <input ref={fileInputRef} type="file" accept="video/mp4,video/quicktime,video/webm,video/*" onChange={handleFileUpload} className="hidden" />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </Section>
 
       {/* 2. Voice & Language */}
@@ -476,12 +761,32 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
         )}
       </Section>
 
+      {/* Active Effects Summary */}
+      {hasAnyEffect && (
+        <div className="bg-primary/5 rounded-xl p-3 border border-primary/20">
+          <p className="text-[10px] font-semibold text-primary mb-1.5 font-myanmar">✨ ရွေးထားသော Effects:</p>
+          <div className="flex flex-wrap gap-1">
+            {aspectRatio !== "original" && <span className="px-2 py-0.5 bg-primary/15 rounded-full text-[10px] text-primary">{aspectRatio}</span>}
+            {flipVideo && <span className="px-2 py-0.5 bg-primary/15 rounded-full text-[10px] text-primary">Flip</span>}
+            {copyrightBypass && <span className="px-2 py-0.5 bg-primary/15 rounded-full text-[10px] text-primary">© Bypass</span>}
+            {autoColorGrade && <span className="px-2 py-0.5 bg-primary/15 rounded-full text-[10px] text-primary">Color Grade</span>}
+            {textWatermark && <span className="px-2 py-0.5 bg-primary/15 rounded-full text-[10px] text-primary">Watermark</span>}
+            {logoOverlay && <span className="px-2 py-0.5 bg-primary/15 rounded-full text-[10px] text-primary">Logo</span>}
+            {objectRemoval && <span className="px-2 py-0.5 bg-primary/15 rounded-full text-[10px] text-primary">Object Remove</span>}
+            {introFile && <span className="px-2 py-0.5 bg-primary/15 rounded-full text-[10px] text-primary">Intro</span>}
+            {outroFile && <span className="px-2 py-0.5 bg-primary/15 rounded-full text-[10px] text-primary">Outro</span>}
+            {autoSubtitles && <span className="px-2 py-0.5 bg-primary/15 rounded-full text-[10px] text-primary">Subtitles</span>}
+            {characterEnabled && <span className="px-2 py-0.5 bg-primary/15 rounded-full text-[10px] text-primary">Character</span>}
+          </div>
+        </div>
+      )}
+
       {/* Processing Progress */}
       {isProcessing && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="gradient-card rounded-2xl p-4 border border-primary/30">
           <div className="flex items-center gap-3 mb-2">
             <Loader2 className="w-5 h-5 animate-spin text-primary" />
-            <span className="text-sm font-medium text-primary font-myanmar">ဗီဒီယို တည်းဖြတ်နေသည်...</span>
+            <span className="text-sm font-medium text-primary font-myanmar">{progressMsg || "ဗီဒီယို တည်းဖြတ်နေသည်..."}</span>
           </div>
           <div className="w-full bg-secondary/30 rounded-full h-2 overflow-hidden">
             <motion.div className="h-full bg-primary rounded-full" animate={{ width: `${progress}%` }} transition={{ duration: 0.3 }} />
@@ -491,20 +796,23 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
       )}
 
       {/* Generate Button */}
-      <Button onClick={handleGenerate} disabled={isProcessing || !videoUrl.trim() || credits < cost} className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-2xl py-5 text-sm font-semibold">
+      <Button onClick={handleGenerate} disabled={isProcessing || !hasSource || credits < cost} className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-2xl py-5 text-sm font-semibold">
         {isProcessing ? (
           <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing {progress}%...</>
         ) : (
-          <><Play className="w-4 h-4 mr-2" />Generate Video ({cost} Credits)</>
+          <><Play className="w-4 h-4 mr-2" />{hasAnyEffect ? `Generate + Effects (${cost} Credits)` : `Generate Video (${cost} Credits)`}</>
         )}
       </Button>
       <VideoLimitWarning />
 
       {/* Result */}
-      {(result || aiAnalysis) && (
+      {result && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="gradient-card rounded-2xl p-4 border border-primary/30 space-y-3">
-          <h3 className="text-sm font-semibold text-primary font-myanmar">🎬 AI ခွဲခြမ်းစိတ်ဖြာချက်</h3>
-          
+          <h3 className="text-sm font-semibold text-primary font-myanmar">🎬 Output ဗီဒီယို</h3>
+
+          {/* Video player */}
+          <video src={result} controls className="w-full rounded-xl border border-primary/20" />
+
           {/* AI Analysis Text */}
           {aiAnalysis && (
             <div className="space-y-2">
@@ -519,22 +827,19 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
               </Button>
             </div>
           )}
-          
-          {/* Original video link */}
-          {result && result !== videoUrl && (
-            <Button onClick={() => downloadVideo(result, "video-multi")} variant="outline" className="w-full">
-              <Download className="w-4 h-4 mr-2" />Download Video
-            </Button>
-          )}
+
+          {/* Download */}
+          <Button onClick={() => downloadVideo(result, "video-multi")} className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white">
+            <Download className="w-4 h-4 mr-2" /> Download Video
+          </Button>
         </motion.div>
       )}
 
       {/* Feature Summary */}
       <div className="bg-secondary/10 rounded-xl p-3 border border-primary/10">
         <p className="text-[10px] text-muted-foreground font-myanmar text-center leading-relaxed">
-          ⚡ FFmpeg.wasm ဖြင့် Browser တွင် တိုက်ရိုက် တည်းဖြတ်ခြင်း • 
-          🤖 Gemini AI ဖြင့် Subtitle/Translation • 
-          🎬 Intro+Outro ပေါင်းစည်းခြင်း • 
+          ⚡ FFmpeg.wasm ဖြင့် Browser တွင် Effects တိုက်ရိုက်ထည့်ခြင်း •
+          📤 ဖိုင်တင် သို့ URL Link ထည့်နိုင်ခြင်း •
           🛡️ Copyright Bypass (Auto Zoom+Flip+Color)
         </p>
       </div>
