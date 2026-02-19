@@ -480,34 +480,73 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
         cmd.push("-i", "tts.mp3");
       }
 
-      if (hasLogoFile) {
+      // Build unified filter_complex to avoid duplicate -filter_complex flags (FFmpeg only accepts ONE)
+      const logoInputIdx = hasTtsAudio ? 2 : 1;
+      const hasLogo = hasLogoFile;
+
+      if (hasLogo) {
         cmd.push("-i", "logo.png");
-        const logoInputIdx = hasTtsAudio ? 2 : 1;
-        const posMap: Record<string, string> = {
-          "bottom-left": "20:H-h-20",
-          "bottom-right": "W-w-20:H-h-20",
-          "top-left": "20:20",
-          "top-right": "W-w-20:20",
-          "center": "(W-w)/2:(H-h)/2",
-        };
-        const logoPos = posMap[logoPosition] || posMap["top-right"];
-        if (filters.length > 0) {
-          cmd.push("-filter_complex", `[0:v]${filters.join(",")}[base];[${logoInputIdx}:v]scale=80:80[logo];[base][logo]overlay=${logoPos}`);
-        } else {
-          cmd.push("-filter_complex", `[${logoInputIdx}:v]scale=80:80[logo];[0:v][logo]overlay=${logoPos}`);
+      }
+
+      const posMap: Record<string, string> = {
+        "bottom-left": "20:H-h-20",
+        "bottom-right": "W-w-20:H-h-20",
+        "top-left": "20:20",
+        "top-right": "W-w-20:20",
+        "center": "(W-w)/2:(H-h)/2",
+      };
+      const logoPos = posMap[logoPosition] || posMap["top-right"];
+
+      // Determine if we need a single unified filter_complex
+      const needsFilterComplex = hasLogo || (hasTtsAudio && (filters.length > 0 || hasLogo));
+
+      if (needsFilterComplex) {
+        // Build single unified filter_complex with video + audio graphs
+        let fc = "";
+
+        // Video graph
+        if (filters.length > 0 && hasLogo) {
+          fc += `[0:v]${filters.join(",")}[base];[${hasLogo ? (hasTtsAudio ? 2 : 1) : 0}:v]scale=80:80[logo];[base][logo]overlay=${logoPos}[vout]`;
+        } else if (hasLogo) {
+          fc += `[${hasLogo ? (hasTtsAudio ? 2 : 1) : 0}:v]scale=80:80[logo];[0:v][logo]overlay=${logoPos}[vout]`;
+        } else if (filters.length > 0) {
+          fc += `[0:v]${filters.join(",")}[vout]`;
         }
-      } else if (filters.length > 0) {
+
+        // Audio graph (TTS mixing)
+        if (hasTtsAudio) {
+          if (fc) fc += ";";
+          fc += `[0:a]volume=0.3[orig];[1:a]volume=1.0[tts];[orig][tts]amix=inputs=2:duration=longest[aout]`;
+        }
+
+        cmd.push("-filter_complex", fc);
+
+        // Map outputs
+        if (fc.includes("[vout]")) {
+          cmd.push("-map", "[vout]");
+        } else {
+          cmd.push("-map", "0:v");
+        }
+        if (hasTtsAudio) {
+          cmd.push("-map", "[aout]");
+        } else {
+          cmd.push("-map", "0:a?");
+        }
+      } else if (filters.length > 0 && !hasTtsAudio) {
+        // Simple case: only video filters, no logo, no TTS
         cmd.push("-vf", filters.join(","));
+      } else if (hasTtsAudio && !hasLogo && filters.length === 0) {
+        // Only TTS audio mixing, no video filters or logo
+        cmd.push("-filter_complex", `[0:a]volume=0.3[orig];[1:a]volume=1.0[tts];[orig][tts]amix=inputs=2:duration=longest[aout]`);
+        cmd.push("-map", "0:v", "-map", "[aout]");
       }
 
       // Memory-optimized encoding settings
       cmd.push("-c:v", "libx264", "-preset", "ultrafast", "-crf", "28");
 
-      if (hasTtsAudio) {
-        // Mix original audio with TTS: lower original volume, add TTS
-        cmd.push("-filter_complex", `[0:a]volume=0.3[orig];[1:a]volume=1.0[tts];[orig][tts]amix=inputs=2:duration=longest[aout]`);
-        cmd.push("-map", "0:v", "-map", "[aout]");
-      } else {
+      if (!hasTtsAudio && !needsFilterComplex) {
+        cmd.push("-c:a", "aac", "-b:a", "128k");
+      } else if (!hasTtsAudio) {
         cmd.push("-c:a", "aac", "-b:a", "128k");
       }
 
@@ -797,19 +836,34 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
           const errMsg = ffmpegErr.message || "";
           console.error("[FFmpeg] Error caught:", errMsg);
 
-          if (errMsg.startsWith("FFMPEG_MEMORY_LIMIT:") || errMsg.startsWith("FFMPEG_PROCESS_FAIL:")) {
+        if (errMsg.startsWith("FFMPEG_MEMORY_LIMIT:") || errMsg.startsWith("FFMPEG_PROCESS_FAIL:") || errMsg.startsWith("FFMPEG_LOAD_FAIL:")) {
             const userMsg = errMsg.split(":").slice(1).join(":");
-            setErrorDetail(`⚠️ Browser FFmpeg Error: ${userMsg}\n\n💡 ဖိုင်အရွယ်အစား သေးသေး သုံးပါ သို့မဟုတ် Effects လျှော့ပါ`);
+            console.warn("[FFmpeg Fallback] Saving original video instead. Error:", userMsg);
+
+            // Fallback: save original video to user's Store
+            if (videoSignedUrl) {
+              try {
+                setProgressMsg("Original video ကို Store သို့ သိမ်းနေသည်...");
+                const fallbackResp = await fetch(videoSignedUrl);
+                if (fallbackResp.ok) {
+                  const fallbackBlob = await fallbackResp.blob();
+                  finalUrl = await uploadAndSave(fallbackBlob);
+                  setAiAnalysis((prev) => (prev || "") + "\n\n⚠️ Effects apply မရပါ - original video ကို Store တွင် ထည့်ပြီးပါပြီ");
+                } else {
+                  finalUrl = videoSignedUrl;
+                  setAiAnalysis((prev) => (prev || "") + "\n\n⚠️ FFmpeg effects apply မရပါ - original video link ပြပါမည်");
+                }
+              } catch {
+                finalUrl = videoSignedUrl;
+                setAiAnalysis((prev) => (prev || "") + "\n\n⚠️ FFmpeg effects apply မရပါ - original video ပြပါမည်");
+              }
+            }
+
             toast({
-              title: "FFmpeg Error",
-              description: userMsg,
+              title: "⚠️ Effects apply မရပါ",
+              description: "Original video ကို Store တွင် ထည့်ပြီးပါပြီ",
               variant: "destructive",
             });
-            // Still try to return the raw video if available
-            if (videoSignedUrl) {
-              finalUrl = videoSignedUrl;
-              setAiAnalysis((prev) => (prev || "") + "\n\n⚠️ FFmpeg effects apply မရပါ - original video ပြပါမည်");
-            }
           } else {
             throw ffmpegErr;
           }
@@ -871,7 +925,8 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
       toast({ title: "အမှားရှိပါသည်", description: errorMsg, variant: "destructive" });
     } finally {
       setIsProcessing(false);
-      if (!result) { setProgress(0); setProgressMsg(""); }
+      // Don't reset progress on error - keep error detail visible for debugging
+      // User can dismiss by starting a new generation
       if (pollRef.current) {
         clearInterval(pollRef.current);
         pollRef.current = null;
@@ -1263,7 +1318,7 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
           <><Play className="w-4 h-4 mr-2" />{hasAnyEffect ? `Generate + Effects (${cost} Credits)` : `Generate Video (${cost} Credits)`}</>
         )}
       </Button>
-      <VideoLimitWarning />
+      <VideoLimitWarning maxSeconds={300} />
 
       {/* TTS Audio Result */}
       {ttsAudioUrl && (
