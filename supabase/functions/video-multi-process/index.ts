@@ -157,14 +157,16 @@ serve(async (req) => {
         });
       }
 
-      const REPLICATE_KEY = Deno.env.get("REPLICATE_API_KEY");
+      // Read Replicate key from app_settings first, fallback to env
+      const { data: repSetting } = await supabaseAdmin
+        .from("app_settings").select("value").eq("key", "replicate_api_token").maybeSingle();
+      const REPLICATE_KEY = repSetting?.value || Deno.env.get("REPLICATE_API_KEY");
       if (!REPLICATE_KEY) {
-        return new Response(JSON.stringify({ error: "Replicate API key not configured" }), {
+        return new Response(JSON.stringify({ error: "Replicate API key not configured. Set it in Admin > API Management or as an environment secret." }), {
           status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
-      // Use ProPainter for video object removal
       console.log(`Starting object removal for: ${videoUrl.substring(0, 80)}...`);
 
       const replicateResp = await fetch("https://api.replicate.com/v1/predictions", {
@@ -185,7 +187,12 @@ serve(async (req) => {
       if (!replicateResp.ok) {
         const errText = await replicateResp.text();
         console.error("Replicate error:", replicateResp.status, errText);
-        return new Response(JSON.stringify({ error: "Object removal failed to start" }), {
+        const safeSnippet = (errText || "").substring(0, 500).replace(/Bearer\s+\S+/gi, "Bearer ***");
+        return new Response(JSON.stringify({
+          error: `Object removal failed (${replicateResp.status})`,
+          replicateStatus: replicateResp.status,
+          replicateBody: safeSnippet,
+        }), {
           status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }

@@ -302,6 +302,9 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
     pollRef.current = setInterval(async () => {
       pollCount++;
       try {
+        // Trigger server-side job processing before reading status
+        await supabase.functions.invoke("check-job-status").catch(() => {});
+
         const { data: job } = await supabase
           .from("generation_jobs")
           .select("status, output_url, error_message, input_params")
