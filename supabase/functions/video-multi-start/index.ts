@@ -70,58 +70,69 @@ serve(async (req) => {
     apiKeys?.forEach((k: any) => { keyMap[k.key] = k.value || ""; });
     const REPLICATE_API_KEY = keyMap.replicate_api_token || Deno.env.get("REPLICATE_API_KEY");
 
-    if (!REPLICATE_API_KEY) {
-      return new Response(JSON.stringify({ error: "Replicate API key not configured" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     let externalJobId: string | null = null;
     let toolType = "video_multi_subtitle";
+    let whisperSkipped = false;
+    let whisperSkipReason = "";
 
     if (autoSubtitles) {
-      // Start Whisper transcription via Replicate (using official model endpoint)
-      console.log(`Starting Whisper for: ${videoUrl.substring(0, 80)}...`);
-      try {
-        const whisperResp = await fetch("https://api.replicate.com/v1/models/openai/whisper/predictions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${REPLICATE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            input: {
-              audio: videoUrl,
-              model: "large-v3",
-              language: "auto",
-              translate: false,
-              temperature: 0,
-              transcription: "srt",
-            },
-          }),
-        });
+      if (!REPLICATE_API_KEY) {
+        // No API key — skip subtitles, don't crash
+        console.warn("Replicate API key not configured — skipping Whisper subtitles");
+        whisperSkipped = true;
+        whisperSkipReason = "Replicate API key not configured";
+      } else {
+        // Start Whisper transcription with 10-second timeout
+        console.log(`Starting Whisper for: ${videoUrl.substring(0, 80)}...`);
+        try {
+          const abortController = new AbortController();
+          const timeoutId = setTimeout(() => abortController.abort(), 10000); // 10s timeout
 
-        if (!whisperResp.ok) {
-          const errText = await whisperResp.text();
-          console.error("Whisper start error:", whisperResp.status, errText);
-          // Don't crash — continue without subtitles
-          console.warn("Whisper failed, continuing without auto-subtitles");
-        } else {
-          const whisperData = await whisperResp.json();
-          externalJobId = whisperData.id;
-          console.log(`Whisper prediction started: ${externalJobId}`);
+          const whisperResp = await fetch("https://api.replicate.com/v1/models/openai/whisper/predictions", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${REPLICATE_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              input: {
+                audio: videoUrl,
+                model: "large-v3",
+                language: "auto",
+                translate: false,
+                temperature: 0,
+                transcription: "srt",
+              },
+            }),
+            signal: abortController.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          if (!whisperResp.ok) {
+            const errText = await whisperResp.text();
+            console.error("Whisper start error:", whisperResp.status, errText);
+            whisperSkipped = true;
+            whisperSkipReason = `Whisper API returned ${whisperResp.status}`;
+          } else {
+            const whisperData = await whisperResp.json();
+            externalJobId = whisperData.id;
+            console.log(`Whisper prediction started: ${externalJobId}`);
+          }
+        } catch (whisperErr: any) {
+          const isTimeout = whisperErr.name === "AbortError";
+          console.error("Whisper exception:", isTimeout ? "10s timeout exceeded" : whisperErr.message);
+          whisperSkipped = true;
+          whisperSkipReason = isTimeout ? "Whisper service timeout (10s)" : whisperErr.message;
         }
-      } catch (whisperErr: any) {
-        console.error("Whisper exception:", whisperErr.message);
-        console.warn("Whisper failed, continuing without auto-subtitles");
       }
     }
 
-    // Create generation job
+    // Create generation job regardless of Whisper success
     const { data: job, error: jobErr } = await supabaseAdmin.from("generation_jobs").insert({
       user_id: user.id,
       tool_type: toolType,
-      status: "processing",
+      status: whisperSkipped ? "failed" : "processing",
       credits_cost: creditCost,
       credits_deducted: false,
       external_job_id: externalJobId,
@@ -131,6 +142,8 @@ serve(async (req) => {
         subtitleLanguage,
         isAdmin: userIsAdmin,
         tool_name: "Video Multi-Tool",
+        whisperSkipped,
+        whisperSkipReason,
       },
     }).select("id").single();
 
@@ -141,12 +154,16 @@ serve(async (req) => {
       });
     }
 
-    console.log(`Job created: ${job.id}, externalId: ${externalJobId}`);
+    console.log(`Job created: ${job.id}, externalId: ${externalJobId}, whisperSkipped: ${whisperSkipped}`);
 
     return new Response(JSON.stringify({
       success: true,
       jobId: job.id,
-      message: "Processing started. Poll check-job-status for updates.",
+      whisperSkipped,
+      whisperSkipReason: whisperSkipped ? whisperSkipReason : undefined,
+      message: whisperSkipped
+        ? "Subtitles skipped due to service error. Video will continue without subtitles."
+        : "Processing started. Poll check-job-status for updates.",
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (error: any) {
