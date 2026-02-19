@@ -516,7 +516,7 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
         // Audio graph (TTS mixing)
         if (hasTtsAudio) {
           if (fc) fc += ";";
-          fc += `[0:a]volume=0.3[orig];[1:a]volume=1.0[tts];[orig][tts]amix=inputs=2:duration=longest[aout]`;
+          fc += `[0:a]volume=0.3[orig];[1:a]volume=1.0[tts];[orig][tts]amix=inputs=2:duration=shortest:dropout_transition=2[aout]`;
         }
 
         cmd.push("-filter_complex", fc);
@@ -537,17 +537,17 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
         cmd.push("-vf", filters.join(","));
       } else if (hasTtsAudio && !hasLogo && filters.length === 0) {
         // Only TTS audio mixing, no video filters or logo
-        cmd.push("-filter_complex", `[0:a]volume=0.3[orig];[1:a]volume=1.0[tts];[orig][tts]amix=inputs=2:duration=longest[aout]`);
+        cmd.push("-filter_complex", `[0:a]volume=0.3[orig];[1:a]volume=1.0[tts];[orig][tts]amix=inputs=2:duration=shortest:dropout_transition=2[aout]`);
         cmd.push("-map", "0:v", "-map", "[aout]");
       }
 
       // Memory-optimized encoding settings
       cmd.push("-c:v", "libx264", "-preset", "ultrafast", "-crf", "28");
 
-      if (!hasTtsAudio && !needsFilterComplex) {
-        cmd.push("-c:a", "aac", "-b:a", "128k");
-      } else if (!hasTtsAudio) {
-        cmd.push("-c:a", "aac", "-b:a", "128k");
+      cmd.push("-c:a", "aac", "-b:a", "128k");
+
+      if (hasTtsAudio) {
+        cmd.push("-shortest");
       }
 
       cmd.push("-movflags", "+faststart", "-y", mainOutputName);
