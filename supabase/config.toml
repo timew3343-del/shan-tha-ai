@@ -107,3 +107,6 @@ verify_jwt = false
 
 [functions.video-multi-start]
 verify_jwt = false
+
+[functions.video-multi-process]
+verify_jwt = false

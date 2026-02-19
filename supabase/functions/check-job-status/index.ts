@@ -695,6 +695,58 @@ serve(async (req) => {
           }
         }
 
+        // ===== VIDEO MULTI OBJECT REMOVAL JOBS =====
+        if (job.tool_type === "video_multi_object_removal" && job.external_job_id) {
+          console.log(`Polling Replicate for object removal job ${job.id}`);
+          if (REPLICATE_KEY) {
+            try {
+              const pollResp = await fetch(`https://api.replicate.com/v1/predictions/${job.external_job_id}`, {
+                headers: { Authorization: `Bearer ${REPLICATE_KEY}` },
+              });
+              if (pollResp.ok) {
+                const pollData = await pollResp.json();
+                console.log(`Object removal status: ${pollData.status}`);
+                if (pollData.status === "succeeded") {
+                  const outputUrl = typeof pollData.output === "string" ? pollData.output : pollData.output?.[0] || null;
+                  if (outputUrl) {
+                    const storedUrl = await uploadToStorage(supabaseAdmin, outputUrl, job.user_id, ".mp4", "video/mp4");
+                    const isAdminUser = params?.isAdmin === true;
+                    if (!isAdminUser && !job.credits_deducted && job.credits_cost > 0) {
+                      await supabaseAdmin.rpc("deduct_user_credits", {
+                        _user_id: job.user_id,
+                        _amount: job.credits_cost,
+                        _action: "Video Multi-Tool (Object Removal)",
+                      });
+                    }
+                    await supabaseAdmin.from("user_outputs").insert({
+                      user_id: job.user_id,
+                      tool_id: "video_multi",
+                      tool_name: "Video Multi-Tool (Object Removal)",
+                      output_type: "video",
+                      file_url: storedUrl,
+                    });
+                    await supabaseAdmin.from("generation_jobs").update({
+                      status: "completed",
+                      output_url: storedUrl,
+                      credits_deducted: true,
+                    }).eq("id", job.id);
+                    console.log(`Object removal job ${job.id} completed!`);
+                  }
+                  processed++;
+                } else if (pollData.status === "failed" || pollData.status === "canceled") {
+                  await supabaseAdmin.from("generation_jobs").update({
+                    status: "failed",
+                    error_message: pollData.error || `Object removal ${pollData.status}`,
+                  }).eq("id", job.id);
+                  processed++;
+                }
+              }
+            } catch (e: any) {
+              console.warn(`Object removal poll error: ${e.message}`);
+            }
+          }
+        }
+
         // Mark old stuck jobs as failed (older than 30 minutes)
         const jobAge = Date.now() - new Date(job.created_at).getTime();
         if (jobAge > 30 * 60 * 1000 && job.status !== "completed" && job.status !== "failed") {
