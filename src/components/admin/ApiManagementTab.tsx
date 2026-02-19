@@ -116,8 +116,10 @@ export const ApiManagementTab = () => {
   const [keyInputs, setKeyInputs] = useState<Record<string, string>>({});
   // Show/hide password for each key
   const [showKey, setShowKey] = useState<Record<string, boolean>>({});
-  // Saving states
-  const [isSavingKeys, setIsSavingKeys] = useState(false);
+  // Saving states per key
+  const [savingKeyId, setSavingKeyId] = useState<string | null>(null);
+  // Raw (unmasked) values fetched from DB
+  const [rawValues, setRawValues] = useState<Record<string, string>>({});
 
   // Daily free uses
   const [dailyFreeUses, setDailyFreeUses] = useState(3);
@@ -233,28 +235,60 @@ export const ApiManagementTab = () => {
     }
   };
 
-  const saveAllKeys = async () => {
-    setIsSavingKeys(true);
+  const saveIndividualKey = async (settingKey: string, label: string) => {
+    const val = keyInputs[settingKey];
+    if (!val || val.startsWith("••••")) {
+      toast({ title: "Key ထည့်ပါ", description: `${label} key အသစ်ထည့်ပြီးမှ save လုပ်ပါ`, variant: "destructive" });
+      return;
+    }
+    setSavingKeyId(settingKey);
     try {
-      const allSettingKeys = [
-        ...API_KEYS.map(a => a.settingKey),
-        ...EXTRA_KEYS.map(e => e.settingKey),
-      ];
-
-      for (const sk of allSettingKeys) {
-        const val = keyInputs[sk];
-        if (!val || val.startsWith("••••")) continue; // skip masked/empty
-        await supabase.from("app_settings")
-          .upsert({ key: sk, value: val }, { onConflict: "key" });
-      }
-
-      toast({ title: "API Keys သိမ်းဆည်းပြီးပါပြီ" });
-      await loadConfig(); // reload to re-mask
+      await supabase.from("app_settings")
+        .upsert({ key: settingKey, value: val }, { onConflict: "key" });
+      toast({ title: `${label} Key သိမ်းဆည်းပြီးပါပြီ` });
+      // Update configured status
+      const apiDef = API_KEYS.find(a => a.settingKey === settingKey);
+      if (apiDef) setKeyConfigured(prev => ({ ...prev, [apiDef.key]: true }));
+      else setKeyConfigured(prev => ({ ...prev, [settingKey]: true }));
+      // Re-mask
+      const maskKey = (v: string) => v && v.length > 8 ? "••••••••" + v.slice(-4) : v ? "••••••••" : "";
+      setKeyInputs(prev => ({ ...prev, [settingKey]: maskKey(val) }));
+      setRawValues(prev => ({ ...prev, [settingKey]: val }));
+      setShowKey(prev => ({ ...prev, [settingKey]: false }));
     } catch (error) {
-      console.error("Error saving API keys:", error);
-      toast({ title: "အမှား", description: "API Keys သိမ်းဆည်းရာတွင် ပြဿနာရှိပါသည်", variant: "destructive" });
+      console.error(`Error saving ${label} key:`, error);
+      toast({ title: "အမှား", description: `${label} Key သိမ်းဆည်းရာတွင် ပြဿနာရှိပါသည်`, variant: "destructive" });
     } finally {
-      setIsSavingKeys(false);
+      setSavingKeyId(null);
+    }
+  };
+
+  const handleToggleShowKey = async (settingKey: string) => {
+    const currentlyShowing = showKey[settingKey] || false;
+    if (currentlyShowing) {
+      // Hide: re-mask
+      const raw = rawValues[settingKey];
+      if (raw) {
+        const maskKey = (v: string) => v && v.length > 8 ? "••••••••" + v.slice(-4) : v ? "••••••••" : "";
+        setKeyInputs(prev => ({ ...prev, [settingKey]: maskKey(raw) }));
+      }
+      setShowKey(prev => ({ ...prev, [settingKey]: false }));
+    } else {
+      // Show: fetch real value from DB
+      try {
+        const { data } = await supabase
+          .from("app_settings")
+          .select("value")
+          .eq("key", settingKey)
+          .maybeSingle();
+        if (data?.value) {
+          setRawValues(prev => ({ ...prev, [settingKey]: data.value! }));
+          setKeyInputs(prev => ({ ...prev, [settingKey]: data.value! }));
+        }
+      } catch (e) {
+        console.error("Error fetching key:", e);
+      }
+      setShowKey(prev => ({ ...prev, [settingKey]: true }));
     }
   };
 
@@ -422,8 +456,10 @@ export const ApiManagementTab = () => {
               value={keyInputs[api.settingKey] || ""}
               onChange={val => setKeyInputs(prev => ({ ...prev, [api.settingKey]: val }))}
               show={showKey[api.settingKey] || false}
-              onToggleShow={() => setShowKey(prev => ({ ...prev, [api.settingKey]: !prev[api.settingKey] }))}
+              onToggleShow={() => handleToggleShowKey(api.settingKey)}
               configured={keyConfigured[api.key] || false}
+              onSave={() => saveIndividualKey(api.settingKey, api.label)}
+              isSaving={savingKeyId === api.settingKey}
             />
           ))}
 
@@ -436,15 +472,12 @@ export const ApiManagementTab = () => {
               value={keyInputs[extra.settingKey] || ""}
               onChange={val => setKeyInputs(prev => ({ ...prev, [extra.settingKey]: val }))}
               show={showKey[extra.settingKey] || false}
-              onToggleShow={() => setShowKey(prev => ({ ...prev, [extra.settingKey]: !prev[extra.settingKey] }))}
+              onToggleShow={() => handleToggleShowKey(extra.settingKey)}
               configured={keyConfigured[extra.settingKey] || false}
+              onSave={() => saveIndividualKey(extra.settingKey, extra.label)}
+              isSaving={savingKeyId === extra.settingKey}
             />
           ))}
-
-          <Button onClick={saveAllKeys} disabled={isSavingKeys} className="w-full gradient-gold text-primary-foreground">
-            {isSavingKeys ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-            API Keys အားလုံး သိမ်းဆည်းမည်
-          </Button>
         </div>
       )}
 
@@ -567,10 +600,11 @@ const SectionHeader = ({
 );
 
 const KeyInput = ({
-  label, settingKey, value, onChange, show, onToggleShow, configured,
+  label, settingKey, value, onChange, show, onToggleShow, configured, onSave, isSaving,
 }: {
   label: string; settingKey: string; value: string; onChange: (v: string) => void;
   show: boolean; onToggleShow: () => void; configured: boolean;
+  onSave: () => void; isSaving: boolean;
 }) => (
   <div className="rounded-xl p-3 border border-border/30">
     <div className="flex items-center justify-between mb-1.5">
@@ -581,21 +615,26 @@ const KeyInput = ({
         {configured ? "✓ Set" : "Not Set"}
       </span>
     </div>
-    <div className="relative">
-      <Input
-        type={show ? "text" : "password"}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={`${label} API Key...`}
-        className="pr-9 h-8 text-xs"
-      />
-      <button
-        type="button"
-        onClick={onToggleShow}
-        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-      >
-        {show ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-      </button>
+    <div className="flex items-center gap-2">
+      <div className="relative flex-1">
+        <Input
+          type={show ? "text" : "password"}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder={`${label} API Key...`}
+          className="pr-9 h-8 text-xs"
+        />
+        <button
+          type="button"
+          onClick={onToggleShow}
+          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+        >
+          {show ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+        </button>
+      </div>
+      <Button onClick={onSave} disabled={isSaving} size="sm" className="h-8 px-3 gradient-gold text-primary-foreground shrink-0">
+        {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+      </Button>
     </div>
   </div>
 );
