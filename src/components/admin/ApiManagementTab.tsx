@@ -71,6 +71,14 @@ const API_KEYS: ApiKeyConfig[] = [
     tasks: ["Video Rendering", "Captions", "Video Export"],
   },
   {
+    key: "rapidapi",
+    label: "RapidAPI (Downloader)",
+    description: "YouTube/TikTok/FB Video Download",
+    settingKey: "rapidapi_key",
+    toggleKey: "api_enabled_rapidapi",
+    tasks: ["Video Download", "Video Multi-Tool Source Fetch"],
+  },
+  {
     key: "acrcloud",
     label: "ACRCloud",
     description: "Copyright Detection, Music Recognition",
@@ -101,6 +109,8 @@ const EXTRA_KEYS = [
   { settingKey: "stripe_publishable_key", label: "Stripe Publishable Key" },
   { settingKey: "stripe_secret_key", label: "Stripe Secret Key" },
   { settingKey: "acrcloud_access_secret", label: "ACRCloud Access Secret" },
+  { settingKey: "rapidapi_host", label: "RapidAPI Host (X-RapidAPI-Host)" },
+  { settingKey: "rapidapi_base_url", label: "RapidAPI Base URL (Downloader)" },
 ];
 
 // ─── Component ───────────────────────────────────────────────

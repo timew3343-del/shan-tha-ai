@@ -57,6 +57,14 @@ const API_KEYS: ApiKeyConfig[] = [
     tasks: ["Video Rendering", "Captions", "Video Export"],
   },
   {
+    key: "rapidapi",
+    label: "RapidAPI (Downloader)",
+    description: "YouTube/TikTok/FB Video Download",
+    settingKey: "rapidapi_key",
+    toggleKey: "api_enabled_rapidapi",
+    tasks: ["Video Download", "Video Multi-Tool Source Fetch"],
+  },
+  {
     key: "acrcloud",
     label: "ACRCloud",
     description: "Copyright Detection, Music Recognition",
