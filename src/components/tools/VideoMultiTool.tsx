@@ -808,12 +808,14 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
           },
         });
 
-        if (orError) throw new Error(`Object removal error: ${orError.message}`);
-        if (orData?.error) throw new Error(orData.error);
-
-        if (orData?.jobId) {
+        if (orError || orData?.error) {
+          const errMsg = orError?.message || orData?.error || "Unknown error";
+          console.warn("Object removal skipped:", errMsg);
+          setAiAnalysis((prev) => (prev || "") + `\n\n⚠️ Object removal skip: ${errMsg}`);
+          // Don't throw — continue pipeline without object removal
+        } else if (orData?.jobId) {
           setProgressMsg("🧹 Object removal processing... (Background)");
-          await new Promise<void>((resolve, reject) => {
+          await new Promise<void>((resolve) => {
             startJobPolling(orData.jobId, (completedJob) => {
               if (completedJob.output_url) {
                 videoSignedUrl = completedJob.output_url;
@@ -821,14 +823,13 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
               }
               resolve();
             }, (errMsg) => {
-              // Don't fail entire pipeline, just note the error
               setAiAnalysis((prev) => (prev || "") + `\n\n⚠️ Object removal: ${errMsg}`);
               resolve();
             });
 
             setTimeout(() => {
               if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-              resolve(); // Don't fail, just skip
+              resolve();
             }, 10 * 60 * 1000);
           });
         }
