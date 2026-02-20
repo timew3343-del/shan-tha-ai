@@ -227,7 +227,7 @@ export const FullScreenChat = ({ userId }: FullScreenChatProps) => {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)] pb-16 bg-background">
+    <div className="flex flex-col h-[calc(100vh-140px)] pb-20 bg-background">
       {/* Header - shows current bot */}
       <div className="flex items-center gap-3 p-4 border-b border-border/50 bg-card/80 backdrop-blur-sm">
         <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${currentBot.color} flex items-center justify-center text-white`}>

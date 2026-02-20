@@ -5,7 +5,7 @@ import {
   BarChart3, Download, Settings, Activity, Sun, Moon,
   Bell, TrendingUp, DollarSign, Building, Brain,
   Save, Key, Plus, Trash2, Wallet, CreditCard as CardIcon, Image, X, Loader2,
-  Gift, ExternalLink, AlertTriangle, Power, Eye, EyeOff, Play, Settings2, Tag, MessageSquare, Film, Zap
+  Gift, ExternalLink, AlertTriangle, Power, Eye, EyeOff, Play, Settings2, Tag, MessageSquare, Film, Zap, ShieldCheck, Bot
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -82,6 +82,8 @@ export const Admin = () => {
   const [showRejectModal, setShowRejectModal] = useState<string | null>(null);
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [loadingScreenshot, setLoadingScreenshot] = useState<string | null>(null);
+  const [aiVerifyingId, setAiVerifyingId] = useState<string | null>(null);
+  const [aiVerifyResults, setAiVerifyResults] = useState<Record<string, { verified: boolean; confidence: number; reason: string; detected_amount?: string; detected_service?: string }>>({});
   
   // Pricing state - loaded from database
   const [packages, setPackages] = useState<PricingPackage[]>([]);
@@ -839,6 +841,45 @@ export const Admin = () => {
     }
   };
 
+  const handleAiVerify = async (tx: PendingTransaction) => {
+    if (!tx.screenshot_url) {
+      toast({ title: "ပြေစာမရှိပါ", variant: "destructive" });
+      return;
+    }
+    setAiVerifyingId(tx.id);
+    try {
+      // First get a signed URL for the screenshot
+      let path = tx.screenshot_url;
+      if (tx.screenshot_url.includes('/payment-screenshots/')) {
+        path = tx.screenshot_url.split('/payment-screenshots/')[1];
+      }
+      const { data: urlData, error: urlErr } = await supabase.functions.invoke("get-signed-url", { body: { path } });
+      if (urlErr || urlData?.error) throw new Error("Cannot load screenshot");
+
+      const { data, error } = await supabase.functions.invoke("verify-payment-slip", {
+        body: {
+          transactionId: tx.id,
+          screenshotUrl: urlData.signedUrl,
+          expectedAmount: tx.amount_mmk,
+          packageName: tx.package_name,
+        },
+      });
+      if (error) throw error;
+      
+      setAiVerifyResults(prev => ({ ...prev, [tx.id]: data }));
+      
+      if (data.verified) {
+        toast({ title: "AI စစ်ဆေးပြီး ✅", description: `${data.reason} (${Math.round(data.confidence * 100)}% confident)` });
+      } else {
+        toast({ title: "AI စစ်ဆေးပြီး ⚠️", description: data.reason, variant: "destructive" });
+      }
+    } catch (err: any) {
+      toast({ title: "AI စစ်ဆေးမှု မအောင်မြင်ပါ", description: err.message, variant: "destructive" });
+    } finally {
+      setAiVerifyingId(null);
+    }
+  };
+
   const handleExportCSV = () => {
     const successTx = transactions.filter(t => t.status === "success");
     const csvContent = [
@@ -1032,6 +1073,45 @@ export const Admin = () => {
                         </div>
                       )}
 
+                      {/* Screenshot & AI Verify */}
+                      <div className="flex gap-2 mb-3">
+                        <Button
+                          onClick={() => handleViewScreenshot(tx.screenshot_url, tx.id)}
+                          disabled={loadingScreenshot === tx.id}
+                          variant="outline" size="sm" className="flex-1 text-xs rounded-xl"
+                        >
+                          {loadingScreenshot === tx.id ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Eye className="w-3 h-3 mr-1" />}
+                          ပြေစာကြည့်
+                        </Button>
+                        <Button
+                          onClick={() => handleAiVerify(tx)}
+                          disabled={aiVerifyingId === tx.id || !tx.screenshot_url}
+                          variant="outline" size="sm" className="flex-1 text-xs rounded-xl border-primary/30"
+                        >
+                          {aiVerifyingId === tx.id ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Bot className="w-3 h-3 mr-1" />}
+                          AI စစ်ဆေး
+                        </Button>
+                      </div>
+
+                      {/* AI Verify Result */}
+                      {aiVerifyResults[tx.id] && (
+                        <div className={`mb-3 p-2 rounded-xl text-xs flex items-center gap-2 ${
+                          aiVerifyResults[tx.id].verified 
+                            ? "bg-green-500/10 border border-green-500/30 text-green-600 dark:text-green-400" 
+                            : "bg-destructive/10 border border-destructive/30 text-destructive"
+                        }`}>
+                          {aiVerifyResults[tx.id].verified ? <ShieldCheck className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+                          <div className="flex-1 min-w-0">
+                            <span className="font-semibold">{aiVerifyResults[tx.id].verified ? "AI လက်ခံ ✅" : "AI ငြင်း ❌"}</span>
+                            <span className="ml-1 opacity-75">({Math.round(aiVerifyResults[tx.id].confidence * 100)}%)</span>
+                            {aiVerifyResults[tx.id].detected_amount && (
+                              <span className="ml-1">• {aiVerifyResults[tx.id].detected_amount}</span>
+                            )}
+                            <p className="truncate mt-0.5">{aiVerifyResults[tx.id].reason}</p>
+                          </div>
+                        </div>
+                      )}
+
                       <div className="flex gap-2">
                         <Button
                           onClick={() => handleApprove(tx)}
@@ -1094,6 +1174,18 @@ export const Admin = () => {
                 </div>
               )}
             </div>
+
+            {/* Screenshot Modal */}
+            {screenshotUrl && (
+              <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setScreenshotUrl(null)}>
+                <div className="relative max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
+                  <button onClick={() => setScreenshotUrl(null)} className="absolute -top-3 -right-3 z-10 w-8 h-8 bg-destructive rounded-full flex items-center justify-center text-white">
+                    <X className="w-4 h-4" />
+                  </button>
+                  <img src={screenshotUrl} alt="Payment Screenshot" className="w-full rounded-xl" />
+                </div>
+              </div>
+            )}
           </TabsContent>
 
           {/* Analytics / Financial Dashboard Tab - includes Audit, Pricing, Campaign, Promo, Feedback */}
