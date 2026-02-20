@@ -236,14 +236,16 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
           if (job.output_url && job.output_url !== "srt_ready") {
             const jobToolType = job.tool_type as string;
             if (jobToolType === "song_mtv_video") {
-              // MTV video job → always video
               setResultVideo(job.output_url);
+              saveOutput("video", "MTV Video", undefined, job.output_url);
             } else if (jobToolType === "song_music" || jobToolType === "song_mtv_full") {
-              // Song job → audio
-              if (!isFullAuto) setResultAudio(job.output_url);
+              if (!isFullAuto) {
+                setResultAudio(job.output_url);
+                saveOutput("audio", "AI Song", undefined, job.output_url);
+              }
             } else {
-              // Fallback
               setResultVideo(job.output_url);
+              saveOutput("video", "Generated Video", undefined, job.output_url);
             }
           }
 
@@ -259,7 +261,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
           // Show toast ONCE only
           if (!toastShownRef.current) {
             toastShownRef.current = true;
-            toast({ title: "အောင်မြင်ပါသည် 🎵", description: "ဖန်တီးပြီးပါပြီ" });
+            toast({ title: "အောင်မြင်ပါသည် 🎵", description: "သီချင်းဖန်တီးပြီးပါပြီ! Store ထဲတွင်လည်း သိမ်းထားပါသည်" });
           }
 
         } else if (job?.status === "failed") {
@@ -320,6 +322,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
     setProgress(5);
     setStatusText("စာသားဖန်တီးနေသည်...");
 
+    let pollingStarted = false;
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -327,6 +330,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
         setIsLoading(false);
         return;
       }
+
 
       const requestBody = JSON.stringify({
         serviceOption,
@@ -372,6 +376,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
         if (result.lyrics) setResultLyrics(result.lyrics);
         
         // Start polling - pass isFullAuto flag for chaining
+        pollingStarted = true;
         startPolling(result.jobId, result.lyrics, serviceOption === "full_auto");
         return;
       }
@@ -392,7 +397,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
         toast({ title: "အမှားရှိပါသည်", description: error.message, variant: "destructive" });
       }
     } finally {
-      if (!pollingJobId) {
+      if (!pollingStarted) {
         setIsLoading(false);
       }
     }
