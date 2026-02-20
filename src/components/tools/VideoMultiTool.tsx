@@ -666,6 +666,8 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
     try {
       let videoBlob: Blob | null = null;
       let videoSignedUrl: string | null = null;
+      // CRITICAL: Use local variable for SRT content — React state won't update within same async fn
+      let localSrtContent: string | null = null;
 
       // ── Step 1: Get raw video data ──
       if (sourceMode === "url") {
@@ -732,17 +734,17 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
           // Check if Whisper was skipped by server (graceful skip)
           if (startData?.whisperSkipped) {
             console.warn("[Subtitles] Skipped:", startData.whisperSkipReason);
-            toast({ title: "⚠️ စာတန်းထိုး ချန်လှပ်လိုက်ပါပြီ", description: startData.whisperSkipReason || "Service error - ဗီဒီယိုကို ဆက်လုပ်ပါမည်" });
+            toast({ title: "⚠️ စာတန်းထိုး မအောင်မြင်ပါ", description: startData.whisperSkipReason || "Service error - ဗီဒီယိုကို ဆက်လုပ်ပါမည်" });
             // Continue without subtitles — don't throw
           } else if (startError || startData?.error) {
             // Edge function returned error but we don't crash
             console.error("[Subtitles] Start error:", startError?.message || startData?.error);
-            toast({ title: "⚠️ စာတန်းထိုး ချန်လှပ်လိုက်ပါပြီ", description: "Subtitle service error - ဗီဒီယိုကို ဆက်လုပ်ပါမည်" });
+            toast({ title: "⚠️ စာတန်းထိုး မအောင်မြင်ပါ", description: "Subtitle service error - ဗီဒီယိုကို ဆက်လုပ်ပါမည်" });
           } else {
             const jobId = startData?.jobId;
             if (!jobId) {
               console.error("[Subtitles] No job ID returned");
-              toast({ title: "⚠️ စာတန်းထိုး ချန်လှပ်လိုက်ပါပြီ", description: "Job ID not returned" });
+              toast({ title: "⚠️ စာတန်းထိုး မအောင်မြင်ပါ", description: "Job ID not returned" });
             } else {
               setProgress(30);
               setProgressMsg("Whisper ASR ခွဲခြမ်းနေသည်... (၁-၃ မိနစ် ကြာနိုင်ပါသည်)");
@@ -751,21 +753,22 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
                 startJobPolling(jobId, (completedJob) => {
                   const params = completedJob.input_params as any;
                   if (params?.srtContent) {
+                    localSrtContent = params.srtContent; // Set local variable for TTS step
                     setSrtContent(params.srtContent);
                     setAiAnalysis(`✅ စာတန်းထိုး ပြီးပါပြီ!\n\n🌐 ရှာတွေ့သောဘာသာ: ${params.detectedLanguage || "auto"}\n📝 ဘာသာပြန်: ${params.translatedTo || subtitleLanguage}\n📄 SRT စာကြောင်း: ${(params.srtContent || "").split("\n").filter((l: string) => l.trim()).length} ကြောင်း`);
                   }
                   resolve();
                 }, (errMsg) => {
                   console.warn("[Subtitles] Job failed:", errMsg);
-                  toast({ title: "⚠️ စာတန်းထိုး ချန်လှပ်လိုက်ပါပြီ", description: errMsg });
+                  toast({ title: "⚠️ စာတန်းထိုး မအောင်မြင်ပါ", description: errMsg });
                   resolve(); // Don't reject — continue pipeline
                 });
 
                 setTimeout(() => {
                   if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
                   console.warn("[Subtitles] Timed out after 10 min, continuing...");
-                  toast({ title: "⚠️ စာတန်းထိုး timeout", description: "ဗီဒီယိုကို ဆက်လုပ်ပါမည်" });
-                  resolve(); // Don't reject — continue pipeline
+                  toast({ title: "⚠️ စာတန်းထိုး timeout", description: "အချိန်ကုန်သွားပါပြီ - ဗီဒီယိုကို ဆက်လုပ်ပါမည်" });
+                  resolve();
                 }, 10 * 60 * 1000);
               });
             }
@@ -773,20 +776,20 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
         } catch (subtitleErr: any) {
           // Catch ALL subtitle errors — never crash the whole process
           console.error("[Subtitles] Exception caught, skipping:", subtitleErr.message);
-          toast({ title: "⚠️ စာတန်းထိုး ချန်လှပ်လိုက်ပါပြီ", description: subtitleErr.message || "Service error" });
+          toast({ title: "⚠️ စာတန်းထိုး မအောင်မြင်ပါ", description: subtitleErr.message || "Service error" });
         }
       }
 
       // ── Step 3: TTS Audio (server-side) ──
       let generatedTtsUrl: string | null = null;
-      if (ttsEnabled && srtContent) {
+      if (ttsEnabled && localSrtContent) {
         setProgress(55);
         setProgressMsg("🔊 TTS Voice ထုတ်နေသည်...");
 
         const { data: ttsData, error: ttsError } = await supabase.functions.invoke("video-multi-process", {
           body: {
             action: "tts",
-            srtText: srtContent,
+            srtText: localSrtContent,
             voice,
             language,
             creditCost: 3,
