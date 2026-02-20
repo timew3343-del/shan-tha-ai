@@ -98,6 +98,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
   const [subtitleColor, setSubtitleColor] = useState("#FFFFFF");
   const [audioFile, setAudioFile] = useState<string | null>(null);
   const [audioFileName, setAudioFileName] = useState("");
+  const [audioDurationSec, setAudioDurationSec] = useState<number>(0);
 
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -287,10 +288,44 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
         toast({ title: "ဖိုင်ကြီးလွန်းပါသည်", description: "20MB အောက် ဖိုင်ရွေးပါ", variant: "destructive" });
         return;
       }
-      setAudioFileName(file.name);
-      const reader = new FileReader();
-      reader.onload = (event) => setAudioFile(event.target?.result as string);
-      reader.readAsDataURL(file);
+      // Validate audio duration
+      const audioEl = document.createElement("audio");
+      audioEl.preload = "metadata";
+      const objectUrl = URL.createObjectURL(file);
+      audioEl.src = objectUrl;
+      audioEl.onloadedmetadata = () => {
+        const durSec = audioEl.duration;
+        URL.revokeObjectURL(objectUrl);
+        const maxDurSec = parseInt(videoDuration) * 60;
+        if (durSec > maxDurSec + 5) {
+          toast({
+            title: "အသံဖိုင် ရှည်လွန်းပါသည်",
+            description: `အသံဖိုင်သည် ${Math.ceil(durSec / 60)} မိနစ် ရှိပါသည်။ ရွေးချယ်ထားသော ${videoDuration} မိနစ်ထက် ကျော်နေပါသည်။`,
+            variant: "destructive",
+          });
+          return;
+        }
+        if (durSec > 180 + 5) {
+          toast({
+            title: "အသံဖိုင် ၃ မိနစ်ထက် ကျော်နေပါသည်",
+            description: "အများဆုံး ၃ မိနစ် အထိသာ လက်ခံပါသည်။",
+            variant: "destructive",
+          });
+          return;
+        }
+        setAudioDurationSec(Math.round(durSec));
+        setAudioFileName(file.name);
+        const reader = new FileReader();
+        reader.onload = (event) => setAudioFile(event.target?.result as string);
+        reader.readAsDataURL(file);
+      };
+      audioEl.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        setAudioFileName(file.name);
+        const reader = new FileReader();
+        reader.onload = (event) => setAudioFile(event.target?.result as string);
+        reader.readAsDataURL(file);
+      };
     }
   };
 
@@ -304,6 +339,17 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
     if (serviceOption === "mtv_only" && !audioFile) {
       toast({ title: "အသံဖိုင် ထည့်ပါ", variant: "destructive" });
       return;
+    }
+    if (serviceOption === "mtv_only" && audioDurationSec > 0) {
+      const maxDur = parseInt(videoDuration) * 60;
+      if (audioDurationSec > maxDur + 5) {
+        toast({
+          title: "အသံဖိုင် ရှည်လွန်းပါသည်",
+          description: `အသံဖိုင်သည် ${Math.ceil(audioDurationSec / 60)} မိနစ် ရှိပြီး ရွေးထားသော ${videoDuration} မိနစ်ထက် ကျော်နေပါသည်။`,
+          variant: "destructive",
+        });
+        return;
+      }
     }
     if (serviceOption === "full_auto" && !topic.trim()) {
       toast({ title: "သီချင်း အကြောင်းအရာ ထည့်ပါ", variant: "destructive" });
@@ -574,9 +620,16 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
                 <div className="flex items-center justify-between p-3 bg-primary/10 rounded-xl border border-primary/30">
                   <div className="flex items-center gap-2">
                     <Music className="w-5 h-5 text-primary" />
-                    <span className="text-sm text-foreground truncate max-w-[200px]">{audioFileName}</span>
+                    <div>
+                      <span className="text-sm text-foreground truncate max-w-[200px] block">{audioFileName}</span>
+                      {audioDurationSec > 0 && (
+                        <span className="text-[10px] text-muted-foreground">
+                          ⏱️ {Math.floor(audioDurationSec / 60)}:{String(audioDurationSec % 60).padStart(2, "0")}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <button onClick={() => { setAudioFile(null); setAudioFileName(""); }} className="p-1 bg-destructive rounded-full text-destructive-foreground">
+                  <button onClick={() => { setAudioFile(null); setAudioFileName(""); setAudioDurationSec(0); }} className="p-1 bg-destructive rounded-full text-destructive-foreground">
                     <X className="w-3 h-3" />
                   </button>
                 </div>

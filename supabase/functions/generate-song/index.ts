@@ -384,6 +384,12 @@ Start DIRECTLY with [Verse 1] - no intro text, no explanations, no titles.`;
 
       if (audioBase64) {
         const audioBytes = Uint8Array.from(atob(audioBase64), c => c.charCodeAt(0));
+        
+        // Validate file size (max 20MB)
+        if (audioBytes.length > 20 * 1024 * 1024) {
+          return respond({ error: "အသံဖိုင် 20MB ထက် ကျော်နေပါသည်" }, 400);
+        }
+        
         const fileName = `${userId}/uploaded-${Date.now()}.mp3`;
         await supabaseAdmin.storage.from("videos").upload(fileName, audioBytes.buffer, { contentType: "audio/mpeg", upsert: true });
         const { data: signedData } = await supabaseAdmin.storage.from("videos").createSignedUrl(fileName, 86400 * 7);
