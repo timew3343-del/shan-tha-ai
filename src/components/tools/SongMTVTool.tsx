@@ -67,6 +67,13 @@ const MTV_STYLE_OPTIONS = [
   { value: "cinematic", label: "🎬 Cinematic" },
 ];
 
+const VOICE_TYPE_OPTIONS = [
+  { value: "female", label: "👩 မိန်းမအသံ" },
+  { value: "male", label: "👨 ယောက်ျားအသံ" },
+  { value: "duet", label: "👫 Duet (နှစ်ယောက်တွဲ)" },
+  { value: "choir", label: "🎶 Choir (အုပ်စုအသံ)" },
+];
+
 const DURATION_OPTIONS = [
   { value: "1", label: "⏱️ 1 မိနစ်" },
   { value: "3", label: "⏱️ 3 မိနစ်" },
@@ -86,6 +93,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
   const [mood, setMood] = useState("happy");
   const [language, setLanguage] = useState("my");
   const [mtvStyle, setMtvStyle] = useState("cartoon");
+  const [voiceType, setVoiceType] = useState("female");
   const [videoDuration, setVideoDuration] = useState("1");
   const [showSubtitles, setShowSubtitles] = useState(true);
   const [subtitleColor, setSubtitleColor] = useState("#FFFFFF");
@@ -329,6 +337,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
         genre,
         mood,
         language,
+        voiceType,
         mtvStyle,
         showSubtitles,
         subtitleColor,
@@ -474,7 +483,17 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
                   <SelectContent>{LANGUAGE_OPTIONS.map((l) => (<SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>))}</SelectContent>
                 </Select>
               </div>
-              {(serviceOption === "full_auto") && (
+              <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+                <label className="block text-sm font-medium text-primary mb-2 font-myanmar">🎙️ အသံအမျိုးအစား</label>
+                <Select value={voiceType} onValueChange={setVoiceType} disabled={isLoading}>
+                  <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>{VOICE_TYPE_OPTIONS.map((v) => (<SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>))}</SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {(serviceOption === "full_auto") && (
+              <div className="grid grid-cols-2 gap-3">
                 <div className="gradient-card rounded-2xl p-4 border border-primary/20">
                   <label className="block text-sm font-medium text-primary mb-2 font-myanmar">🎨 MTV Style</label>
                   <Select value={mtvStyle} onValueChange={setMtvStyle} disabled={isLoading}>
@@ -482,18 +501,18 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
                     <SelectContent>{MTV_STYLE_OPTIONS.map((s) => (<SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>))}</SelectContent>
                   </Select>
                 </div>
-              )}
-            </div>
-
-            {serviceOption === "full_auto" && (
-              <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-                <label className="block text-sm font-medium text-primary mb-2 font-myanmar">⏱️ ဗီဒီယို အရှည်</label>
-                <Select value={videoDuration} onValueChange={setVideoDuration} disabled={isLoading}>
-                  <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>{DURATION_OPTIONS.map((d) => (<SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>))}</SelectContent>
-                </Select>
+                <div className="gradient-card rounded-2xl p-4 border border-primary/20">
+                  <label className="block text-sm font-medium text-primary mb-2 font-myanmar">⏱️ ဗီဒီယို အရှည်</label>
+                  <Select value={videoDuration} onValueChange={setVideoDuration} disabled={isLoading}>
+                    <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>{DURATION_OPTIONS.map((d) => (<SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>))}</SelectContent>
+                  </Select>
+                </div>
               </div>
             )}
+
+
+
 
             {serviceOption === "full_auto" && (
               <>

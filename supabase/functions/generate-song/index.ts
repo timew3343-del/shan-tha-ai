@@ -175,10 +175,10 @@ serve(async (req) => {
     const userIsAdmin = await isAdmin(supabaseAdmin, userId);
     console.log(`Song/MTV: user=${userId}, isAdmin=${userIsAdmin}`);
 
-    let parsedBody: { serviceOption?: string; topic?: string; genre?: string; mood?: string; language?: string; mtvStyle?: string; showSubtitles?: boolean; subtitleColor?: string; audioBase64?: string; videoDurationMinutes?: number };
+    let parsedBody: { serviceOption?: string; topic?: string; genre?: string; mood?: string; language?: string; voiceType?: string; mtvStyle?: string; showSubtitles?: boolean; subtitleColor?: string; audioBase64?: string; videoDurationMinutes?: number };
     try { parsedBody = await req.json(); } catch { return respond({ error: "Invalid request body" }, 400); }
 
-    const { serviceOption, topic, genre, mood, language, mtvStyle, showSubtitles, subtitleColor, audioBase64, videoDurationMinutes } = parsedBody;
+    const { serviceOption, topic, genre, mood, language, voiceType, mtvStyle, showSubtitles, subtitleColor, audioBase64, videoDurationMinutes } = parsedBody;
     const requestedDurationMin = Math.min(Math.max(videoDurationMinutes || 1, 1), 10);
 
     if (!serviceOption || !["song_only", "mtv_only", "full_auto"].includes(serviceOption)) {
@@ -269,14 +269,22 @@ Start DIRECTLY with [Verse 1] - no intro text, no explanations, no titles.`;
       console.log("Step 2: Submitting song task (async)...");
 
       const songTitle = (topic || "AI Song").substring(0, 80);
+      // Voice type tags based on user selection
+      const voiceTag: Record<string, string> = {
+        female: "Female Vocal",
+        male: "Male Vocal",
+        duet: "Male and Female Duet",
+        choir: "Choir Vocals",
+      };
+      const selectedVoice = voiceTag[voiceType || "female"] || "Female Vocal";
       // Language-specific vocal style tags for better pronunciation
       const langVocalTags: Record<string, string> = {
-        my: "[Burmese Female Vocal], [Myanmar Pop], [Clear Pronunciation], [Studio Quality], [High Fidelity]",
-        en: "[Clear Vocals], [English], [Studio Quality], [High Fidelity]",
-        th: "[Thai Vocal], [Clear Pronunciation], [Studio Quality], [High Fidelity]",
-        ko: "[Korean Vocal], [K-Pop Style], [Studio Quality], [High Fidelity]",
-        ja: "[Japanese Vocal], [J-Pop Style], [Studio Quality], [High Fidelity]",
-        zh: "[Chinese Vocal], [Mandarin], [Studio Quality], [High Fidelity]",
+        my: `[Burmese ${selectedVoice}], [Myanmar Pop], [Clear Pronunciation], [Studio Quality], [High Fidelity]`,
+        en: `[${selectedVoice}], [English], [Studio Quality], [High Fidelity]`,
+        th: `[Thai ${selectedVoice}], [Clear Pronunciation], [Studio Quality], [High Fidelity]`,
+        ko: `[Korean ${selectedVoice}], [K-Pop Style], [Studio Quality], [High Fidelity]`,
+        ja: `[Japanese ${selectedVoice}], [J-Pop Style], [Studio Quality], [High Fidelity]`,
+        zh: `[Chinese ${selectedVoice}], [Mandarin], [Studio Quality], [High Fidelity]`,
       };
       const styleTags = langVocalTags[language || "my"] || langVocalTags.my;
       const songTags = `${genre || "pop"}, ${mood || "happy"}, ${styleTags}`;
@@ -299,6 +307,7 @@ Start DIRECTLY with [Verse 1] - no intro text, no explanations, no titles.`;
           genre,
           mood,
           language,
+          voiceType,
           mtvStyle: serviceOption === "full_auto" ? mtvStyle : undefined,
           showSubtitles: serviceOption === "full_auto" ? showSubtitles : undefined,
           subtitleColor: serviceOption === "full_auto" ? subtitleColor : undefined,
