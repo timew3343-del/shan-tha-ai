@@ -192,7 +192,7 @@ serve(async (req) => {
     const { data: costSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", costKey).maybeSingle();
 
     let creditCost: number;
-    const durationMult = serviceOption === "song_only" ? 1 : requestedDurationMin;
+    const durationMult = requestedDurationMin;
     const costMultiplier = serviceOption === "song_only" ? 1 : serviceOption === "mtv_only" ? 1.2 : 2;
 
     if (costSetting?.value) {
@@ -234,13 +234,14 @@ serve(async (req) => {
 
         const systemPrompt = `You are a professional songwriter who writes ONLY in ${langName}. 
 Genre: ${genre}. Mood: ${mood}.
-CRITICAL RULE: You MUST write ALL lyrics in ${langName} language ONLY. Do NOT mix languages. Do NOT write in Korean if the language is Burmese. Do NOT write in English if the language is not English.
+CRITICAL RULE: You MUST write ALL lyrics in ${langName} language ONLY. Do NOT mix languages.
 ${langName === "Myanmar (Burmese)" ? "IMPORTANT: မြန်မာစာ သတ်ပုံမှန်ကန်ရမည်၊ သံစဉ်နဲ့ ကိုက်ညီရမည်။ Unicode NFC form သုံးပါ။" : ""}
 ${langName === "Korean" ? "IMPORTANT: 한국어로만 가사를 작성하세요." : ""}
 ${langName === "Thai" ? "IMPORTANT: เขียนเนื้อเพลงเป็นภาษาไทยเท่านั้น" : ""}
 Format: Write ONLY the lyrics with [Verse 1], [Chorus], [Verse 2], [Bridge], [Chorus] sections.
-Write AT LEAST 3 verses and 2 choruses. Each section must have 4-6 lines minimum.
-The total lyrics must be long enough for a 2-3 minute song. Do NOT write short lyrics.
+The song MUST be ${requestedDurationMin} minute(s) long when sung at normal tempo. Write enough lyrics to fill exactly ${requestedDurationMin} minute(s).
+${requestedDurationMin >= 2 ? `Write AT LEAST ${requestedDurationMin + 1} verses and ${requestedDurationMin} choruses. Each section must have 4-6 lines minimum.` : "Write AT LEAST 2 verses and 1 chorus. Each section must have 4-6 lines."}
+${requestedDurationMin >= 3 ? "Include a Bridge section and an Outro for a complete 3-minute song structure." : ""}
 Start DIRECTLY with [Verse 1] - no intro text, no explanations, no titles.`;
 
         lyrics = await callAIWithFailover(LOVABLE_API_KEY, systemPrompt, `Write a ${genre} song about: ${userInput || "a beautiful day"} in ${langName}. Mood: ${mood}.`);

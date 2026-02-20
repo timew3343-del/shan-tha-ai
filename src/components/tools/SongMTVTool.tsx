@@ -116,7 +116,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
     let base: number;
     const durationMin = parseInt(videoDuration) || 1;
     switch (serviceOption) {
-      case "song_only": base = costs.song_mtv || 20; break;
+      case "song_only": base = Math.ceil((costs.song_mtv || 20) * durationMin); break;
       case "mtv_only": base = Math.ceil((costs.song_mtv || 20) * 1.2 * durationMin); break;
       case "full_auto": base = Math.ceil((costs.song_mtv || 20) * 2 * durationMin); break;
       default: base = costs.song_mtv || 20;
@@ -494,8 +494,9 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
               </div>
             </div>
 
-            {(serviceOption === "full_auto") && (
-              <div className="grid grid-cols-2 gap-3">
+            {/* Duration - show for song_only and full_auto */}
+            <div className="grid grid-cols-2 gap-3">
+              {serviceOption === "full_auto" && (
                 <div className="gradient-card rounded-2xl p-4 border border-primary/20">
                   <label className="block text-sm font-medium text-primary mb-2 font-myanmar">🎨 MTV Style</label>
                   <Select value={mtvStyle} onValueChange={setMtvStyle} disabled={isLoading}>
@@ -503,15 +504,18 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
                     <SelectContent>{MTV_STYLE_OPTIONS.map((s) => (<SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>))}</SelectContent>
                   </Select>
                 </div>
-                <div className="gradient-card rounded-2xl p-4 border border-primary/20">
-                  <label className="block text-sm font-medium text-primary mb-2 font-myanmar">⏱️ ဗီဒီယို အရှည်</label>
-                  <Select value={videoDuration} onValueChange={setVideoDuration} disabled={isLoading}>
-                    <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>{DURATION_OPTIONS.map((d) => (<SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>))}</SelectContent>
-                  </Select>
-                </div>
+              )}
+              <div className={`gradient-card rounded-2xl p-4 border border-primary/20 ${serviceOption !== "full_auto" ? "col-span-2" : ""}`}>
+                <label className="block text-sm font-medium text-primary mb-2 font-myanmar">⏱️ သီချင်း အရှည်</label>
+                <Select value={videoDuration} onValueChange={setVideoDuration} disabled={isLoading}>
+                  <SelectTrigger className="bg-background/50 border-primary/30 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>{DURATION_OPTIONS.map((d) => (<SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>))}</SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground mt-1 font-myanmar">
+                  မိနစ်ပိုရှည်လေ Credits ပိုကုန်ကျလေ ဖြစ်ပါသည်
+                </p>
               </div>
-            )}
+            </div>
 
 
 
