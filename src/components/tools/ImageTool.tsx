@@ -28,6 +28,7 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState("");
+  const [selectedAspect, setSelectedAspect] = useState<{ key: string; w: number; h: number; ratio: string }>({ key: "square", w: 1024, h: 1024, ratio: "1:1" });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { showGuide, markAsLearned, saveOutput } = useToolOutput("image-gen", "ပုံထုတ်ရန်");
 
@@ -123,7 +124,10 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
       const { data, error } = await supabase.functions.invoke("generate-image", {
         body: { 
           prompt, 
-          referenceImage 
+          referenceImage,
+          aspectRatio: selectedAspect.ratio,
+          width: selectedAspect.w,
+          height: selectedAspect.h,
         },
       });
 
@@ -233,21 +237,19 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
         </label>
         <div className="grid grid-cols-4 gap-1.5">
           {[
-            { key: "square", label: "1:1", icon: "📸", desc: "IG/FB Post" },
-            { key: "portrait", label: "9:16", icon: "🎵", desc: "TikTok/Reels" },
-            { key: "landscape", label: "16:9", icon: "▶️", desc: "YT/FB Cover" },
-            { key: "free", label: "Free", icon: "🖼️", desc: "Custom" },
+            { key: "square", label: "1:1", icon: "📸", desc: "IG/FB Post", w: 1024, h: 1024, ratio: "1:1" },
+            { key: "portrait", label: "9:16", icon: "🎵", desc: "TikTok/Reels", w: 768, h: 1344, ratio: "9:16" },
+            { key: "landscape", label: "16:9", icon: "▶️", desc: "YT/FB Cover", w: 1344, h: 768, ratio: "16:9" },
+            { key: "free", label: "Free", icon: "🖼️", desc: "Custom", w: 1024, h: 1024, ratio: "1:1" },
           ].map(ar => (
             <button
               key={ar.key}
-              onClick={() => {
-                const dims: Record<string, {w: number; h: number}> = {
-                  square: {w: 1024, h: 1024}, portrait: {w: 768, h: 1344},
-                  landscape: {w: 1344, h: 768}, free: {w: 1024, h: 1024}
-                };
-                (window as any).__imageAspect = dims[ar.key];
-              }}
-              className="flex flex-col items-center gap-0.5 p-2 rounded-xl border border-border/50 hover:border-primary/40 hover:bg-primary/5 transition-all text-center"
+              onClick={() => setSelectedAspect({ key: ar.key, w: ar.w, h: ar.h, ratio: ar.ratio })}
+              className={`flex flex-col items-center gap-0.5 p-2 rounded-xl border transition-all text-center ${
+                selectedAspect.key === ar.key
+                  ? "border-primary bg-primary/10 ring-1 ring-primary/30"
+                  : "border-border/50 hover:border-primary/40 hover:bg-primary/5"
+              }`}
             >
               <span className="text-sm">{ar.icon}</span>
               <span className="text-[10px] font-medium">{ar.label}</span>

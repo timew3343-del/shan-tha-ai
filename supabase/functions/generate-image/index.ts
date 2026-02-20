@@ -9,6 +9,9 @@ const corsHeaders = {
 interface GenerateImageRequest {
   prompt: string;
   referenceImage?: string;
+  aspectRatio?: string;
+  width?: number;
+  height?: number;
 }
 
 serve(async (req) => {
@@ -56,7 +59,8 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { prompt, referenceImage } = body;
+    const { prompt, referenceImage, aspectRatio, width, height } = body;
+    const requestedAspectRatio = aspectRatio || "1:1";
 
     if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
       return new Response(
@@ -168,7 +172,17 @@ serve(async (req) => {
         const fd = new FormData();
         fd.append("prompt", finalPrompt);
         fd.append("output_format", "png");
-        fd.append("aspect_ratio", "1:1");
+        fd.append("aspect_ratio", requestedAspectRatio);
+
+        // Add reference image as init_image for Stability if provided
+        if (referenceImage) {
+          const base64Data = referenceImage.includes(",") ? referenceImage.split(",")[1] : referenceImage;
+          const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+          const blob = new Blob([binaryData], { type: "image/png" });
+          fd.append("image", blob, "reference.png");
+          fd.append("mode", "image-to-image");
+          fd.append("strength", "0.65");
+        }
 
         const stabResp = await fetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
           method: "POST",
