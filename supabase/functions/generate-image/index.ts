@@ -162,7 +162,7 @@ serve(async (req) => {
     let generatedImage: string | null = null;
 
     // Strategy 1: Stability AI (most reliable for image generation)
-    if (STABILITY_API_KEY && !referenceImage) {
+    if (STABILITY_API_KEY) {
       try {
         console.log("Trying Stability AI for image generation...");
         const fd = new FormData();
