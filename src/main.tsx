@@ -2,7 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
-// Force clean module graph - v5
+// Force clean module graph - v6
 
 // Register Service Worker for PWA
 if ('serviceWorker' in navigator) {

@@ -33,6 +33,5 @@ export default defineConfig(({ mode }) => ({
       "react/jsx-dev-runtime",
       "@tanstack/react-query",
     ],
-    force: true,
   },
 }));
