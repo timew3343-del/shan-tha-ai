@@ -230,17 +230,20 @@ serve(async (req) => {
         lyrics = userInput;
       } else {
         console.log("Step 1: Generating lyrics from topic...");
-        const langName = { my: "Myanmar (Burmese)", en: "English", th: "Thai", ko: "Korean", ja: "Japanese", zh: "Chinese" }[language || "my"] || "Myanmar (Burmese)";
+        const langName = { my: "Myanmar (Burmese)", en: "English", th: "Thai", ko: "Korean", ja: "Japanese", zh: "Chinese (Mandarin)" }[language || "my"] || "Myanmar (Burmese)";
 
-        const systemPrompt = `You are a professional songwriter who writes in ${langName}. 
+        const systemPrompt = `You are a professional songwriter who writes ONLY in ${langName}. 
 Genre: ${genre}. Mood: ${mood}.
+CRITICAL RULE: You MUST write ALL lyrics in ${langName} language ONLY. Do NOT mix languages. Do NOT write in Korean if the language is Burmese. Do NOT write in English if the language is not English.
 ${langName === "Myanmar (Burmese)" ? "IMPORTANT: မြန်မာစာ သတ်ပုံမှန်ကန်ရမည်၊ သံစဉ်နဲ့ ကိုက်ညီရမည်။ Unicode NFC form သုံးပါ။" : ""}
+${langName === "Korean" ? "IMPORTANT: 한국어로만 가사를 작성하세요." : ""}
+${langName === "Thai" ? "IMPORTANT: เขียนเนื้อเพลงเป็นภาษาไทยเท่านั้น" : ""}
 Format: Write ONLY the lyrics with [Verse 1], [Chorus], [Verse 2], [Bridge], [Chorus] sections.
 Write AT LEAST 3 verses and 2 choruses. Each section must have 4-6 lines minimum.
 The total lyrics must be long enough for a 2-3 minute song. Do NOT write short lyrics.
 Start DIRECTLY with [Verse 1] - no intro text, no explanations, no titles.`;
 
-        lyrics = await callAIWithFailover(LOVABLE_API_KEY, systemPrompt, userInput || "Write a beautiful song");
+        lyrics = await callAIWithFailover(LOVABLE_API_KEY, systemPrompt, `Write a ${genre} song about: ${userInput || "a beautiful day"} in ${langName}. Mood: ${mood}.`);
         if (!lyrics) lyrics = userInput || "Song lyrics";
 
         // Strip AI preamble: remove anything before the first section marker
@@ -270,25 +273,45 @@ Start DIRECTLY with [Verse 1] - no intro text, no explanations, no titles.`;
       console.log("Step 2: Submitting song task (async)...");
 
       const songTitle = (topic || "AI Song").substring(0, 80);
-      // Voice type tags based on user selection
+
+      // Explicit genre mapping for SunoAPI
+      const genreMap: Record<string, string> = {
+        pop: "Pop", rock: "Rock", hiphop: "Hip-Hop Rap", edm: "Electronic Dance Music EDM",
+        ballad: "Ballad Slow Tempo", jazz: "Jazz Smooth", classical: "Classical Orchestral",
+        rnb: "R&B Soul", country: "Country", myanmar_traditional: "Myanmar Traditional Folk",
+      };
+      const genreTag = genreMap[genre || "pop"] || "Pop";
+
+      // Explicit mood mapping
+      const moodMap: Record<string, string> = {
+        happy: "Happy Upbeat Joyful", sad: "Sad Melancholic Emotional",
+        energetic: "Energetic High Energy Upbeat", romantic: "Romantic Love Tender",
+        chill: "Chill Relaxed Calm Laid-back", epic: "Epic Cinematic Grand Powerful",
+      };
+      const moodTag = moodMap[mood || "happy"] || "Happy Upbeat";
+
+      // Voice type tags
       const voiceTag: Record<string, string> = {
-        female: "Female Vocal",
-        male: "Male Vocal",
-        duet: "Male and Female Duet",
-        choir: "Choir Vocals",
+        female: "Female Vocal Solo Female Singer",
+        male: "Male Vocal Solo Male Singer",
+        duet: "Male and Female Duet Two Singers",
+        choir: "Choir Vocals Group Singing",
       };
-      const selectedVoice = voiceTag[voiceType || "female"] || "Female Vocal";
-      // Language-specific vocal style tags for better pronunciation
-      const langVocalTags: Record<string, string> = {
-        my: `[Burmese ${selectedVoice}], [Myanmar Pop], [Clear Pronunciation], [Studio Quality], [High Fidelity]`,
-        en: `[${selectedVoice}], [English], [Studio Quality], [High Fidelity]`,
-        th: `[Thai ${selectedVoice}], [Clear Pronunciation], [Studio Quality], [High Fidelity]`,
-        ko: `[Korean ${selectedVoice}], [K-Pop Style], [Studio Quality], [High Fidelity]`,
-        ja: `[Japanese ${selectedVoice}], [J-Pop Style], [Studio Quality], [High Fidelity]`,
-        zh: `[Chinese ${selectedVoice}], [Mandarin], [Studio Quality], [High Fidelity]`,
+      const selectedVoice = voiceTag[voiceType || "female"] || "Female Vocal Solo Female Singer";
+
+      // Language-specific tags - CRITICAL for correct language singing
+      const langMap: Record<string, { lang: string; tags: string }> = {
+        my: { lang: "Burmese Myanmar", tags: `[Sing in Burmese Language], [Myanmar ${selectedVoice}], [Burmese Pronunciation]` },
+        en: { lang: "English", tags: `[Sing in English], [${selectedVoice}], [English Pronunciation]` },
+        th: { lang: "Thai", tags: `[Sing in Thai Language], [Thai ${selectedVoice}], [Thai Pronunciation]` },
+        ko: { lang: "Korean", tags: `[Sing in Korean Language], [Korean ${selectedVoice}], [K-Pop Style]` },
+        ja: { lang: "Japanese", tags: `[Sing in Japanese Language], [Japanese ${selectedVoice}], [J-Pop Style]` },
+        zh: { lang: "Chinese Mandarin", tags: `[Sing in Chinese Mandarin], [Chinese ${selectedVoice}], [Mandarin Pronunciation]` },
       };
-      const styleTags = langVocalTags[language || "my"] || langVocalTags.my;
-      const songTags = `${genre || "pop"}, ${mood || "happy"}, ${styleTags}`;
+      const langInfo = langMap[language || "my"] || langMap.my;
+
+      const songTags = `${genreTag}, ${moodTag}, ${langInfo.tags}, [Studio Quality], [High Fidelity]`;
+      console.log(`Final SunoAPI tags: ${songTags}`);
       const songLyrics = processedLyrics || topic || "A beautiful song about life";
 
       const { taskId, provider } = await submitSongTask(supabaseAdmin, songTitle, songTags, songLyrics);
