@@ -119,10 +119,21 @@ export const VideoSubtitleTranslateTool = ({ userId, onBack }: Props) => {
       toast({ title: "ဖိုင်ကြီးလွန်းပါသည်", description: "25MB အောက် ဖိုင်ရွေးပါ", variant: "destructive" });
       return;
     }
-    setVideoFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (ev) => setVideoFile(ev.target?.result as string);
-    reader.readAsDataURL(file);
+    // Check video duration - max 3 minutes
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(video.src);
+      if (video.duration > 180) {
+        toast({ title: "ဗီဒီယိုကြာလွန်းပါသည်", description: "၃ မိနစ်ထိသာ တင်ခွင့်ရှိသည်", variant: "destructive" });
+        return;
+      }
+      setVideoFileName(file.name);
+      const reader = new FileReader();
+      reader.onload = (ev) => setVideoFile(ev.target?.result as string);
+      reader.readAsDataURL(file);
+    };
+    video.src = URL.createObjectURL(file);
   };
 
   const handleGenerate = async () => {
@@ -172,7 +183,7 @@ export const VideoSubtitleTranslateTool = ({ userId, onBack }: Props) => {
       {/* Upload */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">
         <label className="block text-sm font-medium text-primary mb-3 font-myanmar">
-          <Upload className="w-4 h-4 inline mr-1" /> ဗီဒီယို ဖိုင်ထည့်ပါ (25MB အောက်)
+          <Upload className="w-4 h-4 inline mr-1" /> ဗီဒီယို ဖိုင်ထည့်ပါ (၃ မိနစ်ထိ)
         </label>
         {videoFile ? (
           <div className="flex items-center justify-between p-3 bg-primary/10 rounded-xl border border-primary/30">
