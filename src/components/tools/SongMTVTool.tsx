@@ -76,9 +76,8 @@ const VOICE_TYPE_OPTIONS = [
 
 const DURATION_OPTIONS = [
   { value: "1", label: "⏱️ 1 မိနစ်" },
+  { value: "2", label: "⏱️ 2 မိနစ်" },
   { value: "3", label: "⏱️ 3 မိနစ်" },
-  { value: "5", label: "⏱️ 5 မိနစ်" },
-  { value: "10", label: "⏱️ 10 မိနစ်" },
 ];
 
 export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {

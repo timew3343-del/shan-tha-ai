@@ -179,7 +179,7 @@ serve(async (req) => {
     try { parsedBody = await req.json(); } catch { return respond({ error: "Invalid request body" }, 400); }
 
     const { serviceOption, topic, genre, mood, language, voiceType, mtvStyle, showSubtitles, subtitleColor, audioBase64, videoDurationMinutes } = parsedBody;
-    const requestedDurationMin = Math.min(Math.max(videoDurationMinutes || 1, 1), 10);
+    const requestedDurationMin = Math.min(Math.max(videoDurationMinutes || 1, 1), 3);
 
     if (!serviceOption || !["song_only", "mtv_only", "full_auto"].includes(serviceOption)) {
       return respond({ error: "Invalid service option" }, 400);
