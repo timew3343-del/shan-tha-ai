@@ -747,7 +747,7 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
               setProgress(30);
               setProgressMsg("Whisper ASR ခွဲခြမ်းနေသည်... (၁-၃ မိနစ် ကြာနိုင်ပါသည်)");
 
-              await new Promise<void>((resolve, reject) => {
+              await new Promise<void>((resolve) => {
                 startJobPolling(jobId, (completedJob) => {
                   const params = completedJob.input_params as any;
                   if (params?.srtContent) {
@@ -755,11 +755,17 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
                     setAiAnalysis(`✅ စာတန်းထိုး ပြီးပါပြီ!\n\n🌐 ရှာတွေ့သောဘာသာ: ${params.detectedLanguage || "auto"}\n📝 ဘာသာပြန်: ${params.translatedTo || subtitleLanguage}\n📄 SRT စာကြောင်း: ${(params.srtContent || "").split("\n").filter((l: string) => l.trim()).length} ကြောင်း`);
                   }
                   resolve();
-                }, (errMsg) => reject(new Error(errMsg)));
+                }, (errMsg) => {
+                  console.warn("[Subtitles] Job failed:", errMsg);
+                  toast({ title: "⚠️ စာတန်းထိုး ချန်လှပ်လိုက်ပါပြီ", description: errMsg });
+                  resolve(); // Don't reject — continue pipeline
+                });
 
                 setTimeout(() => {
                   if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-                  reject(new Error("Subtitle generation timed out (10 min)"));
+                  console.warn("[Subtitles] Timed out after 10 min, continuing...");
+                  toast({ title: "⚠️ စာတန်းထိုး timeout", description: "ဗီဒီယိုကို ဆက်လုပ်ပါမည်" });
+                  resolve(); // Don't reject — continue pipeline
                 }, 10 * 60 * 1000);
               });
             }
