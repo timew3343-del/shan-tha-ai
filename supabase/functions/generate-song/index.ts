@@ -269,7 +269,16 @@ Start DIRECTLY with [Verse 1] - no intro text, no explanations, no titles.`;
       console.log("Step 2: Submitting song task (async)...");
 
       const songTitle = (topic || "AI Song").substring(0, 80);
-      const styleTags = "[Clear Vocals], [Native Burmese Accent], [Studio Quality], [High Fidelity]";
+      // Language-specific vocal style tags for better pronunciation
+      const langVocalTags: Record<string, string> = {
+        my: "[Burmese Female Vocal], [Myanmar Pop], [Clear Pronunciation], [Studio Quality], [High Fidelity]",
+        en: "[Clear Vocals], [English], [Studio Quality], [High Fidelity]",
+        th: "[Thai Vocal], [Clear Pronunciation], [Studio Quality], [High Fidelity]",
+        ko: "[Korean Vocal], [K-Pop Style], [Studio Quality], [High Fidelity]",
+        ja: "[Japanese Vocal], [J-Pop Style], [Studio Quality], [High Fidelity]",
+        zh: "[Chinese Vocal], [Mandarin], [Studio Quality], [High Fidelity]",
+      };
+      const styleTags = langVocalTags[language || "my"] || langVocalTags.my;
       const songTags = `${genre || "pop"}, ${mood || "happy"}, ${styleTags}`;
       const songLyrics = processedLyrics || topic || "A beautiful song about life";
 

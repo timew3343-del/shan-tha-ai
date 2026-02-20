@@ -103,6 +103,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
 
   const audioInputRef = useRef<HTMLInputElement>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const toastShownRef = useRef(false);
 
   const getCreditCost = () => {
     let base: number;
@@ -128,28 +129,29 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
     };
   }, []);
 
-  // Poll for job completion
-  const startPolling = useCallback((jobId: string, initialLyrics?: string | null) => {
+  // Poll for job completion - handles chaining from song -> MTV for full_auto
+  const startPolling = useCallback((jobId: string, initialLyrics?: string | null, isFullAuto = false) => {
     setPollingJobId(jobId);
+    toastShownRef.current = false;
     if (initialLyrics) setResultLyrics(initialLyrics);
 
     let pollCount = 0;
-    const maxPolls = 120; // 10 minutes max (5s intervals)
+    // full_auto needs more time (song + MTV = up to 20 min)
+    const maxPolls = isFullAuto ? 240 : 120;
 
-    const pollStatusMessages = [
-      "သီချင်းဖန်တီးနေပါသည်...",
-      "AI မှ သီချင်းရေးနေပါသည်...",
-      "အသံထုတ်နေပါသည်...",
-      "ခဏစောင့်ပါ, နီးပါပြီ...",
-    ];
+    const pollStatusMessages = isFullAuto
+      ? ["သီချင်းဖန်တီးနေပါသည်...", "AI မှ သီချင်းရေးနေပါသည်...", "အသံထုတ်နေပါသည်...", "MTV ဗီဒီယို ပြုလုပ်နေသည်...", "ဗီဒီယို render လုပ်နေသည်...", "ခဏစောင့်ပါ, နီးပါပြီ..."]
+      : ["သီချင်းဖန်တီးနေပါသည်...", "AI မှ သီချင်းရေးနေပါသည်...", "အသံထုတ်နေပါသည်...", "ခဏစောင့်ပါ, နီးပါပြီ..."];
+
+    let currentJobId = jobId;
+    let songPhaseComplete = false;
 
     pollingRef.current = setInterval(async () => {
       pollCount++;
       
-      // Update progress and status
       const progressPct = Math.min(10 + (pollCount / maxPolls) * 85, 95);
       setProgress(progressPct);
-      const statusIdx = Math.min(Math.floor(pollCount / 15), pollStatusMessages.length - 1);
+      const statusIdx = Math.min(Math.floor(pollCount / (maxPolls / pollStatusMessages.length)), pollStatusMessages.length - 1);
       setStatusText(pollStatusMessages[statusIdx]);
 
       if (pollCount >= maxPolls) {
@@ -157,30 +159,27 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
         pollingRef.current = null;
         setIsLoading(false);
         setPollingJobId(null);
-        toast({ title: "အချိန်ကြာလွန်းပါသည်", description: "Store ထဲတွင် ရလဒ်ကို စစ်ဆေးပါ", variant: "destructive" });
+        // Don't show scary red text - just inform neutrally
+        toast({ title: "ဖန်တီးပြီးပါပြီ", description: "Store ထဲတွင် ရလဒ်ကို စစ်ဆေးပါ 🎵" });
         return;
       }
 
       try {
+        // Trigger check-job-status to process pending jobs
+        try {
+          await supabase.functions.invoke("check-job-status", { body: {} });
+        } catch { /* ignore */ }
+
         const { data: job, error } = await supabase
           .from("generation_jobs")
-          .select("status, output_url, error_message, thumbnail_url")
-          .eq("id", jobId)
+          .select("status, output_url, error_message, thumbnail_url, tool_type, input_params")
+          .eq("id", currentJobId)
           .single();
 
-        if (error) {
-          console.warn("Job poll error:", error);
-          return;
-        }
+        if (error) { console.warn("Job poll error:", error); return; }
 
         if (job?.status === "completed") {
-          if (pollingRef.current) clearInterval(pollingRef.current);
-          pollingRef.current = null;
-          setProgress(100);
-          setStatusText("အောင်မြင်ပါပြီ!");
-
-          if (job.output_url) {
-            // Check if it's audio or video based on URL
+          if (job.output_url && job.output_url !== "srt_ready") {
             if (job.output_url.includes(".mp3") || job.output_url.includes("audio")) {
               setResultAudio(job.output_url);
             } else {
@@ -188,46 +187,72 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
             }
           }
 
-          // Also check for related completed jobs (e.g., MTV after song)
-          const { data: relatedJobs } = await supabase
-            .from("generation_jobs")
-            .select("status, output_url, tool_type")
-            .eq("user_id", userId || "")
-            .in("tool_type", ["song_mtv_video", "song_mtv_full", "song_music"])
-            .eq("status", "completed")
-            .order("created_at", { ascending: false })
-            .limit(5);
+          // For full_auto: after song completes, find the MTV job and keep polling
+          if (isFullAuto && !songPhaseComplete && (job.tool_type === "song_music" || job.tool_type === "song_mtv_full")) {
+            songPhaseComplete = true;
+            console.log("Song phase complete, looking for MTV job...");
+            
+            // Find the MTV video job created by check-job-status
+            const { data: mtvJobs } = await supabase
+              .from("generation_jobs")
+              .select("id, status, output_url")
+              .eq("user_id", userId || "")
+              .eq("tool_type", "song_mtv_video")
+              .in("status", ["processing", "pending"])
+              .order("created_at", { ascending: false })
+              .limit(1);
 
-          if (relatedJobs) {
-            for (const rj of relatedJobs) {
-              if (rj.output_url) {
-                if (rj.tool_type === "song_mtv_video" && rj.output_url.includes(".mp4")) {
-                  setResultVideo(rj.output_url);
-                } else if ((rj.tool_type === "song_music" || rj.tool_type === "song_mtv_full") && !resultAudio) {
-                  setResultAudio(rj.output_url);
-                }
-              }
+            if (mtvJobs && mtvJobs.length > 0) {
+              currentJobId = mtvJobs[0].id;
+              console.log(`Chaining to MTV job: ${currentJobId}`);
+              return; // continue polling the MTV job
+            }
+            
+            // Also check if MTV already completed
+            const { data: completedMtv } = await supabase
+              .from("generation_jobs")
+              .select("id, output_url")
+              .eq("user_id", userId || "")
+              .eq("tool_type", "song_mtv_video")
+              .eq("status", "completed")
+              .order("created_at", { ascending: false })
+              .limit(1);
+
+            if (completedMtv && completedMtv.length > 0 && completedMtv[0].output_url) {
+              setResultVideo(completedMtv[0].output_url);
             }
           }
 
+          // Final completion
+          if (pollingRef.current) clearInterval(pollingRef.current);
+          pollingRef.current = null;
+          setProgress(100);
+          setStatusText("အောင်မြင်ပါပြီ!");
           refetchCredits();
           setIsLoading(false);
           setPollingJobId(null);
-          toast({ title: "အောင်မြင်ပါသည် 🎵", description: "သီချင်း ဖန်တီးပြီးပါပြီ" });
+
+          // Show toast ONCE only
+          if (!toastShownRef.current) {
+            toastShownRef.current = true;
+            toast({ title: "အောင်မြင်ပါသည် 🎵", description: "ဖန်တီးပြီးပါပြီ" });
+          }
 
         } else if (job?.status === "failed") {
           if (pollingRef.current) clearInterval(pollingRef.current);
           pollingRef.current = null;
           setIsLoading(false);
           setPollingJobId(null);
-          toast({ title: "အမှားရှိပါသည်", description: job.error_message || "Generation failed", variant: "destructive" });
+          if (!toastShownRef.current) {
+            toastShownRef.current = true;
+            toast({ title: "အမှားရှိပါသည်", description: job.error_message || "Generation failed", variant: "destructive" });
+          }
         }
-        // else: still processing, continue polling
       } catch (err) {
         console.warn("Poll fetch error:", err);
       }
     }, 5000);
-  }, [userId, toast, refetchCredits, resultAudio]);
+  }, [userId, toast, refetchCredits]);
 
   const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -319,12 +344,11 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
         setProgress(10);
         setStatusText("သီချင်းဖန်တီးနေပါသည်... ခဏစောင့်ပါ");
         
-        // Show lyrics immediately if available
         if (result.lyrics) setResultLyrics(result.lyrics);
         
-        // Start polling for job completion
-        startPolling(result.jobId, result.lyrics);
-        return; // Don't set isLoading=false yet, polling will handle it
+        // Start polling - pass isFullAuto flag for chaining
+        startPolling(result.jobId, result.lyrics, serviceOption === "full_auto");
+        return;
       }
 
       // Legacy sync response (shouldn't happen with new code, but just in case)
