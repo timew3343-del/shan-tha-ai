@@ -71,6 +71,7 @@ import { TutorialManager, DASHBOARD_TOUR_STEPS } from "./TutorialManager";
 import { useCreditCosts } from "@/hooks/useCreditCosts";
 import { useCredits } from "@/hooks/useCredits";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useToolVisibility } from "@/hooks/useToolVisibility";
 import { useLanguage } from "@/i18n/LanguageContext";
 import { AnimatePresence, motion, LayoutGroup } from "framer-motion";
 import { Users } from "lucide-react";
@@ -129,6 +130,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const { costs } = useCreditCosts();
   const { credits, isLoading: creditsLoading } = useCredits(userId);
   const { isAdmin } = useUserRole(userId);
+  const { isToolEnabled } = useToolVisibility();
   const { t } = useLanguage();
 
   useEffect(() => {
@@ -211,6 +213,10 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
 
   const filteredTools = useMemo(() => {
     let filtered = tools;
+    // Admin sees all tools; non-admin only sees enabled tools
+    if (!isAdmin) {
+      filtered = filtered.filter(tool => isToolEnabled(tool.id));
+    }
     if (activeCategory !== "all") {
       filtered = filtered.filter(tool => tool.category.includes(activeCategory));
     }
@@ -223,7 +229,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
       });
     }
     return filtered;
-  }, [tools, activeCategory, searchQuery, t]);
+  }, [tools, activeCategory, searchQuery, t, isAdmin, isToolEnabled]);
 
   const renderActiveTool = () => {
     switch (activeTool) {
@@ -379,6 +385,8 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                     { key: "lifestyle" as ToolCategory, label: "🌟 လူနေမှုပုံစံနှင့် ခရီးသွား", icon: Sparkles },
                   ].map((section) => {
                     const sectionTools = tools.filter(tool => {
+                      // Filter by visibility for non-admin users
+                      if (!isAdmin && !isToolEnabled(tool.id)) return false;
                       // Primary category check - use first category as primary
                       if (section.key === "premium") return tool.category.includes("premium");
                       // For non-premium sections, only show tools whose FIRST category matches

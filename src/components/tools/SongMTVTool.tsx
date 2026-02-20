@@ -643,17 +643,19 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
         )}
       </Button>
 
-      {/* Results */}
+      {/* Results - show only relevant outputs per service option */}
       {(resultAudio || resultVideo || resultLyrics) && (
         <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
-          {resultLyrics && (
+          {/* Lyrics - show for song_only and full_auto */}
+          {resultLyrics && (serviceOption === "song_only" || serviceOption === "full_auto") && (
             <div className="gradient-card rounded-2xl p-4 border border-primary/30">
               <h3 className="text-sm font-semibold text-primary mb-2 font-myanmar">📝 သီချင်းစာသား</h3>
               <p className="text-xs text-foreground whitespace-pre-wrap font-myanmar">{resultLyrics}</p>
             </div>
           )}
 
-          {resultAudio && (
+          {/* Audio - show for song_only only (full_auto audio is embedded in MTV video) */}
+          {resultAudio && serviceOption === "song_only" && (
             <div className="gradient-card rounded-2xl p-4 border border-primary/30">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-primary font-myanmar">🎵 သီချင်း</h3>
@@ -665,7 +667,8 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
             </div>
           )}
 
-          {resultVideo && (
+          {/* Video - show for mtv_only and full_auto only */}
+          {resultVideo && (serviceOption === "mtv_only" || serviceOption === "full_auto") && (
             <div className="gradient-card rounded-2xl p-4 border border-primary/30">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-primary font-myanmar">🎬 MTV Video</h3>
