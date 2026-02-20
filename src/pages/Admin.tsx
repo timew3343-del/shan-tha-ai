@@ -45,6 +45,8 @@ interface PendingTransaction {
   screenshot_url: string | null;
   created_at: string;
   user_email?: string;
+  user_profile?: { full_name: string | null; avatar_url: string | null } | null;
+  approved_by?: string;
 }
 
 interface PricingPackage {
@@ -440,7 +442,17 @@ export const Admin = () => {
     if (error) {
       console.error("Error fetching transactions:", error);
     } else {
-      setTransactions(data || []);
+      // Enrich with user profiles
+      const txList = data || [];
+      const userIds = [...new Set(txList.map(t => t.user_id))];
+      const { data: profiles } = await supabase.from("profiles").select("user_id, full_name, avatar_url").in("user_id", userIds);
+      const profileMap = new Map(profiles?.map(p => [p.user_id, p]) || []);
+      
+      const enriched = txList.map(tx => ({
+        ...tx,
+        user_profile: profileMap.get(tx.user_id) || null,
+      }));
+      setTransactions(enriched);
     }
     setIsLoading(false);
   };
@@ -986,6 +998,21 @@ export const Admin = () => {
                 <div className="space-y-3">
                   {pendingTransactions.map((tx) => (
                     <div key={tx.id} className="gradient-card rounded-2xl p-4 border border-warning/30">
+                      {/* User Profile */}
+                      <div className="flex items-center gap-2 mb-3 p-2 bg-secondary/30 rounded-xl">
+                        <div className="w-8 h-8 rounded-full overflow-hidden bg-primary/20 flex items-center justify-center shrink-0">
+                          {tx.user_profile?.avatar_url ? (
+                            <img src={tx.user_profile.avatar_url} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <Users className="w-4 h-4 text-primary" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-foreground truncate">{tx.user_profile?.full_name || "Unknown"}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono truncate">{tx.user_id}</p>
+                        </div>
+                      </div>
+
                       <div className="flex items-start justify-between mb-3">
                         <div>
                           <p className="font-semibold text-foreground">{tx.package_name}</p>

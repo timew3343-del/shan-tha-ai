@@ -125,7 +125,7 @@ export const CreditTransferDialog = ({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="gradient-card border-border/50 max-w-sm mx-auto">
+      <DialogContent className="bg-card border-border/50 max-w-sm mx-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-foreground">
             <ArrowRightLeft className="w-5 h-5 text-primary" />
