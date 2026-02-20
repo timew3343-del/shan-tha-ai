@@ -164,12 +164,28 @@ export const CreditTransferDialog = ({
           {/* Receiver UUID */}
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground">လက်ခံမည့်သူ UUID</label>
-            <Input
-              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-              value={receiverId}
-              onChange={(e) => setReceiverId(e.target.value)}
-              className="bg-background/50 border-border/50 rounded-xl h-11 text-sm font-mono"
-            />
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                value={receiverId}
+                onChange={(e) => setReceiverId(e.target.value)}
+                className="bg-background/50 border-border/50 rounded-xl h-11 text-sm font-mono flex-1"
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const text = await navigator.clipboard.readText();
+                    if (text) setReceiverId(text.trim());
+                  } catch {
+                    toast({ title: "Paste မရပါ", description: "Clipboard access ခွင့်ပြုပါ", variant: "destructive" });
+                  }
+                }}
+                className="h-11 px-3 rounded-xl border border-border/50 hover:bg-secondary/50 transition-colors flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap"
+              >
+                📋 Paste
+              </button>
+            </div>
             {isSelfTransfer && (
               <p className="text-xs text-destructive flex items-center gap-1">
                 <AlertCircle className="w-3 h-3" />

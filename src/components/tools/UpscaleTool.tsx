@@ -65,6 +65,43 @@ export const UpscaleTool = ({ userId, onBack }: UpscaleToolProps) => {
     if (imageInputRef.current) imageInputRef.current.value = "";
   };
 
+  const resizeToPreset = (imageUrl: string, preset: string): Promise<string> => {
+    return new Promise((resolve) => {
+      if (preset === "original") {
+        resolve(imageUrl);
+        return;
+      }
+      const dims: Record<string, { w: number; h: number }> = {
+        tiktok: { w: 1080, h: 1920 },
+        youtube: { w: 1920, h: 1080 },
+        instagram: { w: 1080, h: 1080 },
+        fb_cover: { w: 820, h: 312 },
+        twitter: { w: 1500, h: 500 },
+      };
+      const target = dims[preset];
+      if (!target) { resolve(imageUrl); return; }
+
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = target.w;
+        canvas.height = target.h;
+        const ctx = canvas.getContext("2d")!;
+        // Cover crop: scale to fill then center crop
+        const scale = Math.max(target.w / img.width, target.h / img.height);
+        const sw = target.w / scale;
+        const sh = target.h / scale;
+        const sx = (img.width - sw) / 2;
+        const sy = (img.height - sh) / 2;
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, target.w, target.h);
+        resolve(canvas.toDataURL("image/png"));
+      };
+      img.onerror = () => resolve(imageUrl);
+      img.src = imageUrl;
+    });
+  };
+
   const handleUpscale = async () => {
     if (!sourceImage) {
       toast({
@@ -125,10 +162,12 @@ export const UpscaleTool = ({ userId, onBack }: UpscaleToolProps) => {
         throw new Error(result.error || "Upscale failed");
       }
 
-      setResultImage(result.image);
+      // Apply selected platform resize
+      const finalImage = await resizeToPreset(result.image, selectedPreset);
+      setResultImage(finalImage);
       setProgress(100);
       refetchCredits();
-      saveOutput("image", result.image);
+      saveOutput("image", finalImage);
 
       toast({
         title: "အောင်မြင်ပါသည်",

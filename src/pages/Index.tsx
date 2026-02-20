@@ -33,6 +33,7 @@ const Index = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [copiedUuid, setCopiedUuid] = useState(false);
+  const [profile, setProfile] = useState<{ avatar_url: string | null } | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { t } = useLanguage();
@@ -59,6 +60,12 @@ const Index = () => {
   useEffect(() => {
     if (!isLoading && !user) navigate("/auth", { replace: true });
   }, [user, isLoading, navigate]);
+
+  useEffect(() => {
+    if (!user) return;
+    supabase.from("profiles").select("avatar_url").eq("user_id", user.id).single()
+      .then(({ data }) => { if (data) setProfile(data); });
+  }, [user]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -97,14 +104,51 @@ const Index = () => {
         <div className="flex items-center gap-3">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="w-11 h-11 rounded-full gradient-gold flex items-center justify-center shadow-gold hover:shadow-gold-lg transition-all">
-                <UserIcon className="w-5 h-5 text-primary-foreground" />
+              <button className="w-11 h-11 rounded-full overflow-hidden gradient-gold flex items-center justify-center shadow-gold hover:shadow-gold-lg transition-all relative group">
+                {profile?.avatar_url ? (
+                  <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  <UserIcon className="w-5 h-5 text-primary-foreground" />
+                )}
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-64 gradient-card border-border/50">
               <div className="px-3 py-2">
-                <p className="text-sm font-medium text-foreground truncate">{user.email}</p>
-                <p className="text-xs text-muted-foreground">{isAdmin ? "Admin" : "Member"}</p>
+                {/* Profile Picture Upload */}
+                <div className="flex items-center gap-3 mb-2">
+                  <label className="relative cursor-pointer group">
+                    <div className="w-12 h-12 rounded-full overflow-hidden gradient-gold flex items-center justify-center">
+                      {profile?.avatar_url ? (
+                        <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                      ) : (
+                        <UserIcon className="w-5 h-5 text-primary-foreground" />
+                      )}
+                    </div>
+                    <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="text-white text-[8px]">📷</span>
+                    </div>
+                    <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file || !user) return;
+                      try {
+                        const reader = new FileReader();
+                        reader.onload = async (ev) => {
+                          const base64 = ev.target?.result as string;
+                          await supabase.from("profiles").update({ avatar_url: base64 }).eq("user_id", user.id);
+                          setProfile(prev => prev ? { ...prev, avatar_url: base64 } : prev);
+                          toast({ title: "ပရိုဖိုင်ပုံ ပြောင်းပြီးပါပြီ" });
+                        };
+                        reader.readAsDataURL(file);
+                      } catch {
+                        toast({ title: "ပုံတင်၍မရပါ", variant: "destructive" });
+                      }
+                    }} />
+                  </label>
+                  <div>
+                    <p className="text-sm font-medium text-foreground truncate">{user.email}</p>
+                    <p className="text-xs text-muted-foreground">{isAdmin ? "Admin" : "Member"}</p>
+                  </div>
+                </div>
               </div>
               <div className="px-3 py-1.5">
                 <div className="flex items-center gap-1.5 bg-secondary/50 rounded-lg px-2 py-1.5">
