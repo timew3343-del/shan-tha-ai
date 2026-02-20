@@ -86,7 +86,7 @@ serve(async (req) => {
     // Fetch API keys
     const { data: settings } = await supabaseAdmin
       .from("app_settings").select("key, value")
-      .in("key", ["shotstack_api_key", "suno_api_key", "sunoapi_org_key", "goapi_suno_api_key", "replicate_api_token", "openai_api_key", "api_enabled_openai"]);
+      .in("key", ["shotstack_api_key", "suno_api_key", "sunoapi_org_key", "goapi_suno_api_key", "replicate_api_token", "openai_api_key", "api_enabled_openai", "gemini_api_key"]);
     const configMap: Record<string, string> = {};
     settings?.forEach((s: any) => { configMap[s.key] = s.value; });
 
@@ -913,6 +913,406 @@ serve(async (req) => {
             } catch (e: any) {
               console.warn(`Object removal poll error: ${e.message}`);
             }
+          }
+        }
+
+        // ===== VIDEO SUBTITLE & TRANSLATE JOBS =====
+        if (job.tool_type === "video_subtitle_translate") {
+          console.log(`Processing video subtitle job ${job.id}`);
+          const openaiKey = configMap["api_enabled_openai"] !== "false" ? configMap["openai_api_key"] : null;
+          const videoUrl = params?.videoUrl;
+          const targetLang = params?.targetLang || "my";
+          const subtitlePosition = params?.subtitlePosition || "bottom_center";
+          const subtitleColorParam = params?.subtitleColor || "#FFFFFF";
+
+          if (!videoUrl) {
+            await supabaseAdmin.from("generation_jobs").update({ status: "failed", error_message: "No video URL" }).eq("id", job.id);
+            processed++; continue;
+          }
+
+          try {
+            // Step 1: Download video
+            console.log("Downloading video for Whisper...");
+            const videoResp = await fetch(videoUrl);
+            if (!videoResp.ok) throw new Error(`Video download failed: ${videoResp.status}`);
+            const videoBuffer = await videoResp.arrayBuffer();
+            if (videoBuffer.byteLength > 25 * 1024 * 1024) throw new Error("Video too large (max 25MB)");
+
+            // Step 2: Transcribe with OpenAI Whisper
+            if (!openaiKey) throw new Error("OpenAI API key not configured");
+            console.log("Sending to Whisper...");
+            const formData = new FormData();
+            formData.append("file", new Blob([videoBuffer], { type: "video/mp4" }), "video.mp4");
+            formData.append("model", "whisper-1");
+            formData.append("response_format", "srt");
+            const whisperResp = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+              method: "POST", headers: { Authorization: `Bearer ${openaiKey}` }, body: formData,
+            });
+            if (!whisperResp.ok) throw new Error(`Whisper failed: ${whisperResp.status}`);
+            let srtContent = await whisperResp.text();
+            console.log(`Whisper done. SRT length: ${srtContent.length}`);
+
+            // Step 3: Translate
+            const LANG_NAMES: Record<string, string> = { my: "Myanmar (Burmese)", en: "English", th: "Thai", zh: "Chinese", ja: "Japanese", ko: "Korean", hi: "Hindi" };
+            const langName = LANG_NAMES[targetLang] || targetLang;
+            if (targetLang !== "original" && srtContent) {
+              const translateMsgs = [
+                { role: "system", content: "You are a professional subtitle translator. Translate SRT accurately. Keep ALL SRT formatting. Only translate text lines. Return ONLY translated SRT." },
+                { role: "user", content: `Translate to ${langName}:\n\n${srtContent}` },
+              ];
+              let translated = "";
+              try {
+                const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+                  method: "POST", headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+                  body: JSON.stringify({ model: "gpt-4o", messages: translateMsgs, temperature: 0.3, max_tokens: 8192 }),
+                });
+                if (resp.ok) { const d = await resp.json(); translated = d.choices?.[0]?.message?.content?.trim() || ""; }
+              } catch {}
+              if (!translated && LOVABLE_API_KEY) {
+                try {
+                  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                    method: "POST", headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages: translateMsgs, temperature: 0.3, max_tokens: 8192 }),
+                  });
+                  if (resp.ok) { const d = await resp.json(); translated = d.choices?.[0]?.message?.content?.trim() || ""; }
+                } catch {}
+              }
+              if (translated) srtContent = translated;
+            }
+
+            // Step 4: Burn subtitles using Shotstack
+            if (SHOTSTACK_KEY && srtContent) {
+              console.log("Building Shotstack timeline with burned subtitles...");
+              const srtLines = srtContent.split("\n\n").filter((b: string) => b.trim());
+              const subtitleClips: any[] = [];
+              for (const block of srtLines) {
+                const lines = block.split("\n");
+                if (lines.length < 3) continue;
+                const timeParts = lines[1].split(" --> ");
+                if (timeParts.length !== 2) continue;
+                const parseTime = (t: string) => {
+                  const p = t.trim().replace(",", ".").split(":");
+                  return parseFloat(p[0]) * 3600 + parseFloat(p[1]) * 60 + parseFloat(p[2]);
+                };
+                const start = parseTime(timeParts[0]);
+                const end = parseTime(timeParts[1]);
+                const text = lines.slice(2).join(" ").trim().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+                if (!text) continue;
+                const yOffset = subtitlePosition === "top_center" ? -0.35 : 0.06;
+                subtitleClips.push({
+                  asset: {
+                    type: "html",
+                    html: `<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@700&display=swap" rel="stylesheet"><div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:36px;font-weight:700;color:${subtitleColorParam};text-shadow:2px 2px 4px rgba(0,0,0,0.9);text-align:center;padding:8px 16px;background:rgba(0,0,0,0.5);border-radius:6px;">${text}</p></div>`,
+                    width: 1000, height: 120,
+                  },
+                  start, length: Math.max(end - start, 0.5),
+                  position: subtitlePosition === "top_center" ? "top" : "bottom",
+                  offset: { y: yOffset },
+                });
+              }
+
+              const shotstackPayload = {
+                timeline: {
+                  background: "#000000",
+                  tracks: [
+                    ...(subtitleClips.length ? [{ clips: subtitleClips }] : []),
+                    { clips: [{ asset: { type: "video", src: videoUrl, volume: 1 }, start: 0, length: "auto" }] },
+                  ],
+                },
+                output: { format: "mp4", resolution: "hd" },
+              };
+
+              const renderResp = await fetch("https://api.shotstack.io/v1/render", {
+                method: "POST",
+                headers: { "x-api-key": SHOTSTACK_KEY, "Content-Type": "application/json" },
+                body: JSON.stringify(shotstackPayload),
+              });
+              if (!renderResp.ok) throw new Error(`Shotstack render failed: ${renderResp.status}`);
+              const renderData = await renderResp.json();
+              const renderId = renderData.response?.id;
+              if (!renderId) throw new Error("No render ID from Shotstack");
+
+              // Switch to shotstack polling mode
+              await supabaseAdmin.from("generation_jobs").update({
+                tool_type: "shotstack",
+                external_job_id: renderId,
+                input_params: { ...params, srtContent, tool_name: "AI Video Subtitle & Translate" },
+              }).eq("id", job.id);
+              console.log(`Subtitle job ${job.id} sent to Shotstack: ${renderId}`);
+              processed++;
+            } else {
+              // No Shotstack - just save SRT as text output
+              await supabaseAdmin.from("user_outputs").insert({
+                user_id: job.user_id, tool_id: "video_subtitle", tool_name: "AI Video Subtitle & Translate",
+                output_type: "text", content: srtContent,
+              });
+              if (!params?.isAdmin && !job.credits_deducted && job.credits_cost > 0) {
+                await supabaseAdmin.rpc("deduct_user_credits", { _user_id: job.user_id, _amount: job.credits_cost, _action: "video_subtitle_translate" });
+              }
+              await supabaseAdmin.from("generation_jobs").update({
+                status: "completed", output_url: "srt_ready", credits_deducted: true,
+                input_params: { ...params, srtContent },
+              }).eq("id", job.id);
+              processed++;
+            }
+          } catch (err: any) {
+            console.error(`Subtitle job ${job.id} error:`, err.message);
+            await supabaseAdmin.from("generation_jobs").update({ status: "failed", error_message: err.message }).eq("id", job.id);
+            processed++;
+          }
+        }
+
+        // ===== TEXT TO VIDEO JOBS =====
+        if (job.tool_type === "text_to_video") {
+          const phase = params?.phase;
+          console.log(`Text-to-video job ${job.id}, phase: ${phase}`);
+
+          if (phase === "generate_scenes") {
+            const videoStyle = params?.style || "cinematic";
+            const durationSec = params?.durationSec || 30;
+            const aspectRatio = params?.aspectRatio || "16:9";
+            const promptText = params?.prompt || "";
+            const addBgm = params?.addBgm !== false;
+            const sceneDuration = 10;
+            const numScenes = Math.ceil(durationSec / sceneDuration);
+
+            const styleDescs: Record<string, string> = {
+              cinematic: "cinematic 4K film quality, dramatic lighting",
+              cartoon: "colorful cartoon animation, vibrant 2D",
+              anime: "anime style, Japanese animation aesthetic",
+              realistic: "photorealistic, natural lighting",
+              "3d": "3D rendered, Pixar quality",
+              watercolor: "watercolor painting style, artistic",
+            };
+
+            // Use Gemini to generate scene descriptions
+            let sceneDescriptions: string[] = [];
+            try {
+              const geminiKey = configMap["gemini_api_key"] || Deno.env.get("GEMINI_API_KEY");
+              const aiEndpoint = geminiKey ? "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent" : null;
+              
+              const scenePrompt = `Given this video concept: "${promptText}"
+Generate exactly ${numScenes} scene descriptions for a ${durationSec}-second video. Each scene is ${sceneDuration} seconds.
+Return ONLY a JSON array of strings, each being a detailed visual scene description.
+Example: ["A sunrise over mountains with golden light", "A person walking through a misty forest"]`;
+
+              let scenesJson = "";
+              if (LOVABLE_API_KEY) {
+                const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                  method: "POST",
+                  headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+                  body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages: [{ role: "user", content: scenePrompt }], temperature: 0.7 }),
+                });
+                if (resp.ok) {
+                  const d = await resp.json();
+                  scenesJson = d.choices?.[0]?.message?.content?.trim() || "";
+                }
+              }
+
+              // Parse scenes
+              const jsonMatch = scenesJson.match(/\[[\s\S]*\]/);
+              if (jsonMatch) {
+                sceneDescriptions = JSON.parse(jsonMatch[0]);
+              }
+            } catch (e: any) { console.warn("Scene generation error:", e.message); }
+
+            if (sceneDescriptions.length === 0) {
+              sceneDescriptions = Array.from({ length: numScenes }, (_, i) => `${promptText}, scene ${i + 1}, ${styleDescs[videoStyle]}`);
+            }
+
+            // Generate images
+            const sceneImages: string[] = [];
+            let useStability = !!STABILITY_API_KEY;
+
+            if (useStability) {
+              for (let i = 0; i < numScenes; i++) {
+                const imgPrompt = `${sceneDescriptions[i] || promptText}, ${styleDescs[videoStyle]}, ${aspectRatio} aspect ratio, ultra high resolution`;
+                try {
+                  const fd = new FormData();
+                  fd.append("prompt", imgPrompt);
+                  fd.append("output_format", "png");
+                  fd.append("aspect_ratio", aspectRatio === "9:16" ? "9:16" : aspectRatio === "1:1" ? "1:1" : "16:9");
+                  const resp = await fetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
+                    method: "POST", headers: { Authorization: `Bearer ${STABILITY_API_KEY}`, Accept: "image/*" }, body: fd,
+                  });
+                  if (resp.ok) {
+                    const buf = await resp.arrayBuffer();
+                    const imgName = `scene-${job.user_id}-${Date.now()}-${i}.png`;
+                    await supabaseAdmin.storage.from("videos").upload(imgName, buf, { contentType: "image/png", upsert: true });
+                    const { data: imgSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(imgName, 3600);
+                    if (imgSigned?.signedUrl) sceneImages.push(imgSigned.signedUrl);
+                  } else if (resp.status === 402 || resp.status === 403) {
+                    useStability = false; await resp.text(); break;
+                  } else { await resp.text(); }
+                } catch (e) { console.warn("Stability error:", e); }
+              }
+            }
+
+            // Fallback to Lovable AI
+            if (sceneImages.length < numScenes && LOVABLE_API_KEY) {
+              for (let i = sceneImages.length; i < numScenes; i++) {
+                try {
+                  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      model: "google/gemini-2.5-flash-image",
+                      messages: [{ role: "user", content: `Generate image: ${sceneDescriptions[i] || promptText}, ${styleDescs[videoStyle]}, ${aspectRatio}` }],
+                      modalities: ["image", "text"],
+                    }),
+                  });
+                  if (resp.ok) {
+                    const d = await resp.json();
+                    const imgUrl = d.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+                    if (imgUrl?.startsWith("data:image")) {
+                      const b64 = imgUrl.split(",")[1];
+                      const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+                      const imgName = `scene-${job.user_id}-${Date.now()}-${i}.png`;
+                      await supabaseAdmin.storage.from("videos").upload(imgName, bytes.buffer, { contentType: "image/png", upsert: true });
+                      const { data: imgSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(imgName, 3600);
+                      if (imgSigned?.signedUrl) sceneImages.push(imgSigned.signedUrl);
+                    }
+                  }
+                } catch {}
+              }
+            }
+
+            if (sceneImages.length === 0) {
+              await supabaseAdmin.from("generation_jobs").update({ status: "failed", error_message: "No scene images generated" }).eq("id", job.id);
+              processed++; continue;
+            }
+
+            // Build Shotstack timeline
+            if (!SHOTSTACK_KEY) {
+              await supabaseAdmin.from("generation_jobs").update({ status: "failed", error_message: "Shotstack key not configured" }).eq("id", job.id);
+              processed++; continue;
+            }
+
+            const clips = sceneImages.map((url: string, i: number) => ({
+              asset: { type: "image", src: url },
+              start: i * sceneDuration, length: sceneDuration,
+              effect: ["zoomIn", "slideLeft", "zoomOut", "slideRight"][i % 4],
+              transition: { in: "fade", out: "fade" },
+            }));
+
+            const shotstackPayload: any = {
+              timeline: {
+                background: "#000000",
+                tracks: [{ clips }],
+              },
+              output: { format: "mp4", resolution: "hd", aspectRatio: aspectRatio === "9:16" ? "9:16" : aspectRatio === "1:1" ? "1:1" : "16:9" },
+            };
+
+            const renderResp = await fetch("https://api.shotstack.io/v1/render", {
+              method: "POST",
+              headers: { "x-api-key": SHOTSTACK_KEY, "Content-Type": "application/json" },
+              body: JSON.stringify(shotstackPayload),
+            });
+            if (!renderResp.ok) {
+              const errText = await renderResp.text();
+              await supabaseAdmin.from("generation_jobs").update({ status: "failed", error_message: `Shotstack: ${renderResp.status}` }).eq("id", job.id);
+              processed++; continue;
+            }
+
+            const renderData = await renderResp.json();
+            const renderId = renderData.response?.id;
+            if (!renderId) {
+              await supabaseAdmin.from("generation_jobs").update({ status: "failed", error_message: "No Shotstack render ID" }).eq("id", job.id);
+              processed++; continue;
+            }
+
+            // Switch to shotstack polling
+            await supabaseAdmin.from("generation_jobs").update({
+              tool_type: "shotstack",
+              external_job_id: renderId,
+              input_params: { ...params, phase: "rendering", tool_name: "AI Text-to-Video Creator" },
+            }).eq("id", job.id);
+            console.log(`Text-to-video ${job.id} sent to Shotstack: ${renderId}`);
+            processed++;
+          }
+        }
+
+        // ===== VIDEO BG CHANGE JOBS =====
+        if (job.tool_type === "video_bg_change") {
+          console.log(`Processing video BG change job ${job.id}`);
+          const videoUrl = params?.videoUrl;
+          const bgDescription = params?.bgDescription || "professional office background";
+
+          if (!videoUrl) {
+            await supabaseAdmin.from("generation_jobs").update({ status: "failed", error_message: "No video URL" }).eq("id", job.id);
+            processed++; continue;
+          }
+
+          try {
+            // Use Replicate for video background removal + replacement
+            if (!REPLICATE_KEY) throw new Error("Replicate API key not configured");
+
+            // Step 1: Remove background using Replicate
+            console.log("Starting BG removal via Replicate...");
+            const bgRemoveResp = await fetch("https://api.replicate.com/v1/predictions", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${REPLICATE_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                model: "arielreplicate/robust_video_matting",
+                input: { input_video: videoUrl },
+              }),
+            });
+
+            if (!bgRemoveResp.ok) throw new Error(`Replicate BG remove failed: ${bgRemoveResp.status}`);
+            const bgRemoveData = await bgRemoveResp.json();
+            const predictionId = bgRemoveData.id;
+
+            // Update job with prediction ID for polling
+            await supabaseAdmin.from("generation_jobs").update({
+              external_job_id: predictionId,
+              input_params: { ...params, phase: "bg_removing", replicatePredictionId: predictionId },
+            }).eq("id", job.id);
+            console.log(`BG removal started: ${predictionId}`);
+            processed++;
+
+          } catch (err: any) {
+            console.error(`BG change job ${job.id} error:`, err.message);
+            await supabaseAdmin.from("generation_jobs").update({ status: "failed", error_message: err.message }).eq("id", job.id);
+            processed++;
+          }
+        }
+
+        // ===== VIDEO BG CHANGE - POLLING REPLICATE =====
+        if (job.tool_type === "video_bg_change" && job.external_job_id && params?.phase === "bg_removing") {
+          // Already handled above for new jobs, this handles polling
+        }
+
+        // Poll Replicate for video_bg_change jobs
+        if (job.tool_type === "video_bg_change" && job.external_job_id) {
+          console.log(`Polling Replicate for BG change job ${job.id}`);
+          if (REPLICATE_KEY) {
+            try {
+              const pollResp = await fetch(`https://api.replicate.com/v1/predictions/${job.external_job_id}`, {
+                headers: { Authorization: `Bearer ${REPLICATE_KEY}` },
+              });
+              if (pollResp.ok) {
+                const pollData = await pollResp.json();
+                if (pollData.status === "succeeded") {
+                  const outputUrl = typeof pollData.output === "string" ? pollData.output : pollData.output?.[0] || null;
+                  if (outputUrl) {
+                    const storedUrl = await uploadToStorage(supabaseAdmin, outputUrl, job.user_id, ".mp4", "video/mp4");
+                    if (!params?.isAdmin && !job.credits_deducted && job.credits_cost > 0) {
+                      await supabaseAdmin.rpc("deduct_user_credits", { _user_id: job.user_id, _amount: job.credits_cost, _action: "video_bg_change" });
+                    }
+                    await supabaseAdmin.from("user_outputs").insert({
+                      user_id: job.user_id, tool_id: "video_bg_change", tool_name: "AI Video Background Changer",
+                      output_type: "video", file_url: storedUrl,
+                    });
+                    await supabaseAdmin.from("generation_jobs").update({ status: "completed", output_url: storedUrl, credits_deducted: true }).eq("id", job.id);
+                    console.log(`BG change job ${job.id} completed!`);
+                  }
+                  processed++;
+                } else if (pollData.status === "failed" || pollData.status === "canceled") {
+                  await supabaseAdmin.from("generation_jobs").update({ status: "failed", error_message: pollData.error || `BG change ${pollData.status}` }).eq("id", job.id);
+                  processed++;
+                }
+              }
+            } catch (e: any) { console.warn(`BG change poll error: ${e.message}`); }
           }
         }
 

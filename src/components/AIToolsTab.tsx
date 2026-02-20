@@ -158,6 +158,10 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const docSlideCost = Math.ceil((2 + 3 * 5) * 1.4);
 
   const tools: ToolDef[] = useMemo(() => [
+    // NEW Video Tools - Show at top
+    { id: "videosubtitle", icon: Captions, titleKey: "", fallbackTitle: "AI Video Subtitle & Translate", descKey: "", fallbackDesc: "ဗီဒီယိုမှာ စာတန်းထိုး + ဘာသာပြန်", gradient: "bg-gradient-to-br from-teal-500 via-cyan-600 to-blue-700", credits: (costs as any).video_subtitle || 15, category: ["video"], badge: "NEW" },
+    { id: "texttovideo", icon: Film, titleKey: "", fallbackTitle: "AI Text-to-Video Creator", descKey: "", fallbackDesc: "စာသားဖြင့် ဗီဒီယို ဖန်တီးရန်", gradient: "bg-gradient-to-br from-rose-500 via-pink-600 to-fuchsia-700", credits: (costs as any).text_to_video || 20, category: ["video"], badge: "NEW" },
+    { id: "videobgchange", icon: ImagePlus, titleKey: "", fallbackTitle: "AI Video Background Changer", descKey: "", fallbackDesc: "ဗီဒီယို နောက်ခံ ပြောင်းလဲခြင်း", gradient: "bg-gradient-to-br from-emerald-500 via-green-600 to-teal-700", credits: (costs as any).video_bg_change || 18, category: ["video"], badge: "NEW" },
     // Premium - Only expensive/complex tools
     { id: "songmtv", icon: Music, titleKey: "tool.songMtv", fallbackTitle: "သီချင်းထုတ်မယ်/MTV ထုတ်မယ်", descKey: "tool.songMtv.desc", fallbackDesc: "AI အသုံးပြု၍ သီချင်းနှင့် MTV များ ဖန်တီးပေးခြင်း", gradient: "bg-gradient-to-br from-rose-500 via-pink-600 to-fuchsia-700", credits: costs.song_mtv, category: ["premium", "audio"], badge: "PREMIUM", badgeTooltip: "AI Song & MTV Creator" },
     { id: "autoad", icon: Zap, titleKey: "tool.autoAd", fallbackTitle: "AI ကို ကြော်ငြာ အပ်ခြင်း", descKey: "tool.autoAd.desc", fallbackDesc: "AI မှ သင်အပ်သောကြော်ငြာကို ဖန်တီးပေးပါလိမ့်မည်", gradient: "bg-gradient-to-br from-orange-500 via-amber-600 to-yellow-700", credits: costs.auto_ad, category: ["premium", "video"], badge: "PREMIUM", badgeTooltip: "Full Auto Ad Generator" },
@@ -212,10 +216,6 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
     { id: "travelplanner", icon: Plane, titleKey: "", fallbackTitle: "AI ခရီးသွား လမ်းညွှန်", descKey: "", fallbackDesc: "ကမ္ဘာပတ် ခရီးစဉ် ပလန်", gradient: "bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-600", credits: (costs as any).travel_planner || 3, category: ["lifestyle"], badge: "NEW" },
     { id: "autoresizer", icon: Crop, titleKey: "", fallbackTitle: "Auto Resizer", descKey: "", fallbackDesc: "TikTok/YouTube/FB အရွယ်အစား ပြောင်း", gradient: "bg-gradient-to-br from-lime-500 via-green-600 to-emerald-700", credits: 0, category: ["image"], badge: "FREE" },
     { id: "videoeditor", icon: Clapperboard, titleKey: "", fallbackTitle: "Video Editor", descKey: "", fallbackDesc: "Trim, Speed, Zoom, Filter, Text", gradient: "bg-gradient-to-br from-indigo-500 via-blue-600 to-violet-700", credits: (costs as any).video_editor || 2, category: ["video"], badge: "NEW" },
-    // New Video Tools
-    { id: "videosubtitle", icon: Captions, titleKey: "", fallbackTitle: "AI Video Subtitle & Translate", descKey: "", fallbackDesc: "ဗီဒီယိုမှာ စာတန်းထိုး + ဘာသာပြန်", gradient: "bg-gradient-to-br from-teal-500 via-cyan-600 to-blue-700", credits: (costs as any).video_subtitle || 15, category: ["video"], badge: "NEW" },
-    { id: "texttovideo", icon: Film, titleKey: "", fallbackTitle: "AI Text-to-Video Creator", descKey: "", fallbackDesc: "စာသားဖြင့် ဗီဒီယို ဖန်တီးရန်", gradient: "bg-gradient-to-br from-rose-500 via-pink-600 to-fuchsia-700", credits: (costs as any).text_to_video || 20, category: ["video"], badge: "NEW" },
-    { id: "videobgchange", icon: ImagePlus, titleKey: "", fallbackTitle: "AI Video Background Changer", descKey: "", fallbackDesc: "ဗီဒီယို နောက်ခံ ပြောင်းလဲခြင်း", gradient: "bg-gradient-to-br from-emerald-500 via-green-600 to-teal-700", credits: (costs as any).video_bg_change || 18, category: ["video"], badge: "NEW" },
   ], [costs, docSlideCost]);
 
   const filteredTools = useMemo(() => {
