@@ -59,6 +59,9 @@ const VideoMultiTool = lazy(() => import("./tools/VideoMultiTool").then(m => ({ 
 const CharacterAnimateTool = lazy(() => import("./tools/CharacterAnimateTool").then(m => ({ default: m.CharacterAnimateTool })));
 const AutoResizerTool = lazy(() => import("./tools/AutoResizerTool").then(m => ({ default: m.AutoResizerTool })));
 const VideoEditor = lazy(() => import("./VideoEditor").then(m => ({ default: m.VideoEditor })));
+const VideoSubtitleTranslateTool = lazy(() => import("./tools/VideoSubtitleTranslateTool").then(m => ({ default: m.VideoSubtitleTranslateTool })));
+const TextToVideoCreatorTool = lazy(() => import("./tools/TextToVideoCreatorTool").then(m => ({ default: m.TextToVideoCreatorTool })));
+const VideoBgChangerTool = lazy(() => import("./tools/VideoBgChangerTool").then(m => ({ default: m.VideoBgChangerTool })));
 
 import { ToolCardCompact } from "./ToolCardCompact";
 import { ToolHeader } from "./ToolHeader";
@@ -81,7 +84,7 @@ interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv" | "videoredesign" | "logodesign" | "photorestore" | "spellcheck" | "virtualtryon" | "astrology" | "interiordesign" | "cvbuilder" | "bizconsultant" | "creativewriter" | "legaladvisor" | "messagepolisher" | "nutritionplanner" | "cardealer" | "exteriordesign" | "voicetranslator" | "healthchecker" | "babynamer" | "legaldoc" | "styletransfer" | "smartchef" | "travelplanner" | "fashiondesigner" | "videomulti" | "characteranimate" | "autoresizer" | "videoeditor";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv" | "videoredesign" | "logodesign" | "photorestore" | "spellcheck" | "virtualtryon" | "astrology" | "interiordesign" | "cvbuilder" | "bizconsultant" | "creativewriter" | "legaladvisor" | "messagepolisher" | "nutritionplanner" | "cardealer" | "exteriordesign" | "voicetranslator" | "healthchecker" | "babynamer" | "legaldoc" | "styletransfer" | "smartchef" | "travelplanner" | "fashiondesigner" | "videomulti" | "characteranimate" | "autoresizer" | "videoeditor" | "videosubtitle" | "texttovideo" | "videobgchange";
 
 type ToolCategory = "all" | "image" | "video" | "audio" | "premium" | "health" | "legal" | "lifestyle" | "fashion";
 
@@ -209,6 +212,10 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
     { id: "travelplanner", icon: Plane, titleKey: "", fallbackTitle: "AI ခရီးသွား လမ်းညွှန်", descKey: "", fallbackDesc: "ကမ္ဘာပတ် ခရီးစဉ် ပလန်", gradient: "bg-gradient-to-br from-sky-400 via-blue-500 to-indigo-600", credits: (costs as any).travel_planner || 3, category: ["lifestyle"], badge: "NEW" },
     { id: "autoresizer", icon: Crop, titleKey: "", fallbackTitle: "Auto Resizer", descKey: "", fallbackDesc: "TikTok/YouTube/FB အရွယ်အစား ပြောင်း", gradient: "bg-gradient-to-br from-lime-500 via-green-600 to-emerald-700", credits: 0, category: ["image"], badge: "FREE" },
     { id: "videoeditor", icon: Clapperboard, titleKey: "", fallbackTitle: "Video Editor", descKey: "", fallbackDesc: "Trim, Speed, Zoom, Filter, Text", gradient: "bg-gradient-to-br from-indigo-500 via-blue-600 to-violet-700", credits: (costs as any).video_editor || 2, category: ["video"], badge: "NEW" },
+    // New Video Tools
+    { id: "videosubtitle", icon: Captions, titleKey: "", fallbackTitle: "AI Video Subtitle & Translate", descKey: "", fallbackDesc: "ဗီဒီယိုမှာ စာတန်းထိုး + ဘာသာပြန်", gradient: "bg-gradient-to-br from-teal-500 via-cyan-600 to-blue-700", credits: (costs as any).video_subtitle || 15, category: ["video"], badge: "NEW" },
+    { id: "texttovideo", icon: Film, titleKey: "", fallbackTitle: "AI Text-to-Video Creator", descKey: "", fallbackDesc: "စာသားဖြင့် ဗီဒီယို ဖန်တီးရန်", gradient: "bg-gradient-to-br from-rose-500 via-pink-600 to-fuchsia-700", credits: (costs as any).text_to_video || 20, category: ["video"], badge: "NEW" },
+    { id: "videobgchange", icon: ImagePlus, titleKey: "", fallbackTitle: "AI Video Background Changer", descKey: "", fallbackDesc: "ဗီဒီယို နောက်ခံ ပြောင်းလဲခြင်း", gradient: "bg-gradient-to-br from-emerald-500 via-green-600 to-teal-700", credits: (costs as any).video_bg_change || 18, category: ["video"], badge: "NEW" },
   ], [costs, docSlideCost]);
 
   const filteredTools = useMemo(() => {
@@ -280,6 +287,9 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
       case "characteranimate": return <CharacterAnimateTool key="characteranimate" userId={userId} onBack={handleBack} />;
       case "autoresizer": return <AutoResizerTool key="autoresizer" userId={userId} onBack={handleBack} />;
       case "videoeditor": return <div key="videoeditor"><ToolHeader title="Video Editor" subtitle="Trim, Speed, Zoom, Filter, Text" onBack={handleBack} /><VideoEditor userId={userId} /></div>;
+      case "videosubtitle": return <VideoSubtitleTranslateTool key="videosubtitle" userId={userId} onBack={handleBack} />;
+      case "texttovideo": return <TextToVideoCreatorTool key="texttovideo" userId={userId} onBack={handleBack} />;
+      case "videobgchange": return <VideoBgChangerTool key="videobgchange" userId={userId} onBack={handleBack} />;
       default: return null;
     }
   };
