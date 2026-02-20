@@ -91,7 +91,7 @@ serve(async (req) => {
     settings?.forEach((s: any) => { configMap[s.key] = s.value; });
 
     const SHOTSTACK_KEY = configMap["shotstack_api_key"] || Deno.env.get("SHOTSTACK_API_KEY");
-    const STABILITY_API_KEY = Deno.env.get("STABILITY_API_KEY");
+    // STABILITY_API_KEY removed - using Gemini for all scene generation
     const REPLICATE_KEY = configMap["replicate_api_token"] || Deno.env.get("REPLICATE_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
@@ -463,51 +463,41 @@ serve(async (req) => {
             ];
 
             const sceneImages: string[] = [];
-            let useStability = !!STABILITY_API_KEY;
 
-            // Try Stability AI first
-            if (useStability) {
-              for (let i = 0; i < numScenesNeeded; i++) {
-                const theme = sceneThemes[i % sceneThemes.length];
-                const prompt = `Music video ${theme}, ${styleDescriptions[mtvStyle] || styleDescriptions.cartoon}, ${mood} atmosphere, variation ${i + 1}, 16:9`;
+            // Use Gemini (Lovable AI) for all scene image generation - cost-effective & high quality
+            if (LOVABLE_API_KEY) {
+              console.log(`Generating ${numScenesNeeded} scene images with Gemini...`);
+              
+              // Generate lyrics-aware scene descriptions using Gemini text
+              let sceneDescriptions: string[] = [];
+              const lyricsContext = cleanLyrics || params?.lyrics || "";
+              if (lyricsContext) {
                 try {
-                  const fd = new FormData();
-                  fd.append("prompt", prompt);
-                  fd.append("output_format", "png");
-                  fd.append("aspect_ratio", "16:9");
-                  const sceneResp = await fetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
+                  const descResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
                     method: "POST",
-                    headers: { Authorization: `Bearer ${STABILITY_API_KEY}`, Accept: "image/*" },
-                    body: fd,
+                    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      model: "google/gemini-3-flash-preview",
+                      messages: [{
+                        role: "user",
+                        content: `Given these song lyrics:\n"${lyricsContext.substring(0, 1500)}"\n\nGenerate exactly ${numScenesNeeded} detailed visual scene descriptions for a music video. Style: ${styleDescriptions[mtvStyle] || styleDescriptions.cartoon}. Mood: ${mood}.\nReturn ONLY a JSON array of strings. Each string should be a vivid, detailed scene description matching the lyrics meaning.\nExample: ["A couple walking through cherry blossoms at sunset", "Rain falling on a lonely street at night"]`,
+                      }],
+                      temperature: 0.7,
+                    }),
                   });
-                  if (sceneResp.ok) {
-                    const buf = await sceneResp.arrayBuffer();
-                    const imgName = `${job.user_id}/scene-${Date.now()}-${i}.png`;
-                    await supabaseAdmin.storage.from("videos").upload(imgName, buf, { contentType: "image/png", upsert: true });
-                    const { data: imgSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(imgName, 86400);
-                    if (imgSigned?.signedUrl) sceneImages.push(imgSigned.signedUrl);
-                    console.log(`Scene ${sceneImages.length}/${numScenesNeeded} generated (Stability)`);
-                  } else {
-                    console.warn(`Stability scene gen failed: ${sceneResp.status}`);
-                    await sceneResp.text();
-                    if (sceneResp.status === 402 || sceneResp.status === 403) {
-                      console.log("Stability API credits exhausted, switching to Lovable AI...");
-                      useStability = false;
-                      break;
-                    }
+                  if (descResp.ok) {
+                    const descData = await descResp.json();
+                    const content = descData.choices?.[0]?.message?.content?.trim() || "";
+                    const jsonMatch = content.match(/\[[\s\S]*\]/);
+                    if (jsonMatch) sceneDescriptions = JSON.parse(jsonMatch[0]);
+                    console.log(`Generated ${sceneDescriptions.length} lyrics-aware scene descriptions`);
                   }
-                } catch (e) {
-                  console.warn("Stability scene error:", e);
-                }
+                } catch (e: any) { console.warn("Scene description generation error:", e.message); }
               }
-            }
 
-            // Fallback: Use Lovable AI (Gemini image generation)
-            if (sceneImages.length < numScenesNeeded && LOVABLE_API_KEY) {
-              console.log(`Generating ${numScenesNeeded - sceneImages.length} remaining scenes with Lovable AI...`);
-              for (let i = sceneImages.length; i < numScenesNeeded; i++) {
-                const theme = sceneThemes[i % sceneThemes.length];
-                const prompt = `Generate a 16:9 aspect ratio music video scene image. Style: ${styleDescriptions[mtvStyle] || styleDescriptions.cartoon}. Scene: ${theme}. Mood: ${mood}. Ultra high resolution, cinematic quality. No text overlays.`;
+              for (let i = 0; i < numScenesNeeded; i++) {
+                const theme = sceneDescriptions[i] || sceneThemes[i % sceneThemes.length];
+                const prompt = `Generate a 16:9 aspect ratio music video scene image. Scene: ${theme}. Style: ${styleDescriptions[mtvStyle] || styleDescriptions.cartoon}. Mood: ${mood}. Ultra high resolution, cinematic quality, dramatic lighting. No text overlays, no watermarks.`;
                 try {
                   const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
                     method: "POST",
@@ -529,14 +519,14 @@ serve(async (req) => {
                       const { data: imgSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(imgName, 86400);
                       if (imgSigned?.signedUrl) {
                         sceneImages.push(imgSigned.signedUrl);
-                        console.log(`Scene ${sceneImages.length}/${numScenesNeeded} generated (Lovable AI)`);
+                        console.log(`Scene ${sceneImages.length}/${numScenesNeeded} generated (Gemini)`);
                       }
                     }
                   } else {
-                    console.warn(`Lovable AI image gen failed: ${aiResp.status}`);
+                    console.warn(`Gemini image gen failed: ${aiResp.status}`);
                   }
                 } catch (e) {
-                  console.warn("Lovable AI scene error:", e);
+                  console.warn("Gemini scene error:", e);
                 }
               }
             }
@@ -550,13 +540,18 @@ serve(async (req) => {
               continue;
             }
 
-            // Build Shotstack timeline
+            // Build Shotstack timeline with cinematic motion effects
+            const motionEffects = ["zoomIn", "slideLeft", "zoomOut", "slideRight", "zoomIn", "slideUp"];
+            const transitionTypes = ["fade", "dissolve", "wipeRight", "wipeLeft", "slideLeft", "slideRight"];
             const clips = sceneImages.map((url: string, i: number) => ({
               asset: { type: "image", src: url },
               start: i * sceneDuration,
               length: sceneDuration,
-              effect: i % 2 === 0 ? "zoomIn" : "slideLeft",
-              transition: { in: "fade", out: "fade" },
+              effect: motionEffects[i % motionEffects.length],
+              transition: {
+                in: i === 0 ? "fade" : transitionTypes[i % transitionTypes.length],
+                out: i === sceneImages.length - 1 ? "fade" : transitionTypes[(i + 1) % transitionTypes.length],
+              },
             }));
 
             const soundtrack: any[] = [];
@@ -1249,44 +1244,20 @@ Example: ["A sunrise over mountains with golden light", "A person walking throug
               sceneDescriptions = Array.from({ length: numScenes }, (_, i) => `${promptText}, scene ${i + 1}, ${styleDescs[videoStyle]}`);
             }
 
-            // Generate images
+            // Generate images using Gemini (Lovable AI) - cost-effective & high quality
             const sceneImages: string[] = [];
-            let useStability = !!STABILITY_API_KEY;
 
-            if (useStability) {
+            if (LOVABLE_API_KEY) {
+              console.log(`Generating ${numScenes} scene images with Gemini...`);
               for (let i = 0; i < numScenes; i++) {
-                const imgPrompt = `${sceneDescriptions[i] || promptText}, ${styleDescs[videoStyle]}, ${aspectRatio} aspect ratio, ultra high resolution`;
-                try {
-                  const fd = new FormData();
-                  fd.append("prompt", imgPrompt);
-                  fd.append("output_format", "png");
-                  fd.append("aspect_ratio", aspectRatio === "9:16" ? "9:16" : aspectRatio === "1:1" ? "1:1" : "16:9");
-                  const resp = await fetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
-                    method: "POST", headers: { Authorization: `Bearer ${STABILITY_API_KEY}`, Accept: "image/*" }, body: fd,
-                  });
-                  if (resp.ok) {
-                    const buf = await resp.arrayBuffer();
-                    const imgName = `scene-${job.user_id}-${Date.now()}-${i}.png`;
-                    await supabaseAdmin.storage.from("videos").upload(imgName, buf, { contentType: "image/png", upsert: true });
-                    const { data: imgSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(imgName, 3600);
-                    if (imgSigned?.signedUrl) sceneImages.push(imgSigned.signedUrl);
-                  } else if (resp.status === 402 || resp.status === 403) {
-                    useStability = false; await resp.text(); break;
-                  } else { await resp.text(); }
-                } catch (e) { console.warn("Stability error:", e); }
-              }
-            }
-
-            // Fallback to Lovable AI
-            if (sceneImages.length < numScenes && LOVABLE_API_KEY) {
-              for (let i = sceneImages.length; i < numScenes; i++) {
+                const imgPrompt = `Generate a ${aspectRatio} aspect ratio image. Scene: ${sceneDescriptions[i] || promptText}. Style: ${styleDescs[videoStyle]}. Ultra high resolution, cinematic quality, dramatic lighting. No text overlays, no watermarks.`;
                 try {
                   const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
                     method: "POST",
                     headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
                     body: JSON.stringify({
                       model: "google/gemini-2.5-flash-image",
-                      messages: [{ role: "user", content: `Generate image: ${sceneDescriptions[i] || promptText}, ${styleDescs[videoStyle]}, ${aspectRatio}` }],
+                      messages: [{ role: "user", content: imgPrompt }],
                       modalities: ["image", "text"],
                     }),
                   });
@@ -1298,11 +1269,16 @@ Example: ["A sunrise over mountains with golden light", "A person walking throug
                       const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
                       const imgName = `scene-${job.user_id}-${Date.now()}-${i}.png`;
                       await supabaseAdmin.storage.from("videos").upload(imgName, bytes.buffer, { contentType: "image/png", upsert: true });
-                      const { data: imgSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(imgName, 3600);
-                      if (imgSigned?.signedUrl) sceneImages.push(imgSigned.signedUrl);
+                      const { data: imgSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(imgName, 86400);
+                      if (imgSigned?.signedUrl) {
+                        sceneImages.push(imgSigned.signedUrl);
+                        console.log(`Scene ${sceneImages.length}/${numScenes} generated (Gemini)`);
+                      }
                     }
+                  } else {
+                    console.warn(`Gemini image gen failed: ${resp.status}`);
                   }
-                } catch {}
+                } catch (e) { console.warn("Gemini scene error:", e); }
               }
             }
 
@@ -1311,17 +1287,22 @@ Example: ["A sunrise over mountains with golden light", "A person walking throug
               processed++; continue;
             }
 
-            // Build Shotstack timeline
+            // Build Shotstack timeline with cinematic motion effects
             if (!SHOTSTACK_KEY) {
               await supabaseAdmin.from("generation_jobs").update({ status: "failed", error_message: "Shotstack key not configured" }).eq("id", job.id);
               processed++; continue;
             }
 
+            const motionFx = ["zoomIn", "slideLeft", "zoomOut", "slideRight", "zoomIn", "slideUp"];
+            const transFx = ["fade", "dissolve", "wipeRight", "wipeLeft", "slideLeft", "slideRight"];
             const clips = sceneImages.map((url: string, i: number) => ({
               asset: { type: "image", src: url },
               start: i * sceneDuration, length: sceneDuration,
-              effect: ["zoomIn", "slideLeft", "zoomOut", "slideRight"][i % 4],
-              transition: { in: "fade", out: "fade" },
+              effect: motionFx[i % motionFx.length],
+              transition: {
+                in: i === 0 ? "fade" : transFx[i % transFx.length],
+                out: i === sceneImages.length - 1 ? "fade" : transFx[(i + 1) % transFx.length],
+              },
             }));
 
             const shotstackPayload: any = {
