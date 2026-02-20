@@ -246,6 +246,8 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
   const hasFFmpegEffect = copyrightBypass || autoColorGrade || flipVideo || textWatermark || logoOverlay || characterEnabled || aspectRatio !== "original";
   const hasAIFeature = autoSubtitles || ttsEnabled || objectRemoval;
   const hasConcat = !!introFile || !!outroFile;
+  // We need videoBlob for FFmpeg whenever we have visual effects, TTS to merge, subtitles to burn, or concat
+  const needsFFmpeg = hasFFmpegEffect || hasConcat || ttsEnabled || autoSubtitles;
   const hasAnyEffect = hasFFmpegEffect || hasAIFeature || hasConcat || characterEnabled;
 
   const handleImageUpload = (setter: (v: string | null) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -370,7 +372,8 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
     videoBlob: Blob,
     ttsAudio?: string | null,
     intro?: File | null,
-    outro?: File | null
+    outro?: File | null,
+    srtToBurn?: string | null
   ): Promise<Blob> => {
     // Check file size - if too large for browser, throw with specific error
     if (videoBlob.size > MAX_FFMPEG_FILE_SIZE) {
@@ -458,6 +461,20 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
         }
       }
 
+      // Write SRT subtitle file if available for hard-burning
+      let hasSrtFile = false;
+      if (srtToBurn) {
+        try {
+          setProgressMsg("စာတန်းထိုး ထည့်နေသည်...");
+          const encoder = new TextEncoder();
+          await ffmpeg.writeFile("subs.srt", encoder.encode(srtToBurn));
+          hasSrtFile = true;
+          console.log("[FFmpeg] SRT subtitle file written");
+        } catch (e) {
+          console.warn("[FFmpeg] Failed to write SRT:", e);
+        }
+      }
+
       // Write intro/outro files
       let hasIntro = false, hasOutro = false;
       if (intro) {
@@ -539,6 +556,9 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
           fc += `[${charInputIdx}:v]scale=160:160[char];[${lastVideoLabel}][char]overlay=${charPos}[vchar]`;
           lastVideoLabel = "vchar";
         }
+        // Note: Subtitle burning via 'subtitles' filter requires libass (not available in WASM)
+        // SRT subtitles are provided as a separate downloadable file instead
+        // If hasSrtFile is true, we still include it in the pipeline for future server-side burning
         // Final video output label
         const finalVideoLabel = lastVideoLabel === "0:v" ? null : lastVideoLabel;
         if (finalVideoLabel && !fc.endsWith(`[${finalVideoLabel}]`)) {
@@ -718,7 +738,7 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
         }
 
         // Fetch blob for FFmpeg processing
-        if (hasFFmpegEffect || logoOverlay || hasConcat) {
+        if (needsFFmpeg || hasAIFeature) {
           try {
             const resp = await fetch(dlData?.fileUrl);
             if (resp.ok) videoBlob = await resp.blob();
@@ -891,7 +911,8 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
             videoBlob,
             generatedTtsUrl,
             introFile,
-            outroFile
+            outroFile,
+            localSrtContent
           );
 
           setProgress(90);
