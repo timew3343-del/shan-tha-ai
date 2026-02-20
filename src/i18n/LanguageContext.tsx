@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import * as React from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { translations, LANGUAGES } from './translations';
 
 interface LanguageContextType {
