@@ -86,7 +86,7 @@ serve(async (req) => {
     // Fetch API keys
     const { data: settings } = await supabaseAdmin
       .from("app_settings").select("key, value")
-      .in("key", ["shotstack_api_key", "suno_api_key", "sunoapi_org_key", "goapi_suno_api_key", "replicate_api_token", "openai_api_key", "api_enabled_openai", "gemini_api_key"]);
+      .in("key", ["shotstack_api_key", "suno_api_key", "sunoapi_org_key", "goapi_suno_api_key", "replicate_api_token", "openai_api_key", "api_enabled_openai", "gemini_api_key", "global_profit_margin"]);
     const configMap: Record<string, string> = {};
     settings?.forEach((s: any) => { configMap[s.key] = s.value; });
 
@@ -336,6 +336,114 @@ serve(async (req) => {
             const sceneDuration = 10;
             const numScenesNeeded = Math.ceil(totalDurationSec / sceneDuration);
 
+            // ===== Whisper Transcription + Gemini Correction for Subtitles =====
+            const audioUrl = params?.audioUrl;
+            const showSubtitles = params?.showSubtitles;
+            const subtitleColor = params?.subtitleColor || "#FFFFFF";
+            const language = params?.language || "my";
+            let srtContent = "";
+            let cleanLyrics = params?.cleanLyrics || "";
+            
+            // If subtitles enabled and we have audio, transcribe with Whisper for accurate timing
+            if (showSubtitles && audioUrl) {
+              const openaiKey = configMap["api_enabled_openai"] !== "false" ? configMap["openai_api_key"] : null;
+              
+              if (openaiKey) {
+                try {
+                  console.log("MTV: Downloading audio for Whisper transcription...");
+                  const audioResp = await fetch(audioUrl);
+                  if (audioResp.ok) {
+                    const audioBuffer = await audioResp.arrayBuffer();
+                    const audioSize = audioBuffer.byteLength;
+                    console.log(`MTV: Audio downloaded: ${(audioSize / 1024 / 1024).toFixed(1)}MB`);
+                    
+                    if (audioSize <= 25 * 1024 * 1024) {
+                      // Transcribe with Whisper
+                      const formData = new FormData();
+                      formData.append("file", new Blob([audioBuffer], { type: "audio/mpeg" }), "audio.mp3");
+                      formData.append("model", "whisper-1");
+                      formData.append("response_format", "srt");
+                      
+                      const whisperResp = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${openaiKey}` },
+                        body: formData,
+                      });
+                      
+                      if (whisperResp.ok) {
+                        srtContent = await whisperResp.text();
+                        console.log(`MTV: Whisper transcription done. SRT length: ${srtContent.length}`);
+                        
+                        // Gemini Myanmar spelling correction
+                        if (srtContent && (language === "my" || !language) && LOVABLE_API_KEY) {
+                          console.log("MTV: Correcting Myanmar spelling with Gemini...");
+                          try {
+                            const correctionResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                              method: "POST",
+                              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                model: "google/gemini-3-flash-preview",
+                                messages: [
+                                  { role: "system", content: "You are a Myanmar language expert. Fix Myanmar spelling and grammar in SRT subtitle content. Keep ALL SRT formatting (numbers, timestamps) exactly the same. Only fix the text lines. Use proper Unicode (NFC). Return ONLY the corrected SRT." },
+                                  { role: "user", content: `Fix Myanmar spelling in this SRT:\n\n${srtContent}` },
+                                ],
+                                temperature: 0.2,
+                                max_tokens: 4096,
+                              }),
+                            });
+                            if (correctionResp.ok) {
+                              const corrData = await correctionResp.json();
+                              const corrected = corrData.choices?.[0]?.message?.content?.trim();
+                              if (corrected && corrected.length > 10) {
+                                srtContent = corrected;
+                                console.log("MTV: Myanmar spelling corrected successfully");
+                              }
+                            }
+                          } catch (e: any) {
+                            console.warn("MTV: Gemini correction failed:", e.message);
+                          }
+                        }
+                        
+                        // Translate if not Myanmar and not original
+                        if (language && language !== "my" && language !== "original" && LOVABLE_API_KEY) {
+                          const LANG_NAMES: Record<string, string> = { en: "English", th: "Thai", zh: "Chinese", ja: "Japanese", ko: "Korean" };
+                          const langName = LANG_NAMES[language] || language;
+                          try {
+                            const transResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                              method: "POST",
+                              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                model: "google/gemini-3-flash-preview",
+                                messages: [
+                                  { role: "system", content: "Translate SRT subtitle text accurately. Keep ALL SRT formatting. Only translate text lines. Return ONLY translated SRT." },
+                                  { role: "user", content: `Translate to ${langName}:\n\n${srtContent}` },
+                                ],
+                                temperature: 0.3,
+                                max_tokens: 8192,
+                              }),
+                            });
+                            if (transResp.ok) {
+                              const td = await transResp.json();
+                              const translated = td.choices?.[0]?.message?.content?.trim();
+                              if (translated) srtContent = translated;
+                            }
+                          } catch {}
+                        }
+                      } else {
+                        console.warn("MTV: Whisper failed:", whisperResp.status);
+                      }
+                    } else {
+                      console.warn("MTV: Audio too large for Whisper (>25MB)");
+                    }
+                  }
+                } catch (e: any) {
+                  console.warn("MTV: Whisper transcription error:", e.message);
+                }
+              } else {
+                console.warn("MTV: No OpenAI key for Whisper");
+              }
+            }
+
             const styleDescriptions: Record<string, string> = {
               cartoon: "colorful cartoon animation style, vibrant 2D animation",
               "3d": "3D rendered cinematic scene, Pixar quality",
@@ -382,7 +490,6 @@ serve(async (req) => {
                   } else {
                     console.warn(`Stability scene gen failed: ${sceneResp.status}`);
                     await sceneResp.text();
-                    // If 402/403, stop trying Stability and fall back
                     if (sceneResp.status === 402 || sceneResp.status === 403) {
                       console.log("Stability API credits exhausted, switching to Lovable AI...");
                       useStability = false;
@@ -415,7 +522,6 @@ serve(async (req) => {
                     const aiData = await aiResp.json();
                     const imgDataUrl = aiData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
                     if (imgDataUrl && imgDataUrl.startsWith("data:image")) {
-                      // Extract base64 and upload to storage
                       const base64Part = imgDataUrl.split(",")[1];
                       const imgBytes = Uint8Array.from(atob(base64Part), c => c.charCodeAt(0));
                       const imgName = `scene-${job.user_id}-${Date.now()}-${i}.png`;
@@ -445,11 +551,6 @@ serve(async (req) => {
             }
 
             // Build Shotstack timeline
-            const audioUrl = params?.audioUrl;
-            const showSubtitles = params?.showSubtitles;
-            const subtitleColor = params?.subtitleColor || "#FFFFFF";
-            const cleanLyrics = params?.cleanLyrics;
-
             const clips = sceneImages.map((url: string, i: number) => ({
               asset: { type: "image", src: url },
               start: i * sceneDuration,
@@ -467,25 +568,54 @@ serve(async (req) => {
               });
             }
 
+            // Build subtitle clips - prefer Whisper SRT (timed) over evenly-distributed lyrics
             const subtitleClips: any[] = [];
-            if (showSubtitles && cleanLyrics) {
+            if (showSubtitles && srtContent) {
+              // Parse SRT format for accurate timing
+              console.log("MTV: Using Whisper-timed SRT subtitles");
+              const srtBlocks = srtContent.split("\n\n").filter((b: string) => b.trim());
+              for (const block of srtBlocks) {
+                const lines = block.split("\n");
+                if (lines.length < 3) continue;
+                const timeParts = lines[1].split(" --> ");
+                if (timeParts.length !== 2) continue;
+                const parseTime = (t: string) => {
+                  const p = t.trim().replace(",", ".").split(":");
+                  return parseFloat(p[0]) * 3600 + parseFloat(p[1]) * 60 + parseFloat(p[2]);
+                };
+                const start = parseTime(timeParts[0]);
+                const end = parseTime(timeParts[1]);
+                const text = lines.slice(2).join(" ").trim()
+                  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+                if (!text) continue;
+                
+                subtitleClips.push({
+                  asset: {
+                    type: "html",
+                    html: `<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@700&display=swap" rel="stylesheet"><div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:44px;font-weight:700;color:${subtitleColor};text-shadow:3px 3px 6px rgba(0,0,0,0.9), -1px -1px 3px rgba(0,0,0,0.7);text-align:center;padding:12px 24px;background:rgba(0,0,0,0.45);border-radius:8px;line-height:1.4;">${text}</p></div>`,
+                    width: 1200,
+                    height: 150,
+                  },
+                  start,
+                  length: Math.max(end - start, 0.5),
+                  position: "bottom",
+                  offset: { y: 0.06 },
+                });
+              }
+            } else if (showSubtitles && cleanLyrics) {
+              // Fallback: evenly-distributed lyrics (no Whisper available)
+              console.log("MTV: Using evenly-distributed lyrics subtitles (no Whisper)");
               const lines = cleanLyrics.split("\n").filter((l: string) => l.trim());
               const totalVideoLen = sceneImages.length * sceneDuration;
-              // Minimum 3 seconds per line to prevent flickering
               const minLineDur = 3;
               const rawLineDur = totalVideoLen / Math.max(lines.length, 1);
               const lineDuration = Math.max(rawLineDur, minLineDur);
-              // If lines overflow video length, truncate
               const maxLines = Math.floor(totalVideoLen / lineDuration);
               const visibleLines = lines.slice(0, maxLines);
               
               visibleLines.forEach((line: string, i: number) => {
-                // HTML-escape the text
                 const escaped = line.trim()
-                  .replace(/&/g, "&amp;")
-                  .replace(/</g, "&lt;")
-                  .replace(/>/g, "&gt;")
-                  .replace(/"/g, "&quot;");
+                  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
                 
                 subtitleClips.push({
                   asset: {
@@ -544,7 +674,6 @@ serve(async (req) => {
             }
 
             console.log(`Shotstack render started: ${renderId}`);
-            // Update job to track Shotstack render
             await supabaseAdmin.from("generation_jobs").update({
               external_job_id: renderId,
               input_params: { ...params, phase: "rendering" },
