@@ -243,7 +243,7 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
     (characterEnabled ? 2 : 0);
   const cost = baseCost + extraCost;
 
-  const hasFFmpegEffect = copyrightBypass || autoColorGrade || flipVideo || textWatermark || logoOverlay || aspectRatio !== "original";
+  const hasFFmpegEffect = copyrightBypass || autoColorGrade || flipVideo || textWatermark || logoOverlay || characterEnabled || aspectRatio !== "original";
   const hasAIFeature = autoSubtitles || ttsEnabled || objectRemoval;
   const hasConcat = !!introFile || !!outroFile;
   const hasAnyEffect = hasFFmpegEffect || hasAIFeature || hasConcat || characterEnabled;
@@ -427,6 +427,21 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
         }
       }
 
+      // Write character overlay file if needed
+      let hasCharFile = false;
+      if (characterEnabled && characterImage) {
+        try {
+          const charResp = await fetch(characterImage);
+          const charBlob = await charResp.blob();
+          const charData = await fetchFile(new File([charBlob], "char.png"));
+          await ffmpeg.writeFile("char.png", charData);
+          hasCharFile = true;
+          console.log("[FFmpeg] Character file written");
+        } catch (e) {
+          console.warn("[FFmpeg] Failed to load character:", e);
+        }
+      }
+
       // Write TTS audio if available
       let hasTtsAudio = false;
       if (ttsAudio) {
@@ -479,17 +494,16 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
       const mainOutputName = (hasIntro || hasOutro) ? "main_processed.mp4" : "output.mp4";
       const cmd: string[] = ["-i", "input.mp4"];
 
-      if (hasTtsAudio) {
-        cmd.push("-i", "tts.mp3");
-      }
-
-      // Build unified filter_complex to avoid duplicate -filter_complex flags (FFmpeg only accepts ONE)
-      const logoInputIdx = hasTtsAudio ? 2 : 1;
+      // Build unified filter_complex — track input indices dynamically
+      let nextInputIdx = 1; // 0 = input.mp4
+      const ttsInputIdx = hasTtsAudio ? nextInputIdx++ : -1;
       const hasLogo = hasLogoFile;
+      const logoInputIdx = hasLogo ? nextInputIdx++ : -1;
+      const charInputIdx = hasCharFile ? nextInputIdx++ : -1;
 
-      if (hasLogo) {
-        cmd.push("-i", "logo.png");
-      }
+      if (hasTtsAudio) cmd.push("-i", "tts.mp3");
+      if (hasLogo) cmd.push("-i", "logo.png");
+      if (hasCharFile) cmd.push("-i", "char.png");
 
       const posMap: Record<string, string> = {
         "bottom-left": "20:H-h-20",
@@ -499,49 +513,59 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
         "center": "(W-w)/2:(H-h)/2",
       };
       const logoPos = posMap[logoPosition] || posMap["top-right"];
+      const charPos = posMap[characterPosition] || posMap["bottom-right"];
 
       // Determine if we need a single unified filter_complex
-      const needsFilterComplex = hasLogo || (hasTtsAudio && (filters.length > 0 || hasLogo));
+      const needsFilterComplex = hasLogo || hasCharFile || hasTtsAudio || filters.length > 0;
 
       if (needsFilterComplex) {
-        // Build single unified filter_complex with video + audio graphs
         let fc = "";
-
-        // Video graph
-        if (filters.length > 0 && hasLogo) {
-          fc += `[0:v]${filters.join(",")}[base];[${hasLogo ? (hasTtsAudio ? 2 : 1) : 0}:v]scale=80:80[logo];[base][logo]overlay=${logoPos}[vout]`;
-        } else if (hasLogo) {
-          fc += `[${hasLogo ? (hasTtsAudio ? 2 : 1) : 0}:v]scale=80:80[logo];[0:v][logo]overlay=${logoPos}[vout]`;
-        } else if (filters.length > 0) {
-          fc += `[0:v]${filters.join(",")}[vout]`;
+        // ── Video chain ──
+        let lastVideoLabel = "0:v";
+        // Apply visual filters first
+        if (filters.length > 0) {
+          fc += `[0:v]${filters.join(",")}[vfiltered]`;
+          lastVideoLabel = "vfiltered";
+        }
+        // Overlay logo
+        if (hasLogo) {
+          if (fc) fc += ";";
+          fc += `[${logoInputIdx}:v]scale=80:80[logo];[${lastVideoLabel}][logo]overlay=${logoPos}[vlogo]`;
+          lastVideoLabel = "vlogo";
+        }
+        // Overlay character
+        if (hasCharFile) {
+          if (fc) fc += ";";
+          fc += `[${charInputIdx}:v]scale=160:160[char];[${lastVideoLabel}][char]overlay=${charPos}[vchar]`;
+          lastVideoLabel = "vchar";
+        }
+        // Final video output label
+        const finalVideoLabel = lastVideoLabel === "0:v" ? null : lastVideoLabel;
+        if (finalVideoLabel && !fc.endsWith(`[${finalVideoLabel}]`)) {
+          // already labeled
         }
 
-        // Audio graph (TTS mixing)
+        // ── Audio chain (TTS mixing) ──
         if (hasTtsAudio) {
           if (fc) fc += ";";
-          fc += `[0:a]volume=0.3[orig];[1:a]volume=1.0[tts];[orig][tts]amix=inputs=2:duration=shortest:dropout_transition=2[aout]`;
+          fc += `[0:a]volume=0.3[orig];[${ttsInputIdx}:a]volume=1.0[tts];[orig][tts]amix=inputs=2:duration=shortest:dropout_transition=2[aout]`;
         }
 
-        cmd.push("-filter_complex", fc);
-
-        // Map outputs
-        if (fc.includes("[vout]")) {
-          cmd.push("-map", "[vout]");
-        } else {
-          cmd.push("-map", "0:v");
+        if (fc) {
+          cmd.push("-filter_complex", fc);
+          // Map video
+          if (finalVideoLabel) {
+            cmd.push("-map", `[${finalVideoLabel}]`);
+          } else {
+            cmd.push("-map", "0:v");
+          }
+          // Map audio
+          if (hasTtsAudio) {
+            cmd.push("-map", "[aout]");
+          } else {
+            cmd.push("-map", "0:a?");
+          }
         }
-        if (hasTtsAudio) {
-          cmd.push("-map", "[aout]");
-        } else {
-          cmd.push("-map", "0:a?");
-        }
-      } else if (filters.length > 0 && !hasTtsAudio) {
-        // Simple case: only video filters, no logo, no TTS
-        cmd.push("-vf", filters.join(","));
-      } else if (hasTtsAudio && !hasLogo && filters.length === 0) {
-        // Only TTS audio mixing, no video filters or logo
-        cmd.push("-filter_complex", `[0:a]volume=0.3[orig];[1:a]volume=1.0[tts];[orig][tts]amix=inputs=2:duration=shortest:dropout_transition=2[aout]`);
-        cmd.push("-map", "0:v", "-map", "[aout]");
       }
 
       // Memory-optimized encoding settings
@@ -844,7 +868,18 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
         }
       }
 
-      // ── Step 5: FFmpeg processing (if needed) ──
+      // ── Step 5: Re-fetch blob if object removal updated URL ──
+      if (objectRemoval && videoSignedUrl && (!videoBlob || videoSignedUrl !== videoUrl)) {
+        try {
+          setProgressMsg("Object removal ပြီး video ပြန်ယူနေသည်...");
+          const orResp = await fetch(videoSignedUrl);
+          if (orResp.ok) videoBlob = await orResp.blob();
+        } catch (e) {
+          console.warn("[Pipeline] Failed to re-fetch after object removal:", e);
+        }
+      }
+
+      // ── Step 6: FFmpeg processing (if needed) ──
       let finalUrl: string | null = null;
 
       if (videoBlob && (hasFFmpegEffect || hasConcat || generatedTtsUrl)) {
@@ -935,6 +970,7 @@ export const VideoMultiTool = ({ userId, onBack }: Props) => {
       if (autoColorGrade) appliedEffects.push("Color Grade");
       if (textWatermark && watermarkText) appliedEffects.push("Watermark");
       if (logoOverlay) appliedEffects.push("Logo");
+      if (characterEnabled) appliedEffects.push("Character");
       if (autoSubtitles) appliedEffects.push("Subtitles");
       if (ttsEnabled && generatedTtsUrl) appliedEffects.push("TTS Voice");
       if (introFile) appliedEffects.push("Intro");
