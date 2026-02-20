@@ -177,7 +177,7 @@ serve(async (req) => {
           "Prefer": "wait",
         },
         body: JSON.stringify({
-          version: "a98a3a47e964b80224e2a16c1a952105ba2e5e0d7b703b75d02ae927723e4b67",
+          version: "e5ea7ae04e97c96a0e14c70d8e4cb899abdf326a377c01f1c10966ccd6c6bae4",
           input: {
             video: videoUrl,
             ...(maskImageBase64 ? { mask: maskImageBase64 } : {}),
