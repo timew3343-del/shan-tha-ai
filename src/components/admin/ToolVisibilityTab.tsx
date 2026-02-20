@@ -7,6 +7,9 @@ import { useToast } from "@/hooks/use-toast";
 
 // All tool IDs and their display names
 const ALL_TOOLS = [
+  { id: "videosubtitle", name: "AI Video Subtitle & Translate" },
+  { id: "texttovideo", name: "AI Text-to-Video Creator" },
+  { id: "videobgchange", name: "AI Video Background Changer" },
   { id: "songmtv", name: "AI သီချင်း & MTV" },
   { id: "autoad", name: "AI Auto Ad" },
   { id: "socialmedia", name: "AI Studio Management" },
