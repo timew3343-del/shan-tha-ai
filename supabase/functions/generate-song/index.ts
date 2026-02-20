@@ -310,9 +310,23 @@ Start DIRECTLY with [Verse 1] - no intro text, no explanations, no titles.`;
       };
       const langInfo = langMap[language || "my"] || langMap.my;
 
-      const songTags = `${genreTag}, ${moodTag}, ${langInfo.tags}, [Studio Quality], [High Fidelity]`;
-      console.log(`Final SunoAPI tags: ${songTags}`);
-      const songLyrics = processedLyrics || topic || "A beautiful song about life";
+      // Build explicit tags - every user selection MUST appear
+      const songTags = [
+        genreTag,
+        moodTag,
+        selectedVoice,
+        `Sing in ${langInfo.lang}`,
+        `${langInfo.lang} Pronunciation`,
+        `${langInfo.lang} Song`,
+        "Studio Quality",
+        "High Fidelity",
+      ].join(", ");
+      console.log(`Dynamic SunoAPI tags: ${songTags}`);
+      console.log(`User selections -> genre:${genre}, mood:${mood}, voice:${voiceType}, lang:${language}`);
+
+      // Embed language + voice instructions directly into the lyrics prompt for SunoAPI
+      const langDirective = `[${langInfo.lang} Language] [${selectedVoice}] [${genreTag}] [${moodTag}]\n\n`;
+      const songLyrics = langDirective + (processedLyrics || topic || "A beautiful song about life");
 
       const { taskId, provider } = await submitSongTask(supabaseAdmin, songTitle, songTags, songLyrics);
 
