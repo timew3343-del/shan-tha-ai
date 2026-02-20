@@ -355,8 +355,10 @@ serve(async (req) => {
             ];
 
             const sceneImages: string[] = [];
+            let useStability = !!STABILITY_API_KEY;
 
-            if (STABILITY_API_KEY) {
+            // Try Stability AI first
+            if (useStability) {
               for (let i = 0; i < numScenesNeeded; i++) {
                 const theme = sceneThemes[i % sceneThemes.length];
                 const prompt = `Music video ${theme}, ${styleDescriptions[mtvStyle] || styleDescriptions.cartoon}, ${mood} atmosphere, variation ${i + 1}, 16:9`;
@@ -376,13 +378,59 @@ serve(async (req) => {
                     await supabaseAdmin.storage.from("videos").upload(imgName, buf, { contentType: "image/png", upsert: true });
                     const { data: imgSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(imgName, 3600);
                     if (imgSigned?.signedUrl) sceneImages.push(imgSigned.signedUrl);
-                    console.log(`Scene ${sceneImages.length}/${numScenesNeeded} generated`);
+                    console.log(`Scene ${sceneImages.length}/${numScenesNeeded} generated (Stability)`);
                   } else {
-                    console.warn(`Scene gen failed: ${sceneResp.status}`);
+                    console.warn(`Stability scene gen failed: ${sceneResp.status}`);
                     await sceneResp.text();
+                    // If 402/403, stop trying Stability and fall back
+                    if (sceneResp.status === 402 || sceneResp.status === 403) {
+                      console.log("Stability API credits exhausted, switching to Lovable AI...");
+                      useStability = false;
+                      break;
+                    }
                   }
                 } catch (e) {
-                  console.warn("Scene image error:", e);
+                  console.warn("Stability scene error:", e);
+                }
+              }
+            }
+
+            // Fallback: Use Lovable AI (Gemini image generation)
+            if (sceneImages.length < numScenesNeeded && LOVABLE_API_KEY) {
+              console.log(`Generating ${numScenesNeeded - sceneImages.length} remaining scenes with Lovable AI...`);
+              for (let i = sceneImages.length; i < numScenesNeeded; i++) {
+                const theme = sceneThemes[i % sceneThemes.length];
+                const prompt = `Generate a 16:9 aspect ratio music video scene image. Style: ${styleDescriptions[mtvStyle] || styleDescriptions.cartoon}. Scene: ${theme}. Mood: ${mood}. Ultra high resolution, cinematic quality. No text overlays.`;
+                try {
+                  const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      model: "google/gemini-2.5-flash-image",
+                      messages: [{ role: "user", content: prompt }],
+                      modalities: ["image", "text"],
+                    }),
+                  });
+                  if (aiResp.ok) {
+                    const aiData = await aiResp.json();
+                    const imgDataUrl = aiData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+                    if (imgDataUrl && imgDataUrl.startsWith("data:image")) {
+                      // Extract base64 and upload to storage
+                      const base64Part = imgDataUrl.split(",")[1];
+                      const imgBytes = Uint8Array.from(atob(base64Part), c => c.charCodeAt(0));
+                      const imgName = `scene-${job.user_id}-${Date.now()}-${i}.png`;
+                      await supabaseAdmin.storage.from("videos").upload(imgName, imgBytes.buffer, { contentType: "image/png", upsert: true });
+                      const { data: imgSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(imgName, 3600);
+                      if (imgSigned?.signedUrl) {
+                        sceneImages.push(imgSigned.signedUrl);
+                        console.log(`Scene ${sceneImages.length}/${numScenesNeeded} generated (Lovable AI)`);
+                      }
+                    }
+                  } else {
+                    console.warn(`Lovable AI image gen failed: ${aiResp.status}`);
+                  }
+                } catch (e) {
+                  console.warn("Lovable AI scene error:", e);
                 }
               }
             }
