@@ -169,7 +169,7 @@ serve(async (req) => {
 
       console.log(`Starting object removal for: ${videoUrl.substring(0, 80)}...`);
 
-      const replicateResp = await fetch("https://api.replicate.com/v1/models/facebook/propainter/predictions", {
+      const replicateResp = await fetch("https://api.replicate.com/v1/predictions", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${REPLICATE_KEY}`,
@@ -177,6 +177,7 @@ serve(async (req) => {
           "Prefer": "wait",
         },
         body: JSON.stringify({
+          version: "a98a3a47e964b80224e2a16c1a952105ba2e5e0d7b703b75d02ae927723e4b67",
           input: {
             video: videoUrl,
             ...(maskImageBase64 ? { mask: maskImageBase64 } : {}),
