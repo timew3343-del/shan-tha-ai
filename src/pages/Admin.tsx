@@ -31,6 +31,7 @@ import { CollaboratorManagementTab } from "@/components/admin/CollaboratorManage
 import { FinancialDashboardTab } from "@/components/admin/FinancialDashboardTab";
 import { ApiManagementTab } from "@/components/admin/ApiManagementTab";
 import { AutoServiceManagerTab } from "@/components/admin/AutoServiceManagerTab";
+import { ToolVisibilityTab } from "@/components/admin/ToolVisibilityTab";
 
 interface PendingTransaction {
   id: string;
@@ -927,10 +928,14 @@ export const Admin = () => {
               API
             </TabsTrigger>
           </TabsList>
-          <TabsList className="grid w-full grid-cols-4 mb-2">
+          <TabsList className="grid w-full grid-cols-5 mb-2">
             <TabsTrigger value="auto-service" className="text-xs">
               <Zap className="w-4 h-4 mr-1" />
               Auto
+            </TabsTrigger>
+            <TabsTrigger value="tool-visibility" className="text-xs">
+              <Power className="w-4 h-4 mr-1" />
+              Tools
             </TabsTrigger>
             <TabsTrigger value="system" className="text-xs">
               <Settings className="w-4 h-4 mr-1" />
@@ -1189,6 +1194,11 @@ export const Admin = () => {
           {/* Users Table Tab */}
           <TabsContent value="users-table" className="space-y-4">
             <AdminUserTable />
+          </TabsContent>
+
+          {/* Tool Visibility Tab */}
+          <TabsContent value="tool-visibility" className="space-y-4">
+            <ToolVisibilityTab />
           </TabsContent>
 
           {/* Settings Tab - consolidated System + App + Ads + Campaign + Promo + Feedback */}
