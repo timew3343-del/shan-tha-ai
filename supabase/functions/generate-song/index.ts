@@ -232,10 +232,11 @@ serve(async (req) => {
         console.log("Step 1: Generating lyrics from topic...");
         const langName = { my: "Myanmar (Burmese)", en: "English", th: "Thai", ko: "Korean", ja: "Japanese", zh: "Chinese" }[language || "my"] || "Myanmar (Burmese)";
 
-        const systemPrompt = `You are a professional songwriter. Write complete, emotionally rich song lyrics in ${langName} language.
+        const systemPrompt = `You are a professional songwriter who writes in ${langName}. 
 Genre: ${genre}. Mood: ${mood}.
+${langName === "Myanmar (Burmese)" ? "IMPORTANT: မြန်မာစာ သတ်ပုံမှန်ကန်ရမည်၊ သံစဉ်နဲ့ ကိုက်ညီရမည်။ Unicode NFC form သုံးပါ။" : ""}
 Format: Write ONLY the lyrics with [Verse 1], [Chorus], [Verse 2], [Bridge], [Chorus] sections.
-IMPORTANT: Write AT LEAST 3 verses and 2 choruses. Each section should have 4-6 lines minimum.
+Write AT LEAST 3 verses and 2 choruses. Each section must have 4-6 lines minimum.
 The total lyrics must be long enough for a 2-3 minute song. Do NOT write short lyrics.
 Start DIRECTLY with [Verse 1] - no intro text, no explanations, no titles.`;
 
@@ -345,8 +346,8 @@ Start DIRECTLY with [Verse 1] - no intro text, no explanations, no titles.`;
 
       if (audioBase64) {
         const audioBytes = Uint8Array.from(atob(audioBase64), c => c.charCodeAt(0));
-        const fileName = `uploaded-${userId}-${Date.now()}.mp3`;
-        await supabaseAdmin.storage.from("videos").upload(fileName, audioBytes.buffer, { contentType: "audio/mpeg" });
+        const fileName = `${userId}/uploaded-${Date.now()}.mp3`;
+        await supabaseAdmin.storage.from("videos").upload(fileName, audioBytes.buffer, { contentType: "audio/mpeg", upsert: true });
         const { data: signedData } = await supabaseAdmin.storage.from("videos").createSignedUrl(fileName, 86400 * 7);
         audioUrl = signedData?.signedUrl || null;
       }

@@ -482,7 +482,7 @@ serve(async (req) => {
                   });
                   if (sceneResp.ok) {
                     const buf = await sceneResp.arrayBuffer();
-                    const imgName = `scene-${job.user_id}-${Date.now()}-${i}.png`;
+                    const imgName = `${job.user_id}/scene-${Date.now()}-${i}.png`;
                     await supabaseAdmin.storage.from("videos").upload(imgName, buf, { contentType: "image/png", upsert: true });
                     const { data: imgSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(imgName, 3600);
                     if (imgSigned?.signedUrl) sceneImages.push(imgSigned.signedUrl);
@@ -524,7 +524,7 @@ serve(async (req) => {
                     if (imgDataUrl && imgDataUrl.startsWith("data:image")) {
                       const base64Part = imgDataUrl.split(",")[1];
                       const imgBytes = Uint8Array.from(atob(base64Part), c => c.charCodeAt(0));
-                      const imgName = `scene-${job.user_id}-${Date.now()}-${i}.png`;
+                      const imgName = `${job.user_id}/scene-${Date.now()}-${i}.png`;
                       await supabaseAdmin.storage.from("videos").upload(imgName, imgBytes.buffer, { contentType: "image/png", upsert: true });
                       const { data: imgSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(imgName, 3600);
                       if (imgSigned?.signedUrl) {
