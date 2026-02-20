@@ -179,20 +179,20 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
         if (error) { console.warn("Job poll error:", error); return; }
 
         if (job?.status === "completed") {
-          if (job.output_url && job.output_url !== "srt_ready") {
-            if (job.output_url.includes(".mp3") || job.output_url.includes("audio")) {
-              setResultAudio(job.output_url);
-            } else {
-              setResultVideo(job.output_url);
-            }
-          }
-
-          // For full_auto: after song completes, find the MTV job and keep polling
+          // For full_auto: after song completes, chain to MTV job
           if (isFullAuto && !songPhaseComplete && (job.tool_type === "song_music" || job.tool_type === "song_mtv_full")) {
             songPhaseComplete = true;
             console.log("Song phase complete, looking for MTV job...");
             
-            // Find the MTV video job created by check-job-status
+            // Set audio result from song phase
+            if (job.output_url && job.output_url !== "srt_ready") {
+              setResultAudio(job.output_url);
+            }
+
+            // Keep trying to find the MTV job (it may take a few polls to be created by check-job-status)
+            let mtvFound = false;
+            
+            // Check for processing/pending MTV jobs
             const { data: mtvJobs } = await supabase
               .from("generation_jobs")
               .select("id, status, output_url")
@@ -205,6 +205,7 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
             if (mtvJobs && mtvJobs.length > 0) {
               currentJobId = mtvJobs[0].id;
               console.log(`Chaining to MTV job: ${currentJobId}`);
+              mtvFound = true;
               return; // continue polling the MTV job
             }
             
@@ -220,6 +221,24 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
 
             if (completedMtv && completedMtv.length > 0 && completedMtv[0].output_url) {
               setResultVideo(completedMtv[0].output_url);
+              mtvFound = true;
+            }
+
+            if (!mtvFound) {
+              // MTV job hasn't been created yet - reset flag and keep polling
+              // check-job-status will create the MTV job on next invocation
+              songPhaseComplete = false;
+              console.log("MTV job not found yet, will retry...");
+              return;
+            }
+          }
+
+          // Non-chaining completion: set the output
+          if (job.output_url && job.output_url !== "srt_ready") {
+            if (job.output_url.includes(".mp3") || job.output_url.includes("audio")) {
+              if (!isFullAuto) setResultAudio(job.output_url);
+            } else {
+              setResultVideo(job.output_url);
             }
           }
 
