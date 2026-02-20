@@ -484,7 +484,7 @@ serve(async (req) => {
                     const buf = await sceneResp.arrayBuffer();
                     const imgName = `${job.user_id}/scene-${Date.now()}-${i}.png`;
                     await supabaseAdmin.storage.from("videos").upload(imgName, buf, { contentType: "image/png", upsert: true });
-                    const { data: imgSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(imgName, 3600);
+                    const { data: imgSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(imgName, 86400);
                     if (imgSigned?.signedUrl) sceneImages.push(imgSigned.signedUrl);
                     console.log(`Scene ${sceneImages.length}/${numScenesNeeded} generated (Stability)`);
                   } else {
@@ -526,7 +526,7 @@ serve(async (req) => {
                       const imgBytes = Uint8Array.from(atob(base64Part), c => c.charCodeAt(0));
                       const imgName = `${job.user_id}/scene-${Date.now()}-${i}.png`;
                       await supabaseAdmin.storage.from("videos").upload(imgName, imgBytes.buffer, { contentType: "image/png", upsert: true });
-                      const { data: imgSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(imgName, 3600);
+                      const { data: imgSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(imgName, 86400);
                       if (imgSigned?.signedUrl) {
                         sceneImages.push(imgSigned.signedUrl);
                         console.log(`Scene ${sceneImages.length}/${numScenesNeeded} generated (Lovable AI)`);
