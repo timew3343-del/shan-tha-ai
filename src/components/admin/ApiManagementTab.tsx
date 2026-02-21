@@ -102,6 +102,14 @@ const API_KEYS: ApiKeyConfig[] = [
     toggleKey: "api_enabled_goapi_suno",
     tasks: ["Song Generation Backup", "Music AI", "Vocals Backup"],
   },
+  {
+    key: "elevenlabs",
+    label: "ElevenLabs",
+    description: "AI Singing Vocals, Text-to-Speech, Multilingual Voice",
+    settingKey: "elevenlabs_api_key",
+    toggleKey: "api_enabled_elevenlabs",
+    tasks: ["Singing Vocals", "TTS Premium", "Voice Cloning"],
+  },
 ];
 
 // Additional keys that don't have toggle/auto-switch (Stripe, ACRCloud secret)
