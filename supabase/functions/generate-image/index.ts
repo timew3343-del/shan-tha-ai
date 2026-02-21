@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { encode as base64url } from "https://deno.land/std@0.168.0/encoding/base64url.ts";
+import { decode as base64Decode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,6 +14,65 @@ interface GenerateImageRequest {
   aspectRatio?: string;
   width?: number;
   height?: number;
+}
+
+// ─── Vertex AI JWT Auth ─────────────────────────────────────
+async function getVertexAccessToken(serviceAccountJson: string): Promise<string> {
+  const sa = JSON.parse(serviceAccountJson);
+  const now = Math.floor(Date.now() / 1000);
+
+  const header = base64url(new TextEncoder().encode(JSON.stringify({ alg: "RS256", typ: "JWT" })));
+  const payload = base64url(new TextEncoder().encode(JSON.stringify({
+    iss: sa.client_email,
+    sub: sa.client_email,
+    aud: "https://oauth2.googleapis.com/token",
+    iat: now,
+    exp: now + 3600,
+    scope: "https://www.googleapis.com/auth/cloud-platform",
+  })));
+
+  // Import RSA private key
+  const pemBody = sa.private_key
+    .replace(/-----BEGIN PRIVATE KEY-----/, "")
+    .replace(/-----END PRIVATE KEY-----/, "")
+    .replace(/\n/g, "");
+  const keyData = base64Decode(pemBody);
+  const cryptoKey = await crypto.subtle.importKey(
+    "pkcs8", keyData, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]
+  );
+
+  const signature = base64url(new Uint8Array(
+    await crypto.subtle.sign("RSASSA-PKCS1-v1_5", cryptoKey, new TextEncoder().encode(`${header}.${payload}`))
+  ));
+
+  const jwt = `${header}.${payload}.${signature}`;
+
+  // Exchange JWT for access token
+  const tokenResp = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
+  });
+
+  if (!tokenResp.ok) {
+    const err = await tokenResp.text();
+    throw new Error(`Token exchange failed: ${tokenResp.status} - ${err}`);
+  }
+
+  const tokenData = await tokenResp.json();
+  return tokenData.access_token;
+}
+
+// ─── Aspect ratio to Vertex resolution ──────────────────────
+function getVertexResolution(aspectRatio: string): { width: number; height: number } {
+  const map: Record<string, { width: number; height: number }> = {
+    "1:1": { width: 1024, height: 1024 },
+    "3:4": { width: 896, height: 1280 },
+    "4:3": { width: 1280, height: 896 },
+    "9:16": { width: 768, height: 1408 },
+    "16:9": { width: 1408, height: 768 },
+  };
+  return map[aspectRatio] || map["1:1"];
 }
 
 serve(async (req) => {
@@ -35,7 +96,7 @@ serve(async (req) => {
 
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-    
+
     if (userError || !user) {
       return new Response(
         JSON.stringify({ error: "Invalid or expired token" }),
@@ -44,11 +105,8 @@ serve(async (req) => {
     }
 
     const userId = user.id;
-
-    // Check if user is admin
     const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
     const userIsAdmin = isAdminData === true;
-    console.log(`User ${userId} requesting image generation, isAdmin=${userIsAdmin}`);
 
     let body: GenerateImageRequest;
     try {
@@ -59,7 +117,7 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { prompt, referenceImage, aspectRatio, width, height } = body;
+    const { prompt, referenceImage, aspectRatio } = body;
     const requestedAspectRatio = aspectRatio || "1:1";
 
     if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
@@ -68,14 +126,12 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
     if (prompt.length > 5000) {
       return new Response(
         JSON.stringify({ error: "Prompt too long (max 5000 characters)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
     if (referenceImage && referenceImage.length > 10485760) {
       return new Response(
         JSON.stringify({ error: "Reference image too large (max 10MB)" }),
@@ -83,10 +139,10 @@ serve(async (req) => {
       );
     }
 
-    // Get credit cost from admin settings first, fallback to profit_margin calculation
+    // ─── Credit cost ────────────────────────────────────────
     const { data: costSetting } = await supabaseAdmin
       .from("app_settings").select("value").eq("key", "credit_cost_image_generation").maybeSingle();
-    
+
     let creditCost: number;
     if (costSetting?.value) {
       creditCost = parseInt(costSetting.value, 10);
@@ -97,7 +153,6 @@ serve(async (req) => {
       creditCost = Math.ceil(2 * (1 + profitMargin / 100));
     }
 
-    // Admin bypass + credit check
     const { data: profile } = await supabaseAdmin
       .from("profiles").select("credit_balance").eq("user_id", userId).single();
 
@@ -107,7 +162,6 @@ serve(async (req) => {
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
     if (!userIsAdmin && profile.credit_balance < creditCost) {
       return new Response(
         JSON.stringify({ error: "Insufficient credits", required: creditCost, balance: profile.credit_balance }),
@@ -115,24 +169,15 @@ serve(async (req) => {
       );
     }
 
+    // ─── Prompt enhancement (short prompts) ─────────────────
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    const STABILITY_API_KEY = Deno.env.get("STABILITY_API_KEY");
-    
-    if (!LOVABLE_API_KEY && !STABILITY_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "Image generation service not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Intent-based prompting: short input → AI enhances, long/detailed input → use directly
     let finalPrompt = prompt.trim();
     const lineCount = finalPrompt.split("\n").filter(l => l.trim()).length;
     const isDetailedPrompt = lineCount >= 3 || finalPrompt.length >= 200;
 
     if (!isDetailedPrompt && LOVABLE_API_KEY) {
       try {
-        console.log(`Short prompt detected (${finalPrompt.length} chars), enhancing with AI...`);
+        console.log(`Short prompt (${finalPrompt.length} chars), enhancing...`);
         const enhanceResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
           headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
@@ -147,34 +192,92 @@ serve(async (req) => {
           }),
         });
         if (enhanceResp.ok) {
-          const enhanceData = await enhanceResp.json();
-          const enhanced = enhanceData.choices?.[0]?.message?.content?.trim();
+          const d = await enhanceResp.json();
+          const enhanced = d.choices?.[0]?.message?.content?.trim();
           if (enhanced && enhanced.length > finalPrompt.length) {
-            console.log(`Prompt enhanced: ${finalPrompt.length} → ${enhanced.length} chars`);
             finalPrompt = enhanced;
           }
         }
       } catch (e: any) {
-        console.warn(`Prompt enhancement failed (using original): ${e.message}`);
+        console.warn(`Prompt enhancement failed: ${e.message}`);
       }
-    } else {
-      console.log(`Using detailed prompt directly (${finalPrompt.length} chars, ${lineCount} lines)`);
     }
 
-    console.log(`Generating image for prompt: "${finalPrompt.substring(0, 50)}..."`);
+    console.log(`Generating image: "${finalPrompt.substring(0, 60)}..." aspect=${requestedAspectRatio}`);
 
     let generatedImage: string | null = null;
 
-    // Strategy 1: Stability AI (most reliable for image generation)
-    if (STABILITY_API_KEY) {
+    // ─── Strategy 1: Vertex AI Imagen 4 (PRIMARY) ───────────
+    // Check env secret first, then app_settings (admin-uploaded JSON)
+    let VERTEX_SA = Deno.env.get("VERTEX_AI_SERVICE_ACCOUNT");
+    if (!VERTEX_SA) {
+      const { data: vSetting } = await supabaseAdmin
+        .from("app_settings").select("value").eq("key", "vertex_ai_service_account").maybeSingle();
+      if (vSetting?.value) VERTEX_SA = vSetting.value;
+    }
+    if (VERTEX_SA) {
       try {
-        console.log("Trying Stability AI for image generation...");
+        console.log("Trying Vertex AI Imagen 4...");
+        const sa = JSON.parse(VERTEX_SA);
+        const accessToken = await getVertexAccessToken(VERTEX_SA);
+        const projectId = sa.project_id;
+        const location = "us-central1";
+        const model = "imagen-4.0-generate-001";
+        const endpoint = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${model}:predict`;
+
+        const resolution = getVertexResolution(requestedAspectRatio);
+        const requestBody: any = {
+          instances: [{ prompt: finalPrompt }],
+          parameters: {
+            sampleCount: 1,
+            aspectRatio: requestedAspectRatio,
+            outputOptions: { mimeType: "image/png" },
+          },
+        };
+
+        // Add reference image if provided
+        if (referenceImage) {
+          const b64 = referenceImage.includes(",") ? referenceImage.split(",")[1] : referenceImage;
+          requestBody.instances[0].image = { bytesBase64Encoded: b64 };
+        }
+
+        const vertexResp = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (vertexResp.ok) {
+          const data = await vertexResp.json();
+          const b64Image = data.predictions?.[0]?.bytesBase64Encoded;
+          if (b64Image) {
+            generatedImage = `data:image/png;base64,${b64Image}`;
+            console.log("Vertex AI Imagen 4 image generated successfully");
+          } else {
+            console.warn("Vertex AI returned no image data:", JSON.stringify(data).substring(0, 300));
+          }
+        } else {
+          const errText = await vertexResp.text();
+          console.warn(`Vertex AI failed: ${vertexResp.status} - ${errText.substring(0, 300)}`);
+        }
+      } catch (e: any) {
+        console.warn(`Vertex AI error: ${e.message}`);
+      }
+    }
+
+    // ─── Strategy 2: Stability AI (BACKUP) ──────────────────
+    const STABILITY_API_KEY = Deno.env.get("STABILITY_API_KEY");
+    if (!generatedImage && STABILITY_API_KEY) {
+      try {
+        console.log("Falling back to Stability AI...");
         const fd = new FormData();
         fd.append("prompt", finalPrompt);
         fd.append("output_format", "png");
         fd.append("aspect_ratio", requestedAspectRatio);
 
-        // Add reference image as init_image for Stability if provided
         if (referenceImage) {
           const base64Data = referenceImage.includes(",") ? referenceImage.split(",")[1] : referenceImage;
           const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
@@ -194,7 +297,7 @@ serve(async (req) => {
           const buf = await stabResp.arrayBuffer();
           const base64 = btoa(new Uint8Array(buf).reduce((data, byte) => data + String.fromCharCode(byte), ""));
           generatedImage = `data:image/png;base64,${base64}`;
-          console.log("Stability AI image generated successfully");
+          console.log("Stability AI image generated successfully (fallback)");
         } else {
           const errText = await stabResp.text();
           console.warn(`Stability AI failed: ${stabResp.status} - ${errText.substring(0, 200)}`);
@@ -204,18 +307,18 @@ serve(async (req) => {
       }
     }
 
-    // Strategy 2: Lovable AI Gateway (Gemini image model) - fallback or for reference images
+    // ─── Strategy 3: Lovable AI Gateway (last resort) ───────
     if (!generatedImage && LOVABLE_API_KEY) {
       try {
-        console.log("Trying Lovable AI Gateway for image generation...");
+        console.log("Falling back to Lovable AI Gateway...");
         const messages: any[] = [];
         if (referenceImage) {
           messages.push({
             role: "user",
             content: [
               { type: "text", text: `Generate an image based on this reference: ${finalPrompt}` },
-              { type: "image_url", image_url: { url: referenceImage } }
-            ]
+              { type: "image_url", image_url: { url: referenceImage } },
+            ],
           });
         } else {
           messages.push({ role: "user", content: `Generate an image: ${finalPrompt}` });
@@ -223,46 +326,23 @@ serve(async (req) => {
 
         const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash-image",
-            messages,
-            modalities: ["image", "text"],
-          }),
+          headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ model: "google/gemini-2.5-flash-image", messages, modalities: ["image", "text"] }),
         });
 
         if (response.ok) {
           const data = await response.json();
-          console.log("Lovable AI response keys:", JSON.stringify(Object.keys(data)));
-          
-          // Try multiple response formats
           const choice = data.choices?.[0]?.message;
-          generatedImage = 
+          generatedImage =
             choice?.images?.[0]?.image_url?.url ||
             choice?.images?.[0]?.url ||
             choice?.image_url ||
             choice?.content_parts?.find((p: any) => p.type === "image")?.image_url?.url ||
             null;
-          
-          // Check if content contains base64 image data
-          if (!generatedImage && choice?.content) {
-            const content = choice.content;
-            if (typeof content === "string" && content.startsWith("data:image")) {
-              generatedImage = content;
-            }
+          if (!generatedImage && choice?.content && typeof choice.content === "string" && choice.content.startsWith("data:image")) {
+            generatedImage = choice.content;
           }
-          
-          if (generatedImage) {
-            console.log("Lovable AI image generated successfully");
-          } else {
-            console.warn("Lovable AI returned no parseable image. Response structure:", JSON.stringify(data).substring(0, 500));
-          }
-        } else {
-          const errText = await response.text();
-          console.warn(`Lovable AI failed: ${response.status} - ${errText.substring(0, 200)}`);
+          if (generatedImage) console.log("Lovable AI image generated (last resort)");
         }
       } catch (e: any) {
         console.warn(`Lovable AI error: ${e.message}`);
@@ -274,24 +354,17 @@ serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Deduct credits AFTER success (skip for admin)
+    // ─── Deduct credits ─────────────────────────────────────
     let newBalance = profile.credit_balance;
     if (!userIsAdmin) {
       const { data: deductResult } = await supabaseAdmin.rpc("deduct_user_credits", {
-        _user_id: userId, _amount: creditCost, _action: "Image generation"
+        _user_id: userId, _amount: creditCost, _action: "Image generation",
       });
       newBalance = deductResult?.new_balance ?? (profile.credit_balance - creditCost);
-    } else {
-      console.log("Admin free access - skipping credit deduction for image generation");
     }
 
     return new Response(
-      JSON.stringify({
-        success: true,
-        image: generatedImage,
-        creditsUsed: userIsAdmin ? 0 : creditCost,
-        newBalance,
-      }),
+      JSON.stringify({ success: true, image: generatedImage, creditsUsed: userIsAdmin ? 0 : creditCost, newBalance }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: any) {

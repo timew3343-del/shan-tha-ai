@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { 
   Save, Loader2, Power, Zap, AlertTriangle, Gift, Eye, EyeOff, Key, 
-  DollarSign, Activity, ChevronDown, ChevronUp 
+  DollarSign, Activity, ChevronDown, ChevronUp, Upload, CheckCircle2, Cloud
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,11 +56,11 @@ const API_KEYS: ApiKeyConfig[] = [
   },
   {
     key: "stability",
-    label: "Stability AI",
-    description: "Image Generation, Style Transfer",
+    label: "Stability AI (Backup)",
+    description: "Image Generation Backup, Style Transfer",
     settingKey: "stability_api_key",
     toggleKey: "api_enabled_stability",
-    tasks: ["Image Generation", "Style Transfer", "BG Remove"],
+    tasks: ["Image Generation Backup", "Style Transfer", "BG Remove"],
   },
   {
     key: "shotstack",
@@ -145,6 +145,11 @@ export const ApiManagementTab = () => {
   const [balances, setBalances] = useState<ApiBalance[]>([]);
   const [savingBalanceId, setSavingBalanceId] = useState<string | null>(null);
 
+  // Vertex AI
+  const [vertexConfigured, setVertexConfigured] = useState(false);
+  const [vertexUploading, setVertexUploading] = useState(false);
+  const vertexFileRef = useRef<HTMLInputElement>(null);
+
   // Collapsible sections
   const [expandedSection, setExpandedSection] = useState<string>("switch");
 
@@ -165,6 +170,7 @@ export const ApiManagementTab = () => {
         ...API_KEYS.map(a => a.settingKey),
         ...EXTRA_KEYS.map(e => e.settingKey),
         "daily_free_uses",
+        "vertex_ai_service_account",
       ];
 
       const { data } = await supabase
@@ -212,6 +218,10 @@ export const ApiManagementTab = () => {
 
         if (setting.key === "daily_free_uses") {
           setDailyFreeUses(parseInt(setting.value || "3", 10));
+        }
+
+        if (setting.key === "vertex_ai_service_account" && setting.value) {
+          setVertexConfigured(true);
         }
       });
 
@@ -342,6 +352,29 @@ export const ApiManagementTab = () => {
     }
   };
 
+  const handleVertexUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setVertexUploading(true);
+    try {
+      const text = await file.text();
+      // Validate JSON
+      const parsed = JSON.parse(text);
+      if (!parsed.client_email || !parsed.private_key || !parsed.project_id) {
+        throw new Error("Invalid service account JSON");
+      }
+      await supabase.from("app_settings")
+        .upsert({ key: "vertex_ai_service_account", value: text }, { onConflict: "key" });
+      setVertexConfigured(true);
+      toast({ title: "Vertex AI Service Account သိမ်းဆည်းပြီးပါပြီ" });
+    } catch (err: any) {
+      toast({ title: "JSON ဖိုင် မမှန်ကန်ပါ", description: err.message, variant: "destructive" });
+    } finally {
+      setVertexUploading(false);
+      if (vertexFileRef.current) vertexFileRef.current.value = "";
+    }
+  };
+
   const toggleSection = (section: string) => {
     setExpandedSection(prev => prev === section ? "" : section);
   };
@@ -463,6 +496,54 @@ export const ApiManagementTab = () => {
       />
       {expandedSection === "keys" && (
         <div className="space-y-3">
+          {/* ─── Vertex AI (Primary - File Upload) ─── */}
+          <div className="rounded-xl p-3 border border-primary/30 bg-primary/5">
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-2">
+                <Cloud className="w-4 h-4 text-primary" />
+                <span className="text-xs font-medium text-foreground">Vertex AI (Imagen 4) — Primary</span>
+              </div>
+              <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
+                vertexConfigured ? "bg-green-500/20 text-green-600 dark:text-green-400" : "bg-amber-500/20 text-amber-600 dark:text-amber-400"
+              }`}>
+                {vertexConfigured ? "✓ Configured" : "Not Set"}
+              </span>
+            </div>
+            <p className="text-[10px] text-muted-foreground mb-2">
+              Service Account JSON ဖိုင် Upload လုပ်ပါ။ Key ရိုက်ထည့်စရာမလိုပါ။
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                ref={vertexFileRef}
+                type="file"
+                accept=".json"
+                onChange={handleVertexUpload}
+                className="hidden"
+              />
+              <Button
+                onClick={() => vertexFileRef.current?.click()}
+                disabled={vertexUploading}
+                size="sm"
+                variant={vertexConfigured ? "outline" : "default"}
+                className="h-8 text-xs"
+              >
+                {vertexUploading ? (
+                  <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                ) : vertexConfigured ? (
+                  <Upload className="w-3 h-3 mr-1" />
+                ) : (
+                  <Upload className="w-3 h-3 mr-1" />
+                )}
+                {vertexConfigured ? "JSON ဖိုင်ပြန်လဲရန်" : "JSON ဖိုင် Upload"}
+              </Button>
+              {vertexConfigured && (
+                <span className="text-[10px] text-green-600 dark:text-green-400 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> Default Active
+                </span>
+              )}
+            </div>
+          </div>
+
           {/* Main API Keys */}
           {API_KEYS.map(api => (
             <KeyInput
