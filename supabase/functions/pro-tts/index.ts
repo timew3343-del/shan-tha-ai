@@ -201,7 +201,12 @@ serve(async (req) => {
     if (!ttsResponse.ok) {
       const errText = await ttsResponse.text();
       console.error("[Pro TTS] ElevenLabs error:", ttsResponse.status, errText);
-      return new Response(JSON.stringify({ error: "TTS generation failed" }),
+      const errMsg = ttsResponse.status === 401 
+        ? "ElevenLabs API key is invalid or account requires upgrade" 
+        : ttsResponse.status === 429 
+        ? "ElevenLabs rate limit exceeded, please try again later"
+        : "TTS generation failed";
+      return new Response(JSON.stringify({ error: errMsg }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
