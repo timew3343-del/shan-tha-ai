@@ -227,17 +227,41 @@ serve(async (req) => {
           if (audioUrl) {
             console.log(`Suno instrumental ready! Starting vocal+merge pipeline...`);
             try {
+              // ===== FIX #4: Admin Key Check - verify ElevenLabs before pipeline =====
+              const elevenlabsKey = configMap["elevenlabs_api_key"] || Deno.env.get("ELEVENLABS_API_KEY");
+              const elevenlabsEnabled = configMap["api_enabled_elevenlabs"] !== "false";
+              
+              if (!elevenlabsKey || !elevenlabsEnabled) {
+                console.error("BLOCKING: ElevenLabs API key missing or disabled! Cannot generate vocals.");
+                await supabaseAdmin.from("generation_jobs").update({
+                  status: "failed",
+                  error_message: "ElevenLabs API key မရှိပါ သို့မဟုတ် ပိတ်ထားပါသည်။ Admin Board မှာ စစ်ဆေးပါ။",
+                }).eq("id", job.id);
+                processed++;
+                continue;
+              }
+              
               // Step 1: Upload instrumental to storage
               const instrumentalUrl = await uploadToStorage(supabaseAdmin, audioUrl, job.user_id, ".mp3", "audio/mpeg");
               console.log(`Instrumental uploaded: ${instrumentalUrl.substring(0, 80)}...`);
 
               // Step 2: Generate vocals from lyrics using ElevenLabs TTS
               const lyrics = params?.cleanLyrics || params?.lyrics || "";
-              const elevenlabsKey = configMap["elevenlabs_api_key"] || Deno.env.get("ELEVENLABS_API_KEY");
-              const elevenlabsEnabled = configMap["api_enabled_elevenlabs"] !== "false";
+              
+              // ===== FIX #1: Force script - if no lyrics, FAIL instead of continuing =====
+              if (!lyrics || lyrics.trim().length < 10) {
+                console.error("BLOCKING: No lyrics/script found! Script generation was skipped.");
+                await supabaseAdmin.from("generation_jobs").update({
+                  status: "failed",
+                  error_message: "Script/Lyrics မထွက်ပါ။ ထပ်စမ်းပါ။",
+                }).eq("id", job.id);
+                processed++;
+                continue;
+              }
+              
               let vocalsUrl: string | null = null;
 
-              if (lyrics && elevenlabsKey && elevenlabsEnabled) {
+              {
                 // Strip ALL section markers [Intro], [Verse 1], [Chorus], etc. for TTS
                 const ttsLyrics = lyrics
                   .replace(/\[(?:Intro|Verse|Chorus|Bridge|Outro|Hook|Pre-Chorus|Interlude)[^\]]*\]/gi, "")
@@ -381,15 +405,26 @@ serve(async (req) => {
                   vocalsUrl = vocalsSigned?.signedUrl || null;
                   console.log(`ElevenLabs vocals uploaded (MP3): ${vocalsUrl?.substring(0, 80)}...`);
                 }
-              } else if (lyrics && !elevenlabsKey) {
-                console.warn("ElevenLabs API key not configured, skipping vocal generation");
+              }
+              
+              // ===== FIX #2: Vocal Sync Check - BLOCK output without vocals =====
+              if (!vocalsUrl) {
+                console.error("BLOCKING: ElevenLabs vocals generation failed! Not outputting instrumental-only.");
+                await supabaseAdmin.from("generation_jobs").update({
+                  status: "failed",
+                  error_message: "အဆိုသံ (Vocals) ဖန်တီးမအောင်မြင်ပါ။ ElevenLabs API စစ်ဆေးပါ။",
+                }).eq("id", job.id);
+                processed++;
+                continue;
               }
               
               // Step 3: Merge vocals + instrumental via Shotstack
-              if (vocalsUrl && SHOTSTACK_KEY) {
+              if (SHOTSTACK_KEY) {
                 console.log("Submitting Shotstack audio merge (vocals + instrumental)...");
                 
+                // ===== FIX #3: Strict Duration Control =====
                 const requestedDurationSec = (params?.videoDurationMinutes || 1) * 60;
+                console.log(`Strict duration: ${requestedDurationSec}s (${params?.videoDurationMinutes || 1} min)`);
                 
                 const mergeTimeline = {
                   timeline: {
@@ -409,10 +444,13 @@ serve(async (req) => {
                         }],
                       },
                     ],
+                    // FIX #3: Hard cap timeline duration
+                    background: "#000000",
                   },
                   output: {
                     format: "mp3",
                     resolution: "sd",
+                    duration: requestedDurationSec,
                   },
                 };
                 
@@ -442,60 +480,16 @@ serve(async (req) => {
                   continue;
                 } else {
                   const errText = await renderResp.text();
-                  console.warn(`Shotstack merge failed: ${renderResp.status} - ${errText.substring(0, 200)}`);
-                  // Fallback: save instrumental as-is
+                  console.error(`Shotstack merge failed: ${renderResp.status} - ${errText.substring(0, 200)}`);
+                  // FIX #2: FAIL instead of fallback to instrumental-only
+                  await supabaseAdmin.from("generation_jobs").update({
+                    status: "failed",
+                    error_message: "Shotstack merge failed - အဆိုသံနှင့် တီးလုံး ပေါင်းစပ်မအောင်မြင်ပါ။",
+                  }).eq("id", job.id);
+                  processed++;
+                  continue;
                 }
               }
-              
-              // Fallback: if TTS or Shotstack merge failed, save instrumental only
-              console.log("Fallback: saving instrumental audio only");
-              const isAdminUser = params?.isAdmin === true;
-              if (!isAdminUser && !job.credits_deducted && job.credits_cost > 0) {
-                await supabaseAdmin.rpc("deduct_user_credits", {
-                  _user_id: job.user_id,
-                  _amount: job.credits_cost,
-                  _action: `song_mtv_${params?.serviceOption || "song"}`,
-                });
-                await supabaseAdmin.from("credit_audit_log").insert({
-                  user_id: job.user_id,
-                  amount: -job.credits_cost,
-                  credit_type: "deduction",
-                  description: `Song/MTV: ${params?.serviceOption}, ${params?.genre}, ${params?.mood}`,
-                });
-              }
-
-              await supabaseAdmin.from("user_outputs").insert({
-                user_id: job.user_id,
-                tool_id: "song_mtv",
-                tool_name: "Song & MTV",
-                output_type: "audio",
-                content: params?.cleanLyrics || params?.lyrics || "Song generated",
-                file_url: instrumentalUrl,
-              });
-
-              if (job.tool_type === "song_mtv_full") {
-                await supabaseAdmin.from("generation_jobs").insert({
-                  user_id: job.user_id,
-                  tool_type: "song_mtv_video",
-                  status: "processing",
-                  credits_cost: 0,
-                  credits_deducted: true,
-                  input_params: {
-                    ...params,
-                    provider: "shotstack_mtv",
-                    audioUrl: instrumentalUrl,
-                    phase: "generate_scenes",
-                  },
-                });
-              }
-
-              await supabaseAdmin.from("generation_jobs").update({
-                status: "completed",
-                output_url: instrumentalUrl,
-                credits_deducted: true,
-              }).eq("id", job.id);
-
-              processed++;
             } catch (uploadErr: any) {
               console.error(`Song pipeline error: ${uploadErr.message}`);
               await supabaseAdmin.from("generation_jobs").update({
