@@ -86,7 +86,7 @@ serve(async (req) => {
     // Fetch API keys
     const { data: settings } = await supabaseAdmin
       .from("app_settings").select("key, value")
-      .in("key", ["shotstack_api_key", "suno_api_key", "sunoapi_org_key", "goapi_suno_api_key", "replicate_api_token", "openai_api_key", "api_enabled_openai", "gemini_api_key", "global_profit_margin"]);
+      .in("key", ["shotstack_api_key", "suno_api_key", "sunoapi_org_key", "goapi_suno_api_key", "replicate_api_token", "openai_api_key", "api_enabled_openai", "gemini_api_key", "global_profit_margin", "elevenlabs_api_key", "api_enabled_elevenlabs"]);
     const configMap: Record<string, string> = {};
     settings?.forEach((s: any) => { configMap[s.key] = s.value; });
 
@@ -231,28 +231,49 @@ serve(async (req) => {
               const instrumentalUrl = await uploadToStorage(supabaseAdmin, audioUrl, job.user_id, ".mp3", "audio/mpeg");
               console.log(`Instrumental uploaded: ${instrumentalUrl.substring(0, 80)}...`);
 
-              // Step 2: Generate vocals from lyrics using Gemini TTS (native audio output)
+              // Step 2: Generate vocals from lyrics using ElevenLabs TTS
               const lyrics = params?.cleanLyrics || params?.lyrics || "";
-              const geminiKey = configMap["gemini_api_key"] || Deno.env.get("GEMINI_API_KEY");
+              const elevenlabsKey = configMap["elevenlabs_api_key"] || Deno.env.get("ELEVENLABS_API_KEY");
+              const elevenlabsEnabled = configMap["api_enabled_elevenlabs"] !== "false";
               let vocalsUrl: string | null = null;
 
-              if (lyrics && geminiKey) {
+              if (lyrics && elevenlabsKey && elevenlabsEnabled) {
                 // Strip ALL section markers [Intro], [Verse 1], [Chorus], etc. for TTS
                 const ttsLyrics = lyrics
                   .replace(/\[(?:Intro|Verse|Chorus|Bridge|Outro|Hook|Pre-Chorus|Interlude)[^\]]*\]/gi, "")
                   .replace(/\n{3,}/g, "\n\n")
                   .trim();
                 
-                console.log(`Generating Gemini TTS vocals (original: ${lyrics.length} chars, cleaned for TTS: ${ttsLyrics.length} chars)...`);
+                console.log(`Generating ElevenLabs vocals (original: ${lyrics.length} chars, cleaned: ${ttsLyrics.length} chars)...`);
                 
-                // Map voice type to Gemini TTS voices
+                // Map voice type to ElevenLabs voice IDs
                 const voiceMap: Record<string, string> = {
-                  female: "Kore", male: "Charon", duet: "Aoede", choir: "Fenrir",
+                  female: "EXAVITQu4vr4xnSDxMaL",  // Sarah - clear, expressive
+                  male: "nPczCjzI2devNBz1zQrb",     // Brian - warm, deep
+                  duet: "FGY2WhTYpPnrIDTdsKH5",     // Laura - different female
+                  choir: "onwK4e9ZLuTAKqWW03F9",     // Daniel - versatile
                 };
-                const geminiVoice = voiceMap[params?.voiceType || "female"] || "Kore";
+                const voiceId = voiceMap[params?.voiceType || "female"] || voiceMap.female;
                 
-                // Chunk lyrics (Gemini TTS 32k token context, chunk at ~5000 chars)
-                const maxChars = 5000;
+                // Genre-specific voice settings for ElevenLabs
+                const genreVoiceSettings: Record<string, { stability: number; similarity_boost: number; style: number; speed: number }> = {
+                  pop: { stability: 0.4, similarity_boost: 0.75, style: 0.5, speed: 1.0 },
+                  rock: { stability: 0.3, similarity_boost: 0.8, style: 0.7, speed: 1.05 },
+                  hiphop: { stability: 0.25, similarity_boost: 0.85, style: 0.8, speed: 1.1 },
+                  edm: { stability: 0.35, similarity_boost: 0.7, style: 0.6, speed: 1.05 },
+                  ballad: { stability: 0.6, similarity_boost: 0.8, style: 0.4, speed: 0.9 },
+                  jazz: { stability: 0.5, similarity_boost: 0.75, style: 0.5, speed: 0.95 },
+                  classical: { stability: 0.7, similarity_boost: 0.8, style: 0.3, speed: 0.9 },
+                  rnb: { stability: 0.35, similarity_boost: 0.8, style: 0.6, speed: 0.95 },
+                  country: { stability: 0.5, similarity_boost: 0.75, style: 0.5, speed: 1.0 },
+                  myanmar_traditional: { stability: 0.5, similarity_boost: 0.8, style: 0.4, speed: 0.95 },
+                };
+                const voiceSettings = genreVoiceSettings[params?.genre || "pop"] || genreVoiceSettings.pop;
+                
+                console.log(`ElevenLabs: voice=${voiceId}, genre=${params?.genre}, settings=${JSON.stringify(voiceSettings)}`);
+                
+                // Chunk lyrics for ElevenLabs (max ~5000 chars per request)
+                const maxChars = 4500;
                 const chunks: string[] = [];
                 let remaining = ttsLyrics;
                 while (remaining.length > 0) {
@@ -267,181 +288,101 @@ serve(async (req) => {
                   remaining = remaining.substring(breakAt + 1).trim();
                 }
                 
-                console.log(`Gemini TTS: ${chunks.length} chunk(s), voice: ${geminiVoice}`);
+                console.log(`ElevenLabs TTS: ${chunks.length} chunk(s)`);
                 
-                // Genre-specific singing style instructions for Gemini TTS
-                const genreStyle: Record<string, string> = {
-                  pop: "Sing with a bright, catchy pop rhythm. Medium tempo, clear enunciation, light and upbeat delivery.",
-                  rock: "Sing with powerful rock energy. Strong vocal projection, slightly raspy edge, driving rhythm.",
-                  hiphop: "Deliver with a strong hip-hop flow and rhythm. Emphasize beats, use rhythmic pacing and confident delivery.",
-                  edm: "Sing with an energetic, pulsing electronic dance rhythm. Build-up energy, euphoric delivery.",
-                  ballad: "Sing slowly and emotionally like a heartfelt ballad. Gentle, expressive, with pauses for feeling.",
-                  jazz: "Sing with smooth jazz phrasing. Relaxed tempo, swing feel, warm and silky vocal tone.",
-                  classical: "Sing with classical vocal technique. Precise intonation, operatic projection, elegant phrasing.",
-                  rnb: "Sing with smooth R&B soul. Melismatic runs, warm tone, groovy rhythm.",
-                  country: "Sing with country twang and storytelling warmth. Moderate tempo, genuine and heartfelt.",
-                  myanmar_traditional: "Sing in traditional Myanmar style. Melodic phrasing with classical Myanmar vocal ornaments.",
-                };
-                const moodStyle: Record<string, string> = {
-                  happy: "Joyful and bright tone, smiling delivery.",
-                  sad: "Melancholic, tender, emotional with occasional vocal breaks.",
-                  energetic: "High energy, powerful, dynamic vocal range.",
-                  romantic: "Warm, intimate, tender and loving tone.",
-                  chill: "Relaxed, laid-back, smooth and effortless delivery.",
-                  epic: "Grand, powerful, building intensity with dramatic crescendos.",
-                };
-                
-                const langCode = params?.language || "my";
-                const genreDesc = params?.genre || "pop";
-                const moodDesc = params?.mood || "happy";
-                
-                // Language-specific singing instruction
-                const langInstruction: Record<string, string> = {
-                  my: "Sing these Burmese lyrics with proper Myanmar pronunciation and melodic rhythm. Speak in Burmese.",
-                  en: "Sing these English lyrics with clear pronunciation and musical rhythm.",
-                  th: "Sing these Thai lyrics with proper Thai pronunciation and melodic rhythm. Sing in Thai.",
-                  ko: "Sing these Korean lyrics with proper Korean pronunciation and K-pop style rhythm. Sing in Korean.",
-                  ja: "Sing these Japanese lyrics with proper Japanese pronunciation and J-pop style rhythm. Sing in Japanese.",
-                  zh: "Sing these Chinese lyrics with proper Mandarin pronunciation and melodic rhythm. Sing in Mandarin Chinese.",
-                };
-                const singPrompt = langInstruction[langCode] || langInstruction.my;
-                const genreInstruction = genreStyle[genreDesc] || genreStyle.pop;
-                const moodInstruction = moodStyle[moodDesc] || moodStyle.happy;
-                
-                // Gemini TTS model failover list
-                const ttsModels = [
-                  "gemini-2.5-flash-preview-tts",
-                  "gemini-2.5-pro-preview-tts",
-                ];
-                
-                // Generate audio for each chunk with retry + model failover
+                // Generate audio for each chunk with retry
                 const audioChunks: Uint8Array[] = [];
-                let successModel = "";
                 
                 for (let i = 0; i < chunks.length; i++) {
-                  const ttsPrompt = `${singPrompt}\n${genreInstruction}\n${moodInstruction}\n\n${chunks[i]}`;
                   let chunkDone = false;
                   
-                  for (const model of ttsModels) {
-                    if (chunkDone) break;
-                    
-                    // Retry up to 2 times per model
-                    for (let attempt = 0; attempt < 2; attempt++) {
-                      try {
-                        if (attempt > 0) {
-                          console.log(`Gemini TTS retry ${attempt} for chunk ${i + 1}, model: ${model}`);
-                          await new Promise(r => setTimeout(r, 2000 * attempt)); // backoff
-                        }
-                        
-                        const controller = new AbortController();
-                        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
-                        
-                        const ttsResp = await fetch(
-                          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
-                          {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              contents: [{ parts: [{ text: ttsPrompt }] }],
-                              generationConfig: {
-                                responseModalities: ["AUDIO"],
-                                speechConfig: {
-                                  voiceConfig: {
-                                    prebuiltVoiceConfig: { voiceName: geminiVoice },
-                                  },
-                                },
-                              },
-                            }),
-                            signal: controller.signal,
-                          }
-                        );
-                        
-                        clearTimeout(timeoutId);
-                        
-                        if (!ttsResp.ok) {
-                          const errText = await ttsResp.text();
-                          console.warn(`Gemini TTS ${model} chunk ${i + 1} failed (${ttsResp.status}): ${errText.substring(0, 300)}`);
-                          if (ttsResp.status === 429) {
-                            await new Promise(r => setTimeout(r, 5000)); // rate limit backoff
-                          }
-                          continue;
-                        }
-                        
-                        const ttsData = await ttsResp.json();
-                        const audioPart = ttsData.candidates?.[0]?.content?.parts?.[0]?.inlineData;
-                        if (!audioPart?.data) {
-                          console.warn(`Gemini TTS ${model} chunk ${i + 1}: no audio data in response. Keys: ${JSON.stringify(Object.keys(ttsData))}`);
-                          continue;
-                        }
-                        
-                        // Decode base64 PCM audio (L16 format: 16-bit, 24kHz, mono, little-endian)
-                        const raw = Uint8Array.from(atob(audioPart.data), c => c.charCodeAt(0));
-                        audioChunks.push(raw);
-                        successModel = model;
-                        console.log(`Gemini TTS chunk ${i + 1}/${chunks.length} OK (${model}, ${raw.byteLength} bytes PCM, mime: ${audioPart.mimeType || "unknown"})`);
-                        chunkDone = true;
-                        break;
-                        
-                      } catch (err: any) {
-                        console.warn(`Gemini TTS ${model} chunk ${i + 1} error: ${err.message}`);
+                  for (let attempt = 0; attempt < 3; attempt++) {
+                    try {
+                      if (attempt > 0) {
+                        console.log(`ElevenLabs retry ${attempt} for chunk ${i + 1}`);
+                        await new Promise(r => setTimeout(r, 2000 * attempt));
                       }
+                      
+                      const controller = new AbortController();
+                      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s timeout
+                      
+                      const ttsResp = await fetch(
+                        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
+                        {
+                          method: "POST",
+                          headers: {
+                            "xi-api-key": elevenlabsKey,
+                            "Content-Type": "application/json",
+                          },
+                          body: JSON.stringify({
+                            text: chunks[i],
+                            model_id: "eleven_multilingual_v2",
+                            voice_settings: {
+                              stability: voiceSettings.stability,
+                              similarity_boost: voiceSettings.similarity_boost,
+                              style: voiceSettings.style,
+                              use_speaker_boost: true,
+                              speed: voiceSettings.speed,
+                            },
+                            ...(i > 0 && chunks[i - 1] ? { previous_text: chunks[i - 1].slice(-200) } : {}),
+                            ...(i < chunks.length - 1 && chunks[i + 1] ? { next_text: chunks[i + 1].slice(0, 200) } : {}),
+                          }),
+                          signal: controller.signal,
+                        }
+                      );
+                      
+                      clearTimeout(timeoutId);
+                      
+                      if (!ttsResp.ok) {
+                        const errText = await ttsResp.text();
+                        console.warn(`ElevenLabs chunk ${i + 1} failed (${ttsResp.status}): ${errText.substring(0, 300)}`);
+                        if (ttsResp.status === 429) {
+                          await new Promise(r => setTimeout(r, 5000));
+                        }
+                        continue;
+                      }
+                      
+                      // ElevenLabs returns MP3 audio directly (binary)
+                      const audioBuffer = await ttsResp.arrayBuffer();
+                      const audioBytes = new Uint8Array(audioBuffer);
+                      audioChunks.push(audioBytes);
+                      console.log(`ElevenLabs chunk ${i + 1}/${chunks.length} OK (${audioBytes.byteLength} bytes MP3)`);
+                      chunkDone = true;
+                      break;
+                      
+                    } catch (err: any) {
+                      console.warn(`ElevenLabs chunk ${i + 1} error: ${err.message}`);
                     }
                   }
                   
                   if (!chunkDone) {
-                    console.error(`All Gemini TTS models failed for chunk ${i + 1}, stopping.`);
+                    console.error(`ElevenLabs failed for chunk ${i + 1} after 3 attempts, stopping.`);
                     break;
                   }
                 }
                 
-                console.log(`Gemini TTS result: ${audioChunks.length}/${chunks.length} chunks successful${successModel ? ` (model: ${successModel})` : ""}`);
+                console.log(`ElevenLabs result: ${audioChunks.length}/${chunks.length} chunks successful`);
                 
                 if (audioChunks.length > 0) {
-                  // Combine all PCM chunks
-                  const totalPcmSize = audioChunks.reduce((sum, c) => sum + c.byteLength, 0);
-                  const pcmData = new Uint8Array(totalPcmSize);
+                  // Combine all MP3 chunks into one file
+                  const totalSize = audioChunks.reduce((sum, c) => sum + c.byteLength, 0);
+                  const combinedAudio = new Uint8Array(totalSize);
                   let offset = 0;
                   for (const chunk of audioChunks) {
-                    pcmData.set(chunk, offset);
+                    combinedAudio.set(chunk, offset);
                     offset += chunk.byteLength;
                   }
                   
-                  // Wrap raw PCM in WAV header (L16: 16-bit, 24000Hz, 1 channel, little-endian)
-                  const sampleRate = 24000;
-                  const numChannels = 1;
-                  const bitsPerSample = 16;
-                  const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
-                  const blockAlign = numChannels * (bitsPerSample / 8);
-                  const wavHeaderSize = 44;
-                  const wavBuffer = new Uint8Array(wavHeaderSize + pcmData.byteLength);
-                  const view = new DataView(wavBuffer.buffer);
+                  console.log(`ElevenLabs combined MP3: ${combinedAudio.byteLength} bytes`);
                   
-                  // RIFF header
-                  wavBuffer.set(new TextEncoder().encode("RIFF"), 0);
-                  view.setUint32(4, 36 + pcmData.byteLength, true);
-                  wavBuffer.set(new TextEncoder().encode("WAVE"), 8);
-                  // fmt sub-chunk
-                  wavBuffer.set(new TextEncoder().encode("fmt "), 12);
-                  view.setUint32(16, 16, true);
-                  view.setUint16(20, 1, true); // PCM format
-                  view.setUint16(22, numChannels, true);
-                  view.setUint32(24, sampleRate, true);
-                  view.setUint32(28, byteRate, true);
-                  view.setUint16(32, blockAlign, true);
-                  view.setUint16(34, bitsPerSample, true);
-                  // data sub-chunk
-                  wavBuffer.set(new TextEncoder().encode("data"), 36);
-                  view.setUint32(40, pcmData.byteLength, true);
-                  wavBuffer.set(pcmData, wavHeaderSize);
-                  
-                  console.log(`WAV created: ${wavBuffer.byteLength} bytes (${(totalPcmSize / sampleRate / 2).toFixed(1)}s audio)`);
-                  
-                  const vocalsFileName = `${job.user_id}/gemini-vocals-${Date.now()}.wav`;
-                  await supabaseAdmin.storage.from("videos").upload(vocalsFileName, wavBuffer.buffer, { contentType: "audio/wav", upsert: true });
+                  const vocalsFileName = `${job.user_id}/elevenlabs-vocals-${Date.now()}.mp3`;
+                  await supabaseAdmin.storage.from("videos").upload(vocalsFileName, combinedAudio.buffer, { contentType: "audio/mpeg", upsert: true });
                   const { data: vocalsSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(vocalsFileName, 86400 * 7);
                   vocalsUrl = vocalsSigned?.signedUrl || null;
-                  console.log(`Gemini vocals uploaded (WAV): ${vocalsUrl?.substring(0, 80)}...`);
+                  console.log(`ElevenLabs vocals uploaded (MP3): ${vocalsUrl?.substring(0, 80)}...`);
                 }
+              } else if (lyrics && !elevenlabsKey) {
+                console.warn("ElevenLabs API key not configured, skipping vocal generation");
               }
               
               // Step 3: Merge vocals + instrumental via Shotstack

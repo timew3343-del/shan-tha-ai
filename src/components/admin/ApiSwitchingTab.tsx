@@ -88,6 +88,14 @@ const API_KEYS: ApiKeyConfig[] = [
     toggleKey: "api_enabled_goapi_suno",
     tasks: ["Song Generation Backup", "Music AI", "Vocals Backup"],
   },
+  {
+    key: "elevenlabs",
+    label: "ElevenLabs",
+    description: "AI Vocals, Text-to-Speech, Song Singing (Primary Vocal Engine)",
+    settingKey: "elevenlabs_api_key",
+    toggleKey: "api_enabled_elevenlabs",
+    tasks: ["AI Vocals", "Song Singing", "TTS", "Multilingual Voice"],
+  },
 ];
 
 export const ApiSwitchingTab = () => {
