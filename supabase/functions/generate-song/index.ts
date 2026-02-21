@@ -223,13 +223,16 @@ serve(async (req) => {
     if (serviceOption === "song_only" || serviceOption === "full_auto") {
       const userInput = (topic || "").trim();
       const lineCount = userInput.split("\n").filter(l => l.trim().length > 0).length;
-      const isDirectLyrics = lineCount >= 4 || userInput.length >= 200;
+      // FIX #1: Only treat as direct lyrics if it has BOTH many lines AND section markers
+      const hasSectionMarkers = /\[(Intro|Verse|Chorus|Bridge|Outro|Hook|Pre-Chorus)/i.test(userInput);
+      const isDirectLyrics = hasSectionMarkers && lineCount >= 6 && userInput.length >= 200;
 
       if (isDirectLyrics) {
-        console.log(`Step 1: Using user-provided lyrics directly (${lineCount} lines, ${userInput.length} chars)`);
+        console.log(`Step 1: Using user-provided lyrics directly (${lineCount} lines, ${userInput.length} chars, has markers)`);
         lyrics = userInput;
       } else {
-        console.log("Step 1: Generating lyrics from topic...");
+        // FORCE script generation via Gemini - never skip this step
+        console.log(`Step 1: FORCE generating lyrics from topic (input: ${userInput.length} chars, lines: ${lineCount}, markers: ${hasSectionMarkers})`);
         const langName = { my: "Myanmar (Burmese)", en: "English", th: "Thai", ko: "Korean", ja: "Japanese", zh: "Chinese (Mandarin)" }[language || "my"] || "Myanmar (Burmese)";
 
         const systemPrompt = `You are a professional songwriter who writes ONLY in ${langName}. 
@@ -247,15 +250,20 @@ ${requestedDurationMin >= 4 ? "Add a [Verse 3] and a second [Bridge] for a full 
 Start DIRECTLY with [Intro] - no intro text, no explanations, no titles.`;
 
         lyrics = await callAIWithFailover(LOVABLE_API_KEY, systemPrompt, `Write a ${genre} song about: ${userInput || "a beautiful day"} in ${langName}. Mood: ${mood}.`);
-        if (!lyrics) lyrics = userInput || "Song lyrics";
+        
+        // FIX #1: If lyrics generation fails, BLOCK - do not proceed with empty lyrics
+        if (!lyrics || lyrics.trim().length < 20) {
+          console.error("BLOCKING: Gemini failed to generate lyrics/script!");
+          return respond({ error: "Script/Lyrics ဖန်တီးမအောင်မြင်ပါ။ ထပ်စမ်းပါ။" }, 500);
+        }
+        
+        console.log(`Gemini lyrics generated: ${lyrics.length} chars`);
 
         // Strip AI preamble: remove anything before the first section marker
-        if (lyrics) {
-          const sectionMatch = lyrics.match(/(\[(?:Intro|Verse|Chorus|Bridge|Outro|Hook|Pre-Chorus)[^\]]*\])/i);
-          if (sectionMatch && sectionMatch.index && sectionMatch.index > 0) {
-            console.log(`Stripping ${sectionMatch.index} chars of AI preamble`);
-            lyrics = lyrics.substring(sectionMatch.index);
-          }
+        const sectionMatch = lyrics.match(/(\[(?:Intro|Verse|Chorus|Bridge|Outro|Hook|Pre-Chorus)[^\]]*\])/i);
+        if (sectionMatch && sectionMatch.index && sectionMatch.index > 0) {
+          console.log(`Stripping ${sectionMatch.index} chars of AI preamble`);
+          lyrics = lyrics.substring(sectionMatch.index);
         }
       }
     }
