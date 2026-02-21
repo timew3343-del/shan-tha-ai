@@ -179,7 +179,7 @@ serve(async (req) => {
     try { parsedBody = await req.json(); } catch { return respond({ error: "Invalid request body" }, 400); }
 
     const { serviceOption, topic, genre, mood, language, voiceType, mtvStyle, showSubtitles, subtitleColor, audioBase64, videoDurationMinutes } = parsedBody;
-    const requestedDurationMin = Math.min(Math.max(videoDurationMinutes || 1, 1), 3);
+    const requestedDurationMin = Math.min(Math.max(videoDurationMinutes || 1, 1), 5);
 
     if (!serviceOption || !["song_only", "mtv_only", "full_auto"].includes(serviceOption)) {
       return respond({ error: "Invalid service option" }, 400);
@@ -238,18 +238,20 @@ CRITICAL RULE: You MUST write ALL lyrics in ${langName} language ONLY. Do NOT mi
 ${langName === "Myanmar (Burmese)" ? "IMPORTANT: မြန်မာစာ သတ်ပုံမှန်ကန်ရမည်၊ သံစဉ်နဲ့ ကိုက်ညီရမည်။ Unicode NFC form သုံးပါ။" : ""}
 ${langName === "Korean" ? "IMPORTANT: 한국어로만 가사를 작성하세요." : ""}
 ${langName === "Thai" ? "IMPORTANT: เขียนเนื้อเพลงเป็นภาษาไทยเท่านั้น" : ""}
-Format: Write ONLY the lyrics with [Verse 1], [Chorus], [Verse 2], [Bridge], [Chorus] sections.
-The song MUST be ${requestedDurationMin} minute(s) long when sung at normal tempo. Write enough lyrics to fill exactly ${requestedDurationMin} minute(s).
+Format: Write a COMPLETE song script with these sections: [Intro], [Verse 1], [Chorus], [Verse 2], [Bridge], [Chorus], [Outro].
+The [Intro] section should have a 1-2 line mood-setting opening.
+The song MUST be ${requestedDurationMin} minute(s) long when sung at normal ${genre} tempo. Write enough lyrics to fill exactly ${requestedDurationMin} minute(s).
 ${requestedDurationMin >= 2 ? `Write AT LEAST ${requestedDurationMin + 1} verses and ${requestedDurationMin} choruses. Each section must have 4-6 lines minimum.` : "Write AT LEAST 2 verses and 1 chorus. Each section must have 4-6 lines."}
-${requestedDurationMin >= 3 ? "Include a Bridge section and an Outro for a complete 3-minute song structure." : ""}
-Start DIRECTLY with [Verse 1] - no intro text, no explanations, no titles.`;
+${requestedDurationMin >= 3 ? "Include a Bridge section and an Outro." : ""}
+${requestedDurationMin >= 4 ? "Add a [Verse 3] and a second [Bridge] for a full 4-5 minute song structure." : ""}
+Start DIRECTLY with [Intro] - no intro text, no explanations, no titles.`;
 
         lyrics = await callAIWithFailover(LOVABLE_API_KEY, systemPrompt, `Write a ${genre} song about: ${userInput || "a beautiful day"} in ${langName}. Mood: ${mood}.`);
         if (!lyrics) lyrics = userInput || "Song lyrics";
 
         // Strip AI preamble: remove anything before the first section marker
         if (lyrics) {
-          const sectionMatch = lyrics.match(/(\[(?:Verse|Chorus|Bridge|Intro|Outro|Hook|Pre-Chorus)[^\]]*\])/i);
+          const sectionMatch = lyrics.match(/(\[(?:Intro|Verse|Chorus|Bridge|Outro|Hook|Pre-Chorus)[^\]]*\])/i);
           if (sectionMatch && sectionMatch.index && sectionMatch.index > 0) {
             console.log(`Stripping ${sectionMatch.index} chars of AI preamble`);
             lyrics = lyrics.substring(sectionMatch.index);
