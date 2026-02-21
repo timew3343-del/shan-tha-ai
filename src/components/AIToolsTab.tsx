@@ -59,6 +59,7 @@ const VideoMultiTool = lazy(() => import("./tools/VideoMultiTool").then(m => ({ 
 const CharacterAnimateTool = lazy(() => import("./tools/CharacterAnimateTool").then(m => ({ default: m.CharacterAnimateTool })));
 const AutoResizerTool = lazy(() => import("./tools/AutoResizerTool").then(m => ({ default: m.AutoResizerTool })));
 const VideoEditor = lazy(() => import("./VideoEditor").then(m => ({ default: m.VideoEditor })));
+const ProTTSTool = lazy(() => import("./tools/ProTTSTool").then(m => ({ default: m.ProTTSTool })));
 
 import { ToolCardCompact } from "./ToolCardCompact";
 import { ToolHeader } from "./ToolHeader";
@@ -81,7 +82,7 @@ interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv" | "videoredesign" | "logodesign" | "photorestore" | "spellcheck" | "virtualtryon" | "astrology" | "interiordesign" | "cvbuilder" | "bizconsultant" | "creativewriter" | "legaladvisor" | "messagepolisher" | "nutritionplanner" | "cardealer" | "exteriordesign" | "voicetranslator" | "healthchecker" | "babynamer" | "legaldoc" | "styletransfer" | "smartchef" | "travelplanner" | "fashiondesigner" | "videomulti" | "characteranimate" | "autoresizer" | "videoeditor";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv" | "videoredesign" | "logodesign" | "photorestore" | "spellcheck" | "virtualtryon" | "astrology" | "interiordesign" | "cvbuilder" | "bizconsultant" | "creativewriter" | "legaladvisor" | "messagepolisher" | "nutritionplanner" | "cardealer" | "exteriordesign" | "voicetranslator" | "healthchecker" | "babynamer" | "legaldoc" | "styletransfer" | "smartchef" | "travelplanner" | "fashiondesigner" | "videomulti" | "characteranimate" | "autoresizer" | "videoeditor" | "protts";
 
 type ToolCategory = "all" | "image" | "video" | "audio" | "premium" | "health" | "legal" | "lifestyle" | "fashion";
 
@@ -186,6 +187,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
     { id: "scenesummarizer", icon: ListChecks, titleKey: "tool.sceneSumm", fallbackTitle: "Video Recap", descKey: "tool.sceneSumm.desc", fallbackDesc: "ဗီဒီယို အကျဥ်းချုပ်", gradient: "bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-700", credits: costs.scene_summarizer, category: ["video"] },
     // Audio/Text
     { id: "speech", icon: Volume2, titleKey: "tool.tts", fallbackTitle: "အသံ ↔ စာ", descKey: "tool.tts.desc", fallbackDesc: "Text-to-Speech & STT", gradient: "bg-gradient-to-br from-emerald-500 via-green-600 to-teal-700", credits: costs.text_to_speech, category: ["audio"] },
+    { id: "protts", icon: Mic, titleKey: "", fallbackTitle: "Pro Text to Speech", descKey: "", fallbackDesc: "ElevenLabs 30 အသံ | 20 ဘာသာ | AI ဘာသာပြန်", gradient: "bg-gradient-to-br from-violet-500 via-purple-600 to-fuchsia-700", credits: (costs as any).pro_tts || 7, category: ["audio"], badge: "PRO" },
     { id: "youtube", icon: Youtube, titleKey: "tool.youtubeText", fallbackTitle: "YouTube → စာ", descKey: "tool.youtubeText.desc", fallbackDesc: "ဗီဒီယိုမှ စာထုတ်", gradient: "bg-gradient-to-br from-red-500 via-red-600 to-rose-700", credits: costs.youtube_to_text, category: ["audio"] },
     { id: "voicetranslator", icon: Languages, titleKey: "", fallbackTitle: "AI အသံ ဘာသာပြန်စက်", descKey: "", fallbackDesc: "မြန်မာ → နိုင်ငံခြား ဘာသာပြန်", gradient: "bg-gradient-to-br from-indigo-500 via-blue-600 to-cyan-700", credits: (costs as any).voice_translator || 3, category: ["audio"], badge: "NEW" },
     { id: "spellcheck", icon: Type, titleKey: "", fallbackTitle: "AI မြန်မာစာ သတ်ပုံစစ်", descKey: "", fallbackDesc: "သတ်ပုံနှင့် သဒ္ဒါ စစ်ဆေး", gradient: "bg-gradient-to-br from-green-500 via-emerald-600 to-teal-700", credits: costs.myanmar_spellcheck, category: ["audio"], badge: "NEW" },
@@ -282,6 +284,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
       case "characteranimate": return <CharacterAnimateTool key="characteranimate" userId={userId} onBack={handleBack} />;
       case "autoresizer": return <AutoResizerTool key="autoresizer" userId={userId} onBack={handleBack} />;
       case "videoeditor": return <div key="videoeditor"><ToolHeader title="Video Editor" subtitle="Trim, Speed, Zoom, Filter, Text" onBack={handleBack} /><VideoEditor userId={userId} /></div>;
+      case "protts": return <ProTTSTool key="protts" userId={userId} onBack={handleBack} />;
       default: return null;
     }
   };
