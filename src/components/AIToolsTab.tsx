@@ -386,7 +386,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
                     { key: "legal" as ToolCategory, label: "⚖️ ဥပဒေနှင့် စီးပွားရေး", icon: Scale },
                     { key: "lifestyle" as ToolCategory, label: "🌟 လူနေမှုပုံစံနှင့် ခရီးသွား", icon: Sparkles },
                   ].map((section) => {
-                    const sectionTools = tools.filter(tool => {
+                    const sectionTools = visibilityLoading ? [] : tools.filter(tool => {
                       // Filter by visibility for non-admin users
                       if (!isAdmin && !isToolEnabled(tool.id)) return false;
                       // Primary category check - use first category as primary

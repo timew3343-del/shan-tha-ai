@@ -28,7 +28,10 @@ export class ErrorBoundary extends Component<Props, State> {
     const isTransient =
       error.message?.includes("useEffect") ||
       error.message?.includes("Invalid hook call") ||
-      error.message?.includes("Cannot read properties of null");
+      error.message?.includes("Cannot read properties of null") ||
+      error.message?.includes("useNavigate") ||
+      error.message?.includes("<Router>") ||
+      error.message?.includes("useLocation");
 
     if (isTransient && this.state.retryCount < MAX_AUTO_RETRIES) {
       console.log(`Auto-retrying (${this.state.retryCount + 1}/${MAX_AUTO_RETRIES})...`);
