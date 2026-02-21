@@ -55,6 +55,7 @@ const ALL_TOOLS = [
   { id: "travelplanner", name: "AI ခရီးသွား လမ်းညွှန်" },
   { id: "autoresizer", name: "Auto Resizer" },
   { id: "videoeditor", name: "Video Editor" },
+  { id: "protts", name: "Pro Text to Speech" },
 ];
 
 export const ToolVisibilityTab = () => {

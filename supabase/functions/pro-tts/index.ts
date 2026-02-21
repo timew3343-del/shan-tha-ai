@@ -30,7 +30,7 @@ serve(async (req) => {
     const userIsAdmin = isAdminData === true;
 
     const body = await req.json();
-    const { text, voiceId, language, speed, stability, similarityBoost, autoTranslate } = body;
+    const { text, voiceId, language, speed, stability, similarityBoost } = body;
 
     if (!text || typeof text !== "string" || !text.trim()) {
       return new Response(JSON.stringify({ error: "Text is required" }),
@@ -63,9 +63,10 @@ serve(async (req) => {
       }
     }
 
-    // Step 1: Auto-translate if needed
+    // Step 1: ALWAYS translate text to the target language using Gemini
     let finalText = text.trim();
-    if (autoTranslate && language) {
+    let wasTranslated = false;
+    if (language) {
       const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
       if (LOVABLE_API_KEY) {
         try {
@@ -75,18 +76,24 @@ serve(async (req) => {
             body: JSON.stringify({
               model: "google/gemini-3-flash-preview",
               messages: [{
+                role: "system",
+                content: "You are a professional translator. Translate the given text accurately to the specified language. Return ONLY the translated text, nothing else. Do not add any explanation or notes."
+              }, {
                 role: "user",
-                content: `Translate the following text to ${language}. Return ONLY the translated text, nothing else.\n\nText: ${finalText}`
+                content: `Translate the following text to ${language}. If the text is already in ${language}, return it as-is with proper grammar corrections.\n\nText: ${finalText}`
               }],
             }),
           });
           if (translateRes.ok) {
             const translateData = await translateRes.json();
             const translated = translateData.choices?.[0]?.message?.content?.trim();
-            if (translated) finalText = translated;
+            if (translated) {
+              finalText = translated;
+              wasTranslated = true;
+            }
           }
         } catch (e) {
-          console.warn("Auto-translate failed, using original text:", e);
+          console.warn("Translation failed, using original text:", e);
         }
       }
     }
@@ -159,7 +166,8 @@ serve(async (req) => {
       success: true,
       audioBase64,
       audioFormat: "mp3",
-      translatedText: autoTranslate ? finalText : undefined,
+      translatedText: wasTranslated ? finalText : undefined,
+      targetLanguage: language,
       creditsUsed: userIsAdmin ? 0 : creditCost,
       newBalance,
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
