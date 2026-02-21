@@ -97,7 +97,7 @@ export const ProTTSTool = ({ userId, onBack }: Props) => {
   const [translatedText, setTranslatedText] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const cost = (costs as any).pro_tts || 7;
+  const cost = costs.pro_tts || 7;
   const filteredVoices = VOICES.filter(v => v.gender === gender);
 
   const handleGenerate = async () => {

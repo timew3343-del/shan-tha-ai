@@ -7,6 +7,80 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Translate using Gemini API directly (GEMINI_API_KEY)
+async function translateWithGeminiDirect(text: string, targetLang: string, apiKey: string): Promise<string | null> {
+  try {
+    console.log(`[Pro TTS] Translating via Gemini API directly to ${targetLang}...`);
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: `You are a professional translator. Translate the following text into ${targetLang}. Output ONLY the translated text in ${targetLang} script/characters. No explanations, no notes, no original text.\n\nText to translate:\n${text}`
+            }]
+          }],
+          generationConfig: { temperature: 0.3 },
+        }),
+      }
+    );
+    if (!res.ok) {
+      const errBody = await res.text();
+      console.error(`[Pro TTS] Gemini Direct API error ${res.status}: ${errBody}`);
+      return null;
+    }
+    const data = await res.json();
+    const translated = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if (translated && translated.length > 0) {
+      console.log(`[Pro TTS] Gemini Direct translation SUCCESS: "${translated.substring(0, 100)}..."`);
+      return translated;
+    }
+    return null;
+  } catch (e) {
+    console.error("[Pro TTS] Gemini Direct translation exception:", e);
+    return null;
+  }
+}
+
+// Translate using Lovable AI Gateway (fallback)
+async function translateWithLovableGateway(text: string, targetLang: string, apiKey: string): Promise<string | null> {
+  try {
+    console.log(`[Pro TTS] Translating via Lovable Gateway to ${targetLang}...`);
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [{
+          role: "system",
+          content: `You are a professional translator. Output ONLY the translated text in ${targetLang} script/characters. No explanations.`
+        }, {
+          role: "user",
+          content: `Translate into ${targetLang}:\n\n${text}`
+        }],
+        temperature: 0.3,
+      }),
+    });
+    if (!res.ok) {
+      const errBody = await res.text();
+      console.error(`[Pro TTS] Lovable Gateway error ${res.status}: ${errBody}`);
+      return null;
+    }
+    const data = await res.json();
+    const translated = data.choices?.[0]?.message?.content?.trim();
+    if (translated && translated.length > 0) {
+      console.log(`[Pro TTS] Lovable Gateway translation SUCCESS: "${translated.substring(0, 100)}..."`);
+      return translated;
+    }
+    return null;
+  } catch (e) {
+    console.error("[Pro TTS] Lovable Gateway translation exception:", e);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -63,39 +137,32 @@ serve(async (req) => {
       }
     }
 
-    // Step 1: ALWAYS translate text to the target language using Gemini
+    // Step 1: Translate text to target language
     let finalText = text.trim();
     let wasTranslated = false;
-    if (language) {
-      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-      if (LOVABLE_API_KEY) {
-        try {
-          const translateRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              model: "google/gemini-3-flash-preview",
-              messages: [{
-                role: "system",
-                content: "You are a professional translator. Translate the given text accurately to the specified language. Return ONLY the translated text, nothing else. Do not add any explanation or notes."
-              }, {
-                role: "user",
-                content: `Translate the following text to ${language}. If the text is already in ${language}, return it as-is with proper grammar corrections.\n\nText: ${finalText}`
-              }],
-            }),
-          });
-          if (translateRes.ok) {
-            const translateData = await translateRes.json();
-            const translated = translateData.choices?.[0]?.message?.content?.trim();
-            if (translated) {
-              finalText = translated;
-              wasTranslated = true;
-            }
-          }
-        } catch (e) {
-          console.warn("Translation failed, using original text:", e);
-        }
-      }
+    const targetLang = language || "English";
+
+    console.log(`[Pro TTS] Input: "${finalText.substring(0, 80)}..." | Target: ${targetLang}`);
+
+    // Try GEMINI_API_KEY first (direct), then LOVABLE_API_KEY (gateway)
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+
+    let translated: string | null = null;
+
+    if (GEMINI_API_KEY) {
+      translated = await translateWithGeminiDirect(finalText, targetLang, GEMINI_API_KEY);
+    }
+
+    if (!translated && LOVABLE_API_KEY) {
+      translated = await translateWithLovableGateway(finalText, targetLang, LOVABLE_API_KEY);
+    }
+
+    if (translated) {
+      finalText = translated;
+      wasTranslated = true;
+    } else {
+      console.warn("[Pro TTS] All translation methods failed - using original text. Audio may not match target language.");
     }
 
     // Step 2: ElevenLabs TTS
@@ -105,7 +172,10 @@ serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const selectedVoiceId = voiceId || "EXAVITQu4vr4xnSDxMaL"; // Sarah default
+    const selectedVoiceId = voiceId || "EXAVITQu4vr4xnSDxMaL";
+    
+    console.log(`[Pro TTS] ElevenLabs: voice=${selectedVoiceId}, textLen=${finalText.length}, translated=${wasTranslated}`);
+    
     const ttsResponse = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${selectedVoiceId}?output_format=mp3_44100_128`,
       {
@@ -130,7 +200,7 @@ serve(async (req) => {
 
     if (!ttsResponse.ok) {
       const errText = await ttsResponse.text();
-      console.error("ElevenLabs TTS error:", ttsResponse.status, errText);
+      console.error("[Pro TTS] ElevenLabs error:", ttsResponse.status, errText);
       return new Response(JSON.stringify({ error: "TTS generation failed" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -143,7 +213,7 @@ serve(async (req) => {
       });
       newBalance = deductResult?.new_balance ?? (profile!.credit_balance - creditCost);
     } else {
-      console.log("Admin free access - skipping credit deduction for Pro TTS");
+      console.log("[Pro TTS] Admin free access - skipping credit deduction");
     }
 
     const audioBuffer = await ttsResponse.arrayBuffer();
@@ -156,24 +226,26 @@ serve(async (req) => {
         tool_id: "pro-tts",
         tool_name: "Pro Text to Speech",
         output_type: "audio",
-        content: text.substring(0, 500),
+        content: wasTranslated ? `[${targetLang}] ${finalText.substring(0, 500)}` : text.substring(0, 500),
       });
     } catch (e) {
-      console.warn("Failed to save Pro TTS output:", e);
+      console.warn("[Pro TTS] Failed to save output:", e);
     }
+
+    console.log(`[Pro TTS] SUCCESS - translated=${wasTranslated}, lang=${targetLang}, audioSize=${audioBuffer.byteLength}`);
 
     return new Response(JSON.stringify({
       success: true,
       audioBase64,
       audioFormat: "mp3",
       translatedText: wasTranslated ? finalText : undefined,
-      targetLanguage: language,
+      targetLanguage: targetLang,
       creditsUsed: userIsAdmin ? 0 : creditCost,
       newBalance,
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (error: any) {
-    console.error("Pro TTS error:", error);
+    console.error("[Pro TTS] Fatal error:", error);
     return new Response(JSON.stringify({ error: error.message || "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }

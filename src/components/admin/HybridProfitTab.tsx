@@ -60,6 +60,7 @@ const TOOL_LABELS: Record<CreditCostKey, string> = {
   travel_planner: "Travel Planner",
   fashion_designer: "Fashion Designer PRO",
   video_multi: "Video Multi-Tool",
+  pro_tts: "Pro Text to Speech",
 };
 
 interface ToolPricing {
