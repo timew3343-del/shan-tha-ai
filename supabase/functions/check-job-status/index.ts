@@ -231,22 +231,22 @@ serve(async (req) => {
               const instrumentalUrl = await uploadToStorage(supabaseAdmin, audioUrl, job.user_id, ".mp3", "audio/mpeg");
               console.log(`Instrumental uploaded: ${instrumentalUrl.substring(0, 80)}...`);
 
-              // Step 2: Generate TTS vocals from lyrics using OpenAI TTS
+              // Step 2: Generate vocals from lyrics using Gemini TTS (native audio output)
               const lyrics = params?.cleanLyrics || params?.lyrics || "";
-              const openaiKey = configMap["openai_api_key"];
+              const geminiKey = configMap["gemini_api_key"] || Deno.env.get("GEMINI_API_KEY");
               let vocalsUrl: string | null = null;
 
-              if (lyrics && openaiKey) {
-                console.log(`Generating TTS vocals (${lyrics.length} chars)...`);
+              if (lyrics && geminiKey) {
+                console.log(`Generating Gemini TTS vocals (${lyrics.length} chars)...`);
                 
-                // Map voice type to OpenAI TTS voices
+                // Map voice type to Gemini TTS voices
                 const voiceMap: Record<string, string> = {
-                  female: "nova", male: "onyx", duet: "nova", choir: "shimmer",
+                  female: "Kore", male: "Charon", duet: "Aoede", choir: "Fenrir",
                 };
-                const ttsVoice = voiceMap[params?.voiceType || "female"] || "nova";
+                const geminiVoice = voiceMap[params?.voiceType || "female"] || "Kore";
                 
-                // OpenAI TTS has 4096 char limit - chunk if needed
-                const maxChars = 4000;
+                // Gemini TTS has ~32k token context window - chunk at ~5000 chars for safety
+                const maxChars = 5000;
                 const chunks: string[] = [];
                 let remaining = lyrics;
                 while (remaining.length > 0) {
@@ -254,7 +254,6 @@ serve(async (req) => {
                     chunks.push(remaining);
                     break;
                   }
-                  // Find a good break point (newline or period)
                   let breakAt = remaining.lastIndexOf("\n", maxChars);
                   if (breakAt < maxChars * 0.5) breakAt = remaining.lastIndexOf(".", maxChars);
                   if (breakAt < maxChars * 0.5) breakAt = maxChars;
@@ -262,46 +261,108 @@ serve(async (req) => {
                   remaining = remaining.substring(breakAt + 1).trim();
                 }
                 
-                console.log(`TTS: ${chunks.length} chunk(s), voice: ${ttsVoice}`);
+                console.log(`Gemini TTS: ${chunks.length} chunk(s), voice: ${geminiVoice}`);
                 
-                // Generate audio for each chunk
-                const audioChunks: ArrayBuffer[] = [];
+                // Language instruction for better pronunciation
+                const langInstruction: Record<string, string> = {
+                  my: "Sing these Burmese lyrics clearly and melodically in Burmese language.",
+                  en: "Sing these English lyrics clearly and melodically.",
+                  th: "Sing these Thai lyrics clearly and melodically in Thai language.",
+                  ko: "Sing these Korean lyrics clearly and melodically in Korean language.",
+                  ja: "Sing these Japanese lyrics clearly and melodically in Japanese language.",
+                  zh: "Sing these Chinese lyrics clearly and melodically in Mandarin Chinese.",
+                };
+                const langCode = params?.language || "my";
+                const singPrompt = langInstruction[langCode] || langInstruction.my;
+                const moodDesc = params?.mood || "happy";
+                const genreDesc = params?.genre || "pop";
+                
+                // Generate audio for each chunk via Gemini TTS
+                const audioChunks: Uint8Array[] = [];
                 for (let i = 0; i < chunks.length; i++) {
-                  const ttsResp = await fetch("https://api.openai.com/v1/audio/speech", {
-                    method: "POST",
-                    headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      model: "tts-1-hd",
-                      input: chunks[i],
-                      voice: ttsVoice,
-                      response_format: "mp3",
-                      speed: 0.95, // Slightly slower for singing feel
-                    }),
-                  });
+                  const ttsPrompt = `${singPrompt} Style: ${genreDesc}, Mood: ${moodDesc}. Here are the lyrics:\n\n${chunks[i]}`;
+                  
+                  const ttsResp = await fetch(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${geminiKey}`,
+                    {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        contents: [{ parts: [{ text: ttsPrompt }] }],
+                        generationConfig: {
+                          responseModalities: ["AUDIO"],
+                          speechConfig: {
+                            voiceConfig: {
+                              prebuiltVoiceConfig: { voiceName: geminiVoice },
+                            },
+                          },
+                        },
+                      }),
+                    }
+                  );
                   
                   if (!ttsResp.ok) {
-                    console.warn(`TTS chunk ${i + 1} failed: ${ttsResp.status}`);
+                    const errText = await ttsResp.text();
+                    console.warn(`Gemini TTS chunk ${i + 1} failed: ${ttsResp.status} - ${errText.substring(0, 200)}`);
                     break;
                   }
-                  audioChunks.push(await ttsResp.arrayBuffer());
-                  console.log(`TTS chunk ${i + 1}/${chunks.length} done (${audioChunks[i].byteLength} bytes)`);
+                  
+                  const ttsData = await ttsResp.json();
+                  const audioPart = ttsData.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+                  if (!audioPart?.data) {
+                    console.warn(`Gemini TTS chunk ${i + 1}: no audio data in response`);
+                    break;
+                  }
+                  
+                  // Decode base64 PCM audio (16-bit, 24kHz, mono)
+                  const raw = Uint8Array.from(atob(audioPart.data), c => c.charCodeAt(0));
+                  audioChunks.push(raw);
+                  console.log(`Gemini TTS chunk ${i + 1}/${chunks.length} done (${raw.byteLength} bytes PCM)`);
                 }
                 
                 if (audioChunks.length > 0) {
-                  // Combine chunks into single audio buffer
-                  const totalSize = audioChunks.reduce((sum, c) => sum + c.byteLength, 0);
-                  const combined = new Uint8Array(totalSize);
+                  // Combine PCM chunks
+                  const totalPcmSize = audioChunks.reduce((sum, c) => sum + c.byteLength, 0);
+                  const pcmData = new Uint8Array(totalPcmSize);
                   let offset = 0;
                   for (const chunk of audioChunks) {
-                    combined.set(new Uint8Array(chunk), offset);
+                    pcmData.set(chunk, offset);
                     offset += chunk.byteLength;
                   }
                   
-                  const vocalsFileName = `${job.user_id}/vocals-${Date.now()}.mp3`;
-                  await supabaseAdmin.storage.from("videos").upload(vocalsFileName, combined.buffer, { contentType: "audio/mpeg", upsert: true });
+                  // Wrap PCM in WAV header (16-bit, 24kHz, mono)
+                  const sampleRate = 24000;
+                  const numChannels = 1;
+                  const bitsPerSample = 16;
+                  const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+                  const blockAlign = numChannels * (bitsPerSample / 8);
+                  const wavHeaderSize = 44;
+                  const wavBuffer = new Uint8Array(wavHeaderSize + pcmData.byteLength);
+                  const view = new DataView(wavBuffer.buffer);
+                  
+                  // RIFF header
+                  wavBuffer.set(new TextEncoder().encode("RIFF"), 0);
+                  view.setUint32(4, 36 + pcmData.byteLength, true);
+                  wavBuffer.set(new TextEncoder().encode("WAVE"), 8);
+                  // fmt chunk
+                  wavBuffer.set(new TextEncoder().encode("fmt "), 12);
+                  view.setUint32(16, 16, true); // chunk size
+                  view.setUint16(20, 1, true); // PCM format
+                  view.setUint16(22, numChannels, true);
+                  view.setUint32(24, sampleRate, true);
+                  view.setUint32(28, byteRate, true);
+                  view.setUint16(32, blockAlign, true);
+                  view.setUint16(34, bitsPerSample, true);
+                  // data chunk
+                  wavBuffer.set(new TextEncoder().encode("data"), 36);
+                  view.setUint32(40, pcmData.byteLength, true);
+                  wavBuffer.set(pcmData, wavHeaderSize);
+                  
+                  const vocalsFileName = `${job.user_id}/vocals-${Date.now()}.wav`;
+                  await supabaseAdmin.storage.from("videos").upload(vocalsFileName, wavBuffer.buffer, { contentType: "audio/wav", upsert: true });
                   const { data: vocalsSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(vocalsFileName, 86400 * 7);
                   vocalsUrl = vocalsSigned?.signedUrl || null;
-                  console.log(`TTS vocals uploaded: ${vocalsUrl?.substring(0, 80)}...`);
+                  console.log(`Gemini vocals uploaded (WAV): ${vocalsUrl?.substring(0, 80)}...`);
                 }
               }
               
