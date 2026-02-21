@@ -130,7 +130,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   const { costs } = useCreditCosts();
   const { credits, isLoading: creditsLoading } = useCredits(userId);
   const { isAdmin } = useUserRole(userId);
-  const { isToolEnabled } = useToolVisibility();
+  const { isToolEnabled, isLoading: visibilityLoading } = useToolVisibility();
   const { t } = useLanguage();
 
   useEffect(() => {
@@ -212,6 +212,8 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
   ], [costs, docSlideCost]);
 
   const filteredTools = useMemo(() => {
+    // Don't filter by visibility until data is loaded to prevent flickering
+    if (visibilityLoading) return [];
     let filtered = tools;
     // Admin sees all tools; non-admin only sees enabled tools
     if (!isAdmin) {
@@ -229,7 +231,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
       });
     }
     return filtered;
-  }, [tools, activeCategory, searchQuery, t, isAdmin, isToolEnabled]);
+  }, [tools, activeCategory, searchQuery, t, isAdmin, isToolEnabled, visibilityLoading]);
 
   const renderActiveTool = () => {
     switch (activeTool) {
