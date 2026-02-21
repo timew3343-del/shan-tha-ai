@@ -91,7 +91,6 @@ export const ProTTSTool = ({ userId, onBack }: Props) => {
   const [speed, setSpeed] = useState(1.0);
   const [stability, setStability] = useState(0.5);
   const [similarityBoost, setSimilarityBoost] = useState(0.75);
-  const [autoTranslate, setAutoTranslate] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -109,7 +108,7 @@ export const ProTTSTool = ({ userId, onBack }: Props) => {
 
     try {
       const { data, error } = await supabase.functions.invoke("pro-tts", {
-        body: { text: text.trim(), voiceId, language, speed, stability, similarityBoost, autoTranslate },
+        body: { text: text.trim(), voiceId, language, speed, stability, similarityBoost },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -118,7 +117,11 @@ export const ProTTSTool = ({ userId, onBack }: Props) => {
       setAudioUrl(audioDataUrl);
       if (data.translatedText) setTranslatedText(data.translatedText);
       refetch();
-      saveOutput("audio", text.substring(0, 200));
+      // Save with translated text for history
+      const contentForHistory = data.translatedText 
+        ? `[${language}] ${data.translatedText}` 
+        : text.substring(0, 200);
+      saveOutput("audio", contentForHistory);
       toast({ title: "အသံထွက်ပြီးပါပြီ!", description: `${data.creditsUsed} Cr သုံးခဲ့သည်` });
     } catch (e: any) {
       toast({ title: "အမှားရှိပါသည်", description: e.message, variant: "destructive" });
@@ -167,10 +170,10 @@ export const ProTTSTool = ({ userId, onBack }: Props) => {
           </Select>
         </div>
 
-        {/* Auto Translate Toggle */}
-        <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/50">
-          <Label className="text-xs font-myanmar">Gemini ဖြင့် အလိုအလျောက် ဘာသာပြန်</Label>
-          <Switch checked={autoTranslate} onCheckedChange={setAutoTranslate} />
+        {/* Auto Translate Info */}
+        <div className="flex items-center gap-2 p-3 rounded-xl bg-primary/5 border border-primary/10">
+          <span className="text-[10px]">✨</span>
+          <p className="text-[10px] text-muted-foreground font-myanmar">Gemini ဖြင့် ရွေးထားသော ဘာသာစကားသို့ အလိုအလျောက် ဘာသာပြန်ပေးပါမည်</p>
         </div>
 
         {/* Gender */}
