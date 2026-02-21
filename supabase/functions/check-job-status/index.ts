@@ -237,7 +237,13 @@ serve(async (req) => {
               let vocalsUrl: string | null = null;
 
               if (lyrics && geminiKey) {
-                console.log(`Generating Gemini TTS vocals (${lyrics.length} chars)...`);
+                // Strip ALL section markers [Intro], [Verse 1], [Chorus], etc. for TTS
+                const ttsLyrics = lyrics
+                  .replace(/\[(?:Intro|Verse|Chorus|Bridge|Outro|Hook|Pre-Chorus|Interlude)[^\]]*\]/gi, "")
+                  .replace(/\n{3,}/g, "\n\n")
+                  .trim();
+                
+                console.log(`Generating Gemini TTS vocals (original: ${lyrics.length} chars, cleaned for TTS: ${ttsLyrics.length} chars)...`);
                 
                 // Map voice type to Gemini TTS voices
                 const voiceMap: Record<string, string> = {
@@ -248,7 +254,7 @@ serve(async (req) => {
                 // Chunk lyrics (Gemini TTS 32k token context, chunk at ~5000 chars)
                 const maxChars = 5000;
                 const chunks: string[] = [];
-                let remaining = lyrics;
+                let remaining = ttsLyrics;
                 while (remaining.length > 0) {
                   if (remaining.length <= maxChars) {
                     chunks.push(remaining);
@@ -263,19 +269,44 @@ serve(async (req) => {
                 
                 console.log(`Gemini TTS: ${chunks.length} chunk(s), voice: ${geminiVoice}`);
                 
-                // Language/style instruction for pronunciation
-                const langInstruction: Record<string, string> = {
-                  my: "Read these Burmese lyrics clearly, expressively, and with a melodic rhythm suitable for singing. Speak in Burmese.",
-                  en: "Read these English lyrics clearly, expressively, and with a melodic rhythm suitable for singing.",
-                  th: "Read these Thai lyrics clearly, expressively, and with a melodic rhythm. Speak in Thai.",
-                  ko: "Read these Korean lyrics clearly, expressively, and with a melodic rhythm. Speak in Korean.",
-                  ja: "Read these Japanese lyrics clearly, expressively, and with a melodic rhythm. Speak in Japanese.",
-                  zh: "Read these Chinese lyrics clearly, expressively, and with a melodic rhythm. Speak in Mandarin Chinese.",
+                // Genre-specific singing style instructions for Gemini TTS
+                const genreStyle: Record<string, string> = {
+                  pop: "Sing with a bright, catchy pop rhythm. Medium tempo, clear enunciation, light and upbeat delivery.",
+                  rock: "Sing with powerful rock energy. Strong vocal projection, slightly raspy edge, driving rhythm.",
+                  hiphop: "Deliver with a strong hip-hop flow and rhythm. Emphasize beats, use rhythmic pacing and confident delivery.",
+                  edm: "Sing with an energetic, pulsing electronic dance rhythm. Build-up energy, euphoric delivery.",
+                  ballad: "Sing slowly and emotionally like a heartfelt ballad. Gentle, expressive, with pauses for feeling.",
+                  jazz: "Sing with smooth jazz phrasing. Relaxed tempo, swing feel, warm and silky vocal tone.",
+                  classical: "Sing with classical vocal technique. Precise intonation, operatic projection, elegant phrasing.",
+                  rnb: "Sing with smooth R&B soul. Melismatic runs, warm tone, groovy rhythm.",
+                  country: "Sing with country twang and storytelling warmth. Moderate tempo, genuine and heartfelt.",
+                  myanmar_traditional: "Sing in traditional Myanmar style. Melodic phrasing with classical Myanmar vocal ornaments.",
                 };
+                const moodStyle: Record<string, string> = {
+                  happy: "Joyful and bright tone, smiling delivery.",
+                  sad: "Melancholic, tender, emotional with occasional vocal breaks.",
+                  energetic: "High energy, powerful, dynamic vocal range.",
+                  romantic: "Warm, intimate, tender and loving tone.",
+                  chill: "Relaxed, laid-back, smooth and effortless delivery.",
+                  epic: "Grand, powerful, building intensity with dramatic crescendos.",
+                };
+                
                 const langCode = params?.language || "my";
-                const singPrompt = langInstruction[langCode] || langInstruction.my;
-                const moodDesc = params?.mood || "happy";
                 const genreDesc = params?.genre || "pop";
+                const moodDesc = params?.mood || "happy";
+                
+                // Language-specific singing instruction
+                const langInstruction: Record<string, string> = {
+                  my: "Sing these Burmese lyrics with proper Myanmar pronunciation and melodic rhythm. Speak in Burmese.",
+                  en: "Sing these English lyrics with clear pronunciation and musical rhythm.",
+                  th: "Sing these Thai lyrics with proper Thai pronunciation and melodic rhythm. Sing in Thai.",
+                  ko: "Sing these Korean lyrics with proper Korean pronunciation and K-pop style rhythm. Sing in Korean.",
+                  ja: "Sing these Japanese lyrics with proper Japanese pronunciation and J-pop style rhythm. Sing in Japanese.",
+                  zh: "Sing these Chinese lyrics with proper Mandarin pronunciation and melodic rhythm. Sing in Mandarin Chinese.",
+                };
+                const singPrompt = langInstruction[langCode] || langInstruction.my;
+                const genreInstruction = genreStyle[genreDesc] || genreStyle.pop;
+                const moodInstruction = moodStyle[moodDesc] || moodStyle.happy;
                 
                 // Gemini TTS model failover list
                 const ttsModels = [
@@ -288,7 +319,7 @@ serve(async (req) => {
                 let successModel = "";
                 
                 for (let i = 0; i < chunks.length; i++) {
-                  const ttsPrompt = `${singPrompt} Style: ${genreDesc}, Mood: ${moodDesc}.\n\n${chunks[i]}`;
+                  const ttsPrompt = `${singPrompt}\n${genreInstruction}\n${moodInstruction}\n\n${chunks[i]}`;
                   let chunkDone = false;
                   
                   for (const model of ttsModels) {
@@ -417,21 +448,23 @@ serve(async (req) => {
               if (vocalsUrl && SHOTSTACK_KEY) {
                 console.log("Submitting Shotstack audio merge (vocals + instrumental)...");
                 
+                const requestedDurationSec = (params?.videoDurationMinutes || 1) * 60;
+                
                 const mergeTimeline = {
                   timeline: {
                     tracks: [
                       {
                         clips: [{
-                          asset: { type: "audio", src: vocalsUrl, volume: 1 },
+                          asset: { type: "audio", src: vocalsUrl, volume: 1, trim: requestedDurationSec },
                           start: 0,
-                          length: "auto",
+                          length: requestedDurationSec,
                         }],
                       },
                       {
                         clips: [{
-                          asset: { type: "audio", src: instrumentalUrl, volume: 0.35 },
+                          asset: { type: "audio", src: instrumentalUrl, volume: 0.35, trim: requestedDurationSec },
                           start: 0,
-                          length: "auto",
+                          length: requestedDurationSec,
                         }],
                       },
                     ],
@@ -875,9 +908,9 @@ serve(async (req) => {
             const soundtrack: any[] = [];
             if (audioUrl) {
               soundtrack.push({
-                asset: { type: "audio", src: audioUrl, volume: 1 },
+                asset: { type: "audio", src: audioUrl, volume: 1, trim: totalDurationSec },
                 start: 0,
-                length: sceneImages.length * sceneDuration,
+                length: totalDurationSec,
               });
             }
 
