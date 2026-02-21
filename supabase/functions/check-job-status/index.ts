@@ -223,20 +223,150 @@ serve(async (req) => {
             }
           }
 
-          // If audio is ready, upload and complete
+          // If instrumental audio is ready, generate TTS vocals and merge
           if (audioUrl) {
-            console.log(`Song audio ready! Uploading to storage...`);
+            console.log(`Suno instrumental ready! Starting vocal+merge pipeline...`);
             try {
-              const storedAudioUrl = await uploadToStorage(supabaseAdmin, audioUrl, job.user_id, ".mp3", "audio/mpeg");
-              
-              let storedVideoUrl: string | null = null;
-              if (songVideoUrl) {
-                try {
-                  storedVideoUrl = await uploadToStorage(supabaseAdmin, songVideoUrl, job.user_id, ".mp4", "video/mp4");
-                } catch (e) { console.warn("Failed to upload song video:", e); }
-              }
+              // Step 1: Upload instrumental to storage
+              const instrumentalUrl = await uploadToStorage(supabaseAdmin, audioUrl, job.user_id, ".mp3", "audio/mpeg");
+              console.log(`Instrumental uploaded: ${instrumentalUrl.substring(0, 80)}...`);
 
-              // Deduct credits (skip for admin)
+              // Step 2: Generate TTS vocals from lyrics using OpenAI TTS
+              const lyrics = params?.cleanLyrics || params?.lyrics || "";
+              const openaiKey = configMap["openai_api_key"];
+              let vocalsUrl: string | null = null;
+
+              if (lyrics && openaiKey) {
+                console.log(`Generating TTS vocals (${lyrics.length} chars)...`);
+                
+                // Map voice type to OpenAI TTS voices
+                const voiceMap: Record<string, string> = {
+                  female: "nova", male: "onyx", duet: "nova", choir: "shimmer",
+                };
+                const ttsVoice = voiceMap[params?.voiceType || "female"] || "nova";
+                
+                // OpenAI TTS has 4096 char limit - chunk if needed
+                const maxChars = 4000;
+                const chunks: string[] = [];
+                let remaining = lyrics;
+                while (remaining.length > 0) {
+                  if (remaining.length <= maxChars) {
+                    chunks.push(remaining);
+                    break;
+                  }
+                  // Find a good break point (newline or period)
+                  let breakAt = remaining.lastIndexOf("\n", maxChars);
+                  if (breakAt < maxChars * 0.5) breakAt = remaining.lastIndexOf(".", maxChars);
+                  if (breakAt < maxChars * 0.5) breakAt = maxChars;
+                  chunks.push(remaining.substring(0, breakAt + 1));
+                  remaining = remaining.substring(breakAt + 1).trim();
+                }
+                
+                console.log(`TTS: ${chunks.length} chunk(s), voice: ${ttsVoice}`);
+                
+                // Generate audio for each chunk
+                const audioChunks: ArrayBuffer[] = [];
+                for (let i = 0; i < chunks.length; i++) {
+                  const ttsResp = await fetch("https://api.openai.com/v1/audio/speech", {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      model: "tts-1-hd",
+                      input: chunks[i],
+                      voice: ttsVoice,
+                      response_format: "mp3",
+                      speed: 0.95, // Slightly slower for singing feel
+                    }),
+                  });
+                  
+                  if (!ttsResp.ok) {
+                    console.warn(`TTS chunk ${i + 1} failed: ${ttsResp.status}`);
+                    break;
+                  }
+                  audioChunks.push(await ttsResp.arrayBuffer());
+                  console.log(`TTS chunk ${i + 1}/${chunks.length} done (${audioChunks[i].byteLength} bytes)`);
+                }
+                
+                if (audioChunks.length > 0) {
+                  // Combine chunks into single audio buffer
+                  const totalSize = audioChunks.reduce((sum, c) => sum + c.byteLength, 0);
+                  const combined = new Uint8Array(totalSize);
+                  let offset = 0;
+                  for (const chunk of audioChunks) {
+                    combined.set(new Uint8Array(chunk), offset);
+                    offset += chunk.byteLength;
+                  }
+                  
+                  const vocalsFileName = `${job.user_id}/vocals-${Date.now()}.mp3`;
+                  await supabaseAdmin.storage.from("videos").upload(vocalsFileName, combined.buffer, { contentType: "audio/mpeg", upsert: true });
+                  const { data: vocalsSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(vocalsFileName, 86400 * 7);
+                  vocalsUrl = vocalsSigned?.signedUrl || null;
+                  console.log(`TTS vocals uploaded: ${vocalsUrl?.substring(0, 80)}...`);
+                }
+              }
+              
+              // Step 3: Merge vocals + instrumental via Shotstack
+              if (vocalsUrl && SHOTSTACK_KEY) {
+                console.log("Submitting Shotstack audio merge (vocals + instrumental)...");
+                
+                const mergeTimeline = {
+                  timeline: {
+                    tracks: [
+                      {
+                        clips: [{
+                          asset: { type: "audio", src: vocalsUrl, volume: 1 },
+                          start: 0,
+                          length: "auto",
+                        }],
+                      },
+                      {
+                        clips: [{
+                          asset: { type: "audio", src: instrumentalUrl, volume: 0.35 },
+                          start: 0,
+                          length: "auto",
+                        }],
+                      },
+                    ],
+                  },
+                  output: {
+                    format: "mp3",
+                    resolution: "sd",
+                  },
+                };
+                
+                const renderResp = await fetch("https://api.shotstack.io/v1/render", {
+                  method: "POST",
+                  headers: { "x-api-key": SHOTSTACK_KEY, "Content-Type": "application/json" },
+                  body: JSON.stringify(mergeTimeline),
+                });
+                
+                if (renderResp.ok) {
+                  const renderData = await renderResp.json();
+                  const renderId = renderData.response?.id;
+                  console.log(`Shotstack merge render submitted: ${renderId}`);
+                  
+                  // Update job to track Shotstack merge render
+                  await supabaseAdmin.from("generation_jobs").update({
+                    external_job_id: renderId,
+                    input_params: {
+                      ...params,
+                      phase: "merge_audio",
+                      instrumentalUrl,
+                      vocalsUrl,
+                    },
+                  }).eq("id", job.id);
+                  
+                  processed++;
+                  continue;
+                } else {
+                  const errText = await renderResp.text();
+                  console.warn(`Shotstack merge failed: ${renderResp.status} - ${errText.substring(0, 200)}`);
+                  // Fallback: save instrumental as-is
+                }
+              }
+              
+              // Fallback: if TTS or Shotstack merge failed, save instrumental only
+              console.log("Fallback: saving instrumental audio only");
               const isAdminUser = params?.isAdmin === true;
               if (!isAdminUser && !job.credits_deducted && job.credits_cost > 0) {
                 await supabaseAdmin.rpc("deduct_user_credits", {
@@ -252,40 +382,107 @@ serve(async (req) => {
                 });
               }
 
-              // Save to user_outputs
               await supabaseAdmin.from("user_outputs").insert({
                 user_id: job.user_id,
                 tool_id: "song_mtv",
                 tool_name: "Song & MTV",
                 output_type: "audio",
                 content: params?.cleanLyrics || params?.lyrics || "Song generated",
-                file_url: storedAudioUrl,
+                file_url: instrumentalUrl,
               });
 
-              if (storedVideoUrl) {
-                await supabaseAdmin.from("user_outputs").insert({
-                  user_id: job.user_id,
-                  tool_id: "song_mtv",
-                  tool_name: "Song & MTV",
-                  output_type: "video",
-                  content: params?.cleanLyrics || params?.lyrics || "MTV Video",
-                  file_url: storedVideoUrl,
-                });
-              }
-
-              // If full_auto, we need MTV next - create a new job for Shotstack
               if (job.tool_type === "song_mtv_full") {
-                console.log("Full auto: creating MTV video job...");
                 await supabaseAdmin.from("generation_jobs").insert({
                   user_id: job.user_id,
                   tool_type: "song_mtv_video",
                   status: "processing",
-                  credits_cost: 0, // Credits already deducted
+                  credits_cost: 0,
+                  credits_deducted: true,
+                  input_params: {
+                    ...params,
+                    provider: "shotstack_mtv",
+                    audioUrl: instrumentalUrl,
+                    phase: "generate_scenes",
+                  },
+                });
+              }
+
+              await supabaseAdmin.from("generation_jobs").update({
+                status: "completed",
+                output_url: instrumentalUrl,
+                credits_deducted: true,
+              }).eq("id", job.id);
+
+              processed++;
+            } catch (uploadErr: any) {
+              console.error(`Song pipeline error: ${uploadErr.message}`);
+              await supabaseAdmin.from("generation_jobs").update({
+                status: "failed",
+                error_message: `Pipeline failed: ${uploadErr.message}`,
+              }).eq("id", job.id);
+              processed++;
+            }
+          }
+          // else: still processing, leave as-is for next poll
+        }
+
+        // ===== SONG AUDIO MERGE (Shotstack vocals + instrumental) =====
+        if ((job.tool_type === "song_music" || job.tool_type === "song_mtv_full") && params?.phase === "merge_audio" && job.external_job_id) {
+          console.log(`Polling Shotstack merge render: ${job.external_job_id}`);
+          
+          const statusResp = await fetch(`https://api.shotstack.io/v1/render/${job.external_job_id}`, {
+            headers: { "x-api-key": SHOTSTACK_KEY || "" },
+          });
+          
+          if (statusResp.ok) {
+            const statusData = await statusResp.json();
+            const renderStatus = statusData.response?.status;
+            console.log(`Shotstack merge status: ${renderStatus}`);
+            
+            if (renderStatus === "done") {
+              const mergedUrl = statusData.response?.url;
+              const storedMergedUrl = await uploadToStorage(supabaseAdmin, mergedUrl, job.user_id, ".mp3", "audio/mpeg");
+              console.log(`Merged audio uploaded: ${storedMergedUrl.substring(0, 80)}...`);
+              
+              // Deduct credits
+              const isAdminUser = params?.isAdmin === true;
+              if (!isAdminUser && !job.credits_deducted && job.credits_cost > 0) {
+                await supabaseAdmin.rpc("deduct_user_credits", {
+                  _user_id: job.user_id,
+                  _amount: job.credits_cost,
+                  _action: `song_mtv_${params?.serviceOption || "song"}`,
+                });
+                await supabaseAdmin.from("credit_audit_log").insert({
+                  user_id: job.user_id,
+                  amount: -job.credits_cost,
+                  credit_type: "deduction",
+                  description: `Song/MTV: ${params?.serviceOption}, ${params?.genre}, ${params?.mood}`,
+                });
+              }
+              
+              // Save merged audio to user_outputs
+              await supabaseAdmin.from("user_outputs").insert({
+                user_id: job.user_id,
+                tool_id: "song_mtv",
+                tool_name: "Song & MTV",
+                output_type: "audio",
+                content: params?.cleanLyrics || params?.lyrics || "Song generated",
+                file_url: storedMergedUrl,
+              });
+              
+              // If full_auto, chain to MTV video generation
+              if (job.tool_type === "song_mtv_full") {
+                console.log("Full auto: creating MTV video job from merged audio...");
+                await supabaseAdmin.from("generation_jobs").insert({
+                  user_id: job.user_id,
+                  tool_type: "song_mtv_video",
+                  status: "processing",
+                  credits_cost: 0,
                   credits_deducted: true,
                   input_params: {
                     provider: "shotstack_mtv",
                     serviceOption: "full_auto",
-                    audioUrl: storedAudioUrl,
+                    audioUrl: storedMergedUrl,
                     mtvStyle: params?.mtvStyle,
                     mood: params?.mood,
                     language: params?.language,
@@ -300,26 +497,39 @@ serve(async (req) => {
                   },
                 });
               }
-
-              // Update song job as completed
+              
+              // Complete song job
               await supabaseAdmin.from("generation_jobs").update({
                 status: "completed",
-                output_url: storedAudioUrl,
+                output_url: storedMergedUrl,
                 credits_deducted: true,
               }).eq("id", job.id);
-
+              
               processed++;
-              console.log(`Song job ${job.id} completed successfully`);
-            } catch (uploadErr: any) {
-              console.error(`Song upload error: ${uploadErr.message}`);
+              console.log(`Song merge job ${job.id} completed!`);
+            } else if (renderStatus === "failed") {
+              // Fallback: use instrumental only
+              console.warn("Shotstack merge failed, using instrumental as fallback");
+              const fallbackUrl = params?.instrumentalUrl;
+              
+              await supabaseAdmin.from("user_outputs").insert({
+                user_id: job.user_id,
+                tool_id: "song_mtv",
+                tool_name: "Song & MTV",
+                output_type: "audio",
+                content: params?.cleanLyrics || "Song generated",
+                file_url: fallbackUrl,
+              });
+              
               await supabaseAdmin.from("generation_jobs").update({
-                status: "failed",
-                error_message: `Upload failed: ${uploadErr.message}`,
+                status: "completed",
+                output_url: fallbackUrl,
+                credits_deducted: true,
+                error_message: "Merge failed - instrumental only",
               }).eq("id", job.id);
               processed++;
             }
           }
-          // else: still processing, leave as-is for next poll
         }
 
         // ===== MTV VIDEO JOBS (Scene generation + Shotstack) =====

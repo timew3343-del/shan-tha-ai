@@ -108,15 +108,15 @@ async function submitSongTask(
     const SUNO_KEY = keyMap.sunoapi_org_key;
     console.log("Submitting to SunoAPI.org...");
     
-    const sunoResponse = await fetch("https://api.sunoapi.org/api/v1/generate", {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${SUNO_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        customMode: true, instrumental: false,
-        title: songTitle, tags: songTags, prompt: songLyrics, model: "V4",
-        callBackUrl: "https://example.com/callback",
-      }),
-    });
+      const sunoResponse = await fetch("https://api.sunoapi.org/api/v1/generate", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${SUNO_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customMode: true, instrumental: true,
+          title: songTitle, tags: songTags, prompt: songLyrics, model: "V4",
+          callBackUrl: "https://example.com/callback",
+        }),
+      });
 
     if (sunoResponse.ok) {
       const sunoData = await sunoResponse.json();
@@ -140,7 +140,7 @@ async function submitSongTask(
       method: "POST",
       headers: { "X-API-Key": GOAPI_KEY, "Content-Type": "application/json" },
       body: JSON.stringify({
-        custom_mode: true, input: { title: songTitle, tags: songTags, prompt: songLyrics },
+        custom_mode: true, make_instrumental: true, input: { title: songTitle, tags: songTags, prompt: songLyrics },
       }),
     });
 
@@ -311,23 +311,21 @@ Start DIRECTLY with [Verse 1] - no intro text, no explanations, no titles.`;
       };
       const langInfo = langMap[language || "my"] || langMap.my;
 
-      // Build explicit tags - every user selection MUST appear
+      // Build instrumental-focused tags (no voice tags - vocals handled by TTS separately)
       const songTags = [
         genreTag,
         moodTag,
-        selectedVoice,
-        `Sing in ${langInfo.lang}`,
-        `${langInfo.lang} Pronunciation`,
-        `${langInfo.lang} Song`,
+        "Instrumental",
+        "Background Music",
+        "No Vocals",
         "Studio Quality",
         "High Fidelity",
       ].join(", ");
-      console.log(`Dynamic SunoAPI tags: ${songTags}`);
+      console.log(`Dynamic SunoAPI tags (instrumental): ${songTags}`);
       console.log(`User selections -> genre:${genre}, mood:${mood}, voice:${voiceType}, lang:${language}`);
 
-      // Embed language + voice instructions directly into the lyrics prompt for SunoAPI
-      const langDirective = `[${langInfo.lang} Language] [${selectedVoice}] [${genreTag}] [${moodTag}]\n\n`;
-      const songLyrics = langDirective + (processedLyrics || topic || "A beautiful song about life");
+      // For instrumental, just provide mood/style guidance (no lyrics needed for singing)
+      const songLyrics = `[Instrumental] [${genreTag}] [${moodTag}] [No Vocals]\n\n` + (processedLyrics || topic || "A beautiful instrumental piece");
 
       const { taskId, provider } = await submitSongTask(supabaseAdmin, songTitle, songTags, songLyrics);
 
