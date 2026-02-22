@@ -1,95 +1,96 @@
+# Browser-side FFmpeg Hybrid System - Global Implementation Plan
 
+## ရည်ရွယ်ချက်
+Shotstack API calls ကို အနည်းဆုံးဖြစ်အောင် လျှော့ချပြီး credits ချွေတာရန်။ Browser-side FFmpeg (WASM) ကို pre-processing အတွက် သုံးပြီး Shotstack ကို final export အတွက်သာ 1 call ခေါ်ရန်။
 
-# Video Multi-Tool: 85% Crash Fix + Background Fallback + Duration Label Update
+## Architecture Overview
 
-## ပြဿနာ အကျဉ်းချုပ် (Problem Summary)
-
-Video processing သည် 85% တွင် crash ဖြစ်ပြီး UI reset ဖြစ်သွားသည်။ Output video မထွက်ပါ။ ဤအချက်များကြောင့် ဖြစ်ပါသည်:
-
-1. **FFmpeg dual filter_complex bug**: Logo overlay နှင့် TTS audio နှစ်ခုလုံး ဖွင့်ထားပါက `-filter_complex` flag နှစ်ခု ထည့်မိ၍ FFmpeg crash ဖြစ်သည်
-2. **Memory overload**: Intro + Outro + Logo + TTS + main video အားလုံးကို browser memory ထဲ တပြိုင်နက်တင်ရသဖြင့် 100MB+ ဖိုင်များတွင် crash ဖြစ်သည်
-3. **Progress reset bug**: Error ဖြစ်လျှင် `finally` block က progress ကို 0 သို့ reset လုပ်ပြီး error message ပျောက်သွားသည်
-4. **No server fallback**: FFmpeg crash ဖြစ်လျှင် original video ကိုပင် save မလုပ်ဘဲ ပျက်စီးသွားသည်
-5. **Duration label**: "အများဆုံး ၃ မိနစ်" ဟု ပြနေပြီး "၅ မိနစ်" ဖြစ်ရမည်
-
-## ပြင်ဆင်ချက်များ (Fixes)
-
-### Fix 1: FFmpeg Filter Chain Bug (Critical - 85% crash root cause)
-**File:** `src/components/tools/VideoMultiTool.tsx` (lines 476-514)
-
-Logo overlay + TTS audio ကို အတူသုံးသောအခါ `-filter_complex` နှစ်ခါ ထည့်မိနေသည်ကို single unified filter_complex အဖြစ် ပြောင်းမည်။
-
-```text
-BEFORE (crashes):
-  cmd: -i input.mp4 -i tts.mp3 -i logo.png
-       -filter_complex "[0:v]hflip[base];[2:v]scale=80:80[logo];[base][logo]overlay=..."
-       -filter_complex "[0:a]volume=0.3[orig];[1:a]volume=1.0[tts];[orig][tts]amix=..."  <-- DUPLICATE!
-
-AFTER (fixed):
-  cmd: -i input.mp4 -i tts.mp3 -i logo.png
-       -filter_complex "[0:v]hflip[base];[2:v]scale=80:80[logo];[base][logo]overlay=...[vout];
-                         [0:a]volume=0.3[orig];[1:a]volume=1.0[tts];[orig][tts]amix=...[aout]"
-       -map "[vout]" -map "[aout]"
+```
+Browser (FFmpeg WASM)          →  Storage Upload  →  Server (API calls)  →  Shotstack (Final Only)
+├─ Video splitting (60s chunks)   Supabase Storage   ├─ Face Swap (GoAPI)    1 API call for
+├─ Audio concat (TTS segments)                       ├─ Lip Sync (ElevenLabs) final merge/export
+├─ Image → Video (slideshow)                         ├─ Scene Gen (Gemini)
+└─ Basic trim/crop                                   └─ Song Gen (Suno)
 ```
 
-### Fix 2: Server-side Fallback for Large Files
-**File:** `src/components/tools/VideoMultiTool.tsx`
+## Current Shotstack Usage & Migration Plan
 
-FFmpeg crash ဖြစ်လျှင် (85% timeout / memory error):
-- Original video ကို storage သို့ save လုပ်ပြီး user_outputs ထဲ ထည့်မည်
-- "Effects apply မရပါ - original video ကို Store တွင် ထည့်ပြီးပါပြီ" message ပြမည်
-- Credits ကို effects မပါဘဲ base cost သာ deduct လုပ်မည်
+### ✅ Phase 0: Face Swap (COMPLETED)
+- **Before**: Shotstack for splitting + merging (2+ calls)
+- **After**: Browser FFmpeg splitting → GoAPI face swap → Shotstack final merge (1 call)
+- **Status**: Done
 
-### Fix 3: Progress Reset Bug
-**File:** `src/components/tools/VideoMultiTool.tsx` (line 874)
+### 📋 Phase 1: Song/MTV Audio Merge
+- **File**: `supabase/functions/check-job-status/index.ts`
+- **Current**: Shotstack merges vocals + instrumental audio (1 API call per song)
+- **Change**: Use browser-side FFmpeg to merge audio tracks before upload
+- **Impact**: Eliminates ~1 Shotstack call per song generation
+- **Approach**:
+  1. After ElevenLabs vocals + Suno instrumental are ready, download both in browser
+  2. FFmpeg WASM: merge audio with volume balancing (vocals 100%, instrumental 35%)
+  3. Upload merged audio to storage
+  4. Continue with MTV video flow if needed
 
-`finally` block ထဲရှိ `if (!result) { setProgress(0); }` ကို ဖြုတ်ပြီး error ဖြစ်လျှင် error detail ကိုသာ ပြမည်။ User က "ပိတ်မည်" နှိပ်မှသာ reset လုပ်မည်။
+### 📋 Phase 2: MTV Video Composition  
+- **File**: `supabase/functions/check-job-status/index.ts` (MTV section)
+- **Current**: Shotstack creates video from scene images with transitions (1 large API call)
+- **Change**: Browser FFmpeg creates basic image→video clips, Shotstack only for final cinematic merge
+- **Impact**: Reduces Shotstack asset count significantly
+- **Approach**:
+  1. Scene images generated server-side (Gemini)
+  2. Browser FFmpeg: Convert each image to 5-10s video clip with basic zoom/pan
+  3. Upload video clips to storage
+  4. Shotstack: Final merge with crossfade transitions (1 call, fewer assets)
 
-### Fix 4: Duration Label Update
-**File:** `src/components/VideoLimitWarning.tsx`
+### 📋 Phase 3: Story Video Tool
+- **File**: `supabase/functions/story-to-video/index.ts`
+- **Current**: Shotstack creates slideshow from AI-generated scene images
+- **Change**: Browser FFmpeg creates video clips from images, Shotstack for final merge only
+- **Impact**: Similar to MTV - reduces asset complexity
 
-Video Multi-Tool သည် 5 မိနစ် (300 စက္ကန့်) ကို hardcode အသုံးပြုမည်။ `useMaxVideoDuration` hook (180s default) ကို မသုံးတော့ဘဲ 300s ကို တိုက်ရိုက်ပြမည်။ Generate button အောက်ရှိ text ကို "အများဆုံး ၅ မိနစ် (၃၀၀ စက္ကန့်)" ဟု ပြောင်းမည်။
+### 📋 Phase 4: Video Multi Tool
+- **File**: `supabase/functions/video-multi-process/index.ts` & `video-multi-start/index.ts`
+- **Current**: Various Shotstack calls for effects, TTS overlay, captions
+- **Change**: Browser FFmpeg handles basic effects/overlay, Shotstack for final export
+- **Impact**: Multiple Shotstack calls → 1 call
 
-### Fix 5: Memory Optimization for Concat
-**File:** `src/components/tools/VideoMultiTool.tsx`
+### 📋 Phase 5: Caption Video
+- **File**: `supabase/functions/caption-video/index.ts`
+- **Current**: Shotstack renders captions onto video
+- **Change**: Browser FFmpeg can burn subtitles (if ASS/SRT format)
+- **Impact**: Eliminates Shotstack call entirely for basic captions
 
-Intro/Outro concat step ကို main encoding ပြီးမှ sequentially လုပ်ပြီး intermediate files ကို ချက်ချင်း cleanup လုပ်မည်။ Memory pressure လျှော့ရန် re-encode step ကို skip လုပ်ပြီး concat demuxer ကိုသာ သုံးမည်။
+## Shared FFmpeg Utility (Client-side)
 
----
+Create `src/lib/ffmpegUtils.ts` with reusable functions:
 
-## Technical Details
-
-### Changed Files
-
-| File | Change |
-|------|--------|
-| `src/components/tools/VideoMultiTool.tsx` | Fix dual filter_complex, add fallback, fix progress reset, memory optimization |
-| `src/components/VideoLimitWarning.tsx` | Accept optional `maxSeconds` prop, default 300 for Video Multi-Tool |
-
-### FFmpeg Command Fix (Detailed)
-
-The core bug is in `handleGenerate` -> `runFFmpegProcessing` where the command builder adds:
-1. A `-filter_complex` for video filters + logo overlay (line 495)
-2. A second `-filter_complex` for audio mixing (line 508)
-
-FFmpeg only accepts ONE `-filter_complex` per command. The fix merges both into a single graph with named outputs `[vout]` and `[aout]`, then maps them explicitly.
-
-### Fallback Flow
-
-```text
-FFmpeg starts -> crashes at 85%
-  |
-  v
-Catch FFMPEG_PROCESS_FAIL error
-  |
-  v
-Check if videoSignedUrl exists (from download or upload step)
-  |-- Yes -> uploadAndSave(original video) -> show result with warning
-  |-- No  -> show error message only
+```typescript
+// Planned utility functions:
+- initFFmpeg() - Initialize FFmpeg WASM with shared loading
+- splitVideo(file, segmentDuration) - Split video into segments
+- mergeAudio(tracks: {url, volume}[]) - Merge audio with volume control
+- imagesToVideo(images[], duration) - Convert images to video clips
+- addSubtitles(video, srtContent) - Burn subtitles onto video
+- trimVideo(file, start, end) - Basic trim
+- concatVideos(videos[]) - Concatenate video segments
 ```
 
-### Duration Display
-- VideoLimitWarning component will accept an optional `maxSeconds` prop
-- VideoMultiTool passes `maxSeconds={300}` (5 minutes)
-- Display: "အများဆုံး ၅ မိနစ် (၃၀၀ စက္ကန့်) အထိသာ ထုပ်ယူနိုင်ပါသည်"
+## Credit Adjustment
+- Each tool's credit cost should reflect the reduced Shotstack usage
+- Admin can configure per-tool margins in existing `credit_cost_*` settings
+- No database changes needed - existing `app_settings` credit_cost system handles this
 
+## Implementation Order
+1. Create shared `ffmpegUtils.ts` utility
+2. Phase 1 (Song audio merge) - Most impactful single change
+3. Phase 2 (MTV video) - Complex but high savings
+4. Phase 3 (Story Video) - Similar pattern to Phase 2
+5. Phase 4 (Video Multi) - Many sub-features
+6. Phase 5 (Caption) - Simplest, lowest priority
+
+## Risks & Considerations
+- **Browser memory**: FFmpeg WASM needs ~100MB+ RAM. Large videos may fail on low-end devices.
+- **User leaving page**: If user leaves during FFmpeg processing, work is lost. Need to warn users.
+- **SharedArrayBuffer**: FFmpeg WASM requires COOP/COEP headers for multi-threading. May need single-threaded fallback.
+- **File size limits**: Browser can't handle very large files (>500MB). Need server fallback.
+- **Progressive approach**: Implement one tool at a time, verify savings before next.
