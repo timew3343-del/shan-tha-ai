@@ -51,10 +51,10 @@ serve(async (req) => {
       });
     }
 
-    const { videoPath, facePath, duration, isLiveCamera } = body;
+    const { segmentPaths, facePath, duration, isLiveCamera } = body;
 
-    if (!videoPath || !facePath) {
-      return new Response(JSON.stringify({ error: "Video and face image paths are required" }), {
+    if (!segmentPaths || !Array.isArray(segmentPaths) || segmentPaths.length === 0 || !facePath) {
+      return new Response(JSON.stringify({ error: "segmentPaths array and facePath are required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -88,19 +88,28 @@ serve(async (req) => {
       }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Create signed URLs for video and face image
-    const { data: videoSignedUrl } = await supabaseAdmin.storage
-      .from("videos").createSignedUrl(videoPath, 7200); // 2 hours
+    // Create signed URLs for each segment and face image
+    const segmentSignedUrls: string[] = [];
+    for (const segPath of segmentPaths) {
+      const { data: signedUrl } = await supabaseAdmin.storage
+        .from("videos").createSignedUrl(segPath, 7200);
+      if (!signedUrl?.signedUrl) {
+        return new Response(JSON.stringify({ error: `Failed to access segment: ${segPath}` }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      segmentSignedUrls.push(signedUrl.signedUrl);
+    }
+
     const { data: faceSignedUrl } = await supabaseAdmin.storage
       .from("videos").createSignedUrl(facePath, 7200);
-
-    if (!videoSignedUrl?.signedUrl || !faceSignedUrl?.signedUrl) {
-      return new Response(JSON.stringify({ error: "Failed to access uploaded files" }), {
+    if (!faceSignedUrl?.signedUrl) {
+      return new Response(JSON.stringify({ error: "Failed to access face image" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Calculate segments (60s each)
+    // Build segments info (for the process function)
     const segments: { trim: number; length: number }[] = [];
     let remaining = duration;
     let offset = 0;
@@ -111,10 +120,10 @@ serve(async (req) => {
       remaining -= segLen;
     }
 
-    // Estimate processing time (minutes)
-    const estimatedMinutes = Math.max(3, Math.ceil(segments.length * 1.5) + 2);
+    // Estimate processing time
+    const estimatedMinutes = Math.max(3, Math.ceil(segments.length * 2) + 2);
 
-    // Create generation job
+    // Create generation job - segments are already split by client FFmpeg!
     const { data: job, error: jobErr } = await supabaseAdmin.from("generation_jobs").insert({
       user_id: userId,
       tool_type: "face_swap_pipeline",
@@ -122,18 +131,18 @@ serve(async (req) => {
       credits_cost: creditCost,
       credits_deducted: false,
       input_params: {
-        videoUrl: videoSignedUrl.signedUrl,
+        // Pre-split segment URLs from client-side FFmpeg
+        segmentUrls: segmentSignedUrls,
         faceUrl: faceSignedUrl.signedUrl,
         duration,
         segments,
         isLiveCamera: !!isLiveCamera,
         isAdmin: userIsAdmin,
-        stage: "init",
-        splitRenderIds: [],
-        splitUrls: [],
+        // Skip splitting stage - go directly to swapping
+        stage: "swapping",
+        currentSwapIndex: 0,
         swapPredictions: [],
         swappedUrls: [],
-        currentSwapIndex: 0,
         mergeRenderId: null,
         resultUrl: null,
       },
@@ -146,7 +155,7 @@ serve(async (req) => {
       });
     }
 
-    console.log(`Face swap job created: ${job.id}, segments: ${segments.length}, credits: ${creditCost}, admin: ${userIsAdmin}`);
+    console.log(`Face swap job created: ${job.id}, segments: ${segments.length} (pre-split by client FFmpeg), credits: ${creditCost}, admin: ${userIsAdmin}`);
 
     return new Response(JSON.stringify({
       success: true,
@@ -154,7 +163,7 @@ serve(async (req) => {
       creditCost,
       segments: segments.length,
       estimatedMinutes,
-      message: "Processing started",
+      message: "Processing started (Shotstack splitting skipped - using client FFmpeg)",
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (error: any) {

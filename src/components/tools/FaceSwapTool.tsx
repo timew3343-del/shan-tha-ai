@@ -10,6 +10,8 @@ import { ToolHeader } from "@/components/ToolHeader";
 import { motion } from "framer-motion";
 import { useToolOutput } from "@/hooks/useToolOutput";
 import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { toBlobURL, fetchFile } from "@ffmpeg/util";
 
 interface FaceSwapToolProps {
   userId?: string;
@@ -18,6 +20,20 @@ interface FaceSwapToolProps {
 
 const MAX_DURATION = 300; // 5 minutes
 const SEGMENT_SIZE = 60; // 60 seconds per segment
+
+let ffmpegInstance: FFmpeg | null = null;
+
+async function getFFmpeg(): Promise<FFmpeg> {
+  if (ffmpegInstance && ffmpegInstance.loaded) return ffmpegInstance;
+  const ffmpeg = new FFmpeg();
+  const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm";
+  await ffmpeg.load({
+    coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+  });
+  ffmpegInstance = ffmpeg;
+  return ffmpeg;
+}
 
 export const FaceSwapTool = ({ userId, onBack }: FaceSwapToolProps) => {
   const { toast } = useToast();
@@ -58,7 +74,7 @@ export const FaceSwapTool = ({ userId, onBack }: FaceSwapToolProps) => {
   const segmentCount = useMemo(() => Math.ceil(Math.max(videoDuration, 1) / SEGMENT_SIZE), [videoDuration]);
 
   const estimatedTime = useMemo(() => {
-    const mins = Math.max(2, Math.ceil(segmentCount * 1.5) + 1);
+    const mins = Math.max(3, Math.ceil(segmentCount * 2) + 2);
     return mins;
   }, [segmentCount]);
 
@@ -197,6 +213,51 @@ export const FaceSwapTool = ({ userId, onBack }: FaceSwapToolProps) => {
     if (imageInputRef.current) imageInputRef.current.value = "";
   };
 
+  // Split video into segments using browser-side FFmpeg
+  const splitVideoWithFFmpeg = async (videoFile: File | Blob, duration: number): Promise<Blob[]> => {
+    setStatusText("FFmpeg ကို ပြင်ဆင်နေသည်...");
+    const ffmpeg = await getFFmpeg();
+
+    const inputName = "input.mp4";
+    const fileData = await fetchFile(videoFile instanceof File ? videoFile : new File([videoFile], "recording.webm"));
+    await ffmpeg.writeFile(inputName, fileData);
+
+    const segments: Blob[] = [];
+    let offset = 0;
+    let segIdx = 0;
+
+    while (offset < duration) {
+      const segLen = Math.min(SEGMENT_SIZE, duration - offset);
+      const outName = `seg_${segIdx}.mp4`;
+
+      setStatusText(`ဗီဒီယိုအပိုင်း ${segIdx + 1}/${segmentCount} ခွဲနေသည်...`);
+
+      await ffmpeg.exec([
+        "-i", inputName,
+        "-ss", String(offset),
+        "-t", String(segLen),
+        "-c", "copy",
+        "-avoid_negative_ts", "1",
+        outName,
+      ]);
+
+      const data = await ffmpeg.readFile(outName);
+      const blob = new Blob([new Uint8Array(data as Uint8Array)], { type: "video/mp4" });
+      segments.push(blob);
+
+      // Cleanup segment file
+      await ffmpeg.deleteFile(outName);
+
+      offset += segLen;
+      segIdx++;
+    }
+
+    // Cleanup input file
+    await ffmpeg.deleteFile(inputName);
+
+    return segments;
+  };
+
   const handleGenerate = async () => {
     if (!targetVideoFile || !faceImageFile) {
       toast({ title: "ဗီဒီယိုနှင့် ပုံထည့်ပါ", description: "Target Video နှင့် Face Image နှစ်ခုစလုံး လိုအပ်ပါသည်", variant: "destructive" });
@@ -210,31 +271,48 @@ export const FaceSwapTool = ({ userId, onBack }: FaceSwapToolProps) => {
     setIsLoading(true);
     setResultVideo(null);
     setProgress(0);
-    setStatusText("ဗီဒီယိုကို အပ်လုဒ်တင်နေသည်...");
+    setStatusText("ပြင်ဆင်နေသည်...");
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("အကောင့်ဝင်ရန်လိုအပ်သည်");
 
-      // Upload video to storage
-      const videoExt = targetVideoFile instanceof File ? targetVideoFile.name.split(".").pop() || "mp4" : "webm";
-      const videoPath = `${userId}/face-swap/${Date.now()}.${videoExt}`;
-      const { error: videoUpErr } = await supabase.storage.from("videos").upload(videoPath, targetVideoFile);
-      if (videoUpErr) throw new Error("ဗီဒီယို အပ်လုဒ် မအောင်မြင်ပါ: " + videoUpErr.message);
+      // Step 1: Split video using browser-side FFmpeg (saves Shotstack credits!)
+      setProgress(2);
+      let segmentBlobs: Blob[];
 
-      setProgress(5);
-      setStatusText("မျက်နှာပုံကို အပ်လုဒ်တင်နေသည်...");
+      if (videoDuration <= SEGMENT_SIZE) {
+        // Single segment - no splitting needed
+        segmentBlobs = [targetVideoFile instanceof Blob ? targetVideoFile : new Blob([targetVideoFile])];
+        setProgress(10);
+      } else {
+        segmentBlobs = await splitVideoWithFFmpeg(targetVideoFile, videoDuration);
+        setProgress(15);
+      }
 
-      // Upload face image to storage
+      setStatusText(`${segmentBlobs.length} အပိုင်းကို Storage သို့ တင်နေသည်...`);
+
+      // Step 2: Upload each segment + face image to storage
+      const segmentPaths: string[] = [];
+      for (let i = 0; i < segmentBlobs.length; i++) {
+        const segPath = `${userId}/face-swap/${Date.now()}-seg${i}.mp4`;
+        const { error } = await supabase.storage.from("videos").upload(segPath, segmentBlobs[i]);
+        if (error) throw new Error(`Segment ${i + 1} upload failed: ${error.message}`);
+        segmentPaths.push(segPath);
+        setProgress(15 + ((i + 1) / segmentBlobs.length) * 5);
+        setStatusText(`Segment ${i + 1}/${segmentBlobs.length} တင်ပြီး`);
+      }
+
+      // Upload face image
       const faceExt = faceImageFile.name.split(".").pop() || "png";
       const facePath = `${userId}/face-swap/${Date.now()}-face.${faceExt}`;
       const { error: faceUpErr } = await supabase.storage.from("videos").upload(facePath, faceImageFile);
       if (faceUpErr) throw new Error("မျက်နှာပုံ အပ်လုဒ် မအောင်မြင်ပါ: " + faceUpErr.message);
 
-      setProgress(8);
+      setProgress(22);
       setStatusText("Face Swap Pipeline စတင်နေသည်...");
 
-      // Create face swap job
+      // Step 3: Call face-swap edge function with pre-split segment paths
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/face-swap`,
         {
@@ -244,7 +322,7 @@ export const FaceSwapTool = ({ userId, onBack }: FaceSwapToolProps) => {
             Authorization: `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({
-            videoPath,
+            segmentPaths,
             facePath,
             duration: videoDuration,
             isLiveCamera: inputMode === "camera",
@@ -257,8 +335,8 @@ export const FaceSwapTool = ({ userId, onBack }: FaceSwapToolProps) => {
 
       const { jobId } = initResult;
 
-      // Poll face-swap-process
-      const maxPolls = 240; // 20 minutes max
+      // Step 4: Poll face-swap-process for status
+      const maxPolls = 240;
       for (let i = 0; i < maxPolls; i++) {
         await new Promise(r => setTimeout(r, 5000));
 
@@ -473,6 +551,12 @@ export const FaceSwapTool = ({ userId, onBack }: FaceSwapToolProps) => {
           <div className="flex justify-between">
             <span>ခန့်မှန်းကြာချိန်:</span>
             <span className="font-medium">~{estimatedTime} မိနစ်</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span>Shotstack ခေါ်သည့်အကြိမ်:</span>
+            <span className="font-medium text-green-600">
+              {segmentCount > 1 ? "၁ ကြိမ်သာ (Final Merge)" : "၀ ကြိမ် (မလိုအပ်)"}
+            </span>
           </div>
           <div className="flex justify-between text-primary font-semibold text-sm pt-1 border-t border-border">
             <span>စုစုပေါင်း ခရက်ဒစ်:</span>
