@@ -119,3 +119,6 @@ verify_jwt = false
 
 [functions.video-bg-changer]
 verify_jwt = false
+
+[functions.face-swap-process]
+verify_jwt = false
