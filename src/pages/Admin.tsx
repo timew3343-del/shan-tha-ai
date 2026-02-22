@@ -720,25 +720,13 @@ export const Admin = () => {
     setProcessingId(tx.id);
     
     try {
-      const { error: txError } = await supabase
-        .from("transactions")
-        .update({ status: "success" })
-        .eq("id", tx.id);
-
-      if (txError) throw txError;
-
       let totalCredits = tx.credits;
       if (tx.is_first_purchase) {
         const bonus = Math.floor(tx.credits * 0.2);
         totalCredits += bonus;
-        
-        await supabase
-          .from("transactions")
-          .update({ bonus_credits: bonus })
-          .eq("id", tx.id);
       }
 
-      // Use secure RPC with row locking to add credits
+      // CRITICAL: Add credits FIRST before marking transaction as success
       const { data: result, error: creditError } = await supabase.rpc("add_user_credits", {
         _user_id: tx.user_id,
         _amount: totalCredits
@@ -746,7 +734,20 @@ export const Admin = () => {
 
       const resultObj = result as { success?: boolean; error?: string; new_balance?: number } | null;
       if (creditError || !resultObj?.success) {
-        throw new Error(resultObj?.error || "Failed to add credits");
+        throw new Error(resultObj?.error || "Credits ထည့်သွင်းရာတွင် မအောင်မြင်ပါ");
+      }
+
+      // Only mark transaction as success AFTER credits are added
+      const { error: txError } = await supabase
+        .from("transactions")
+        .update({ 
+          status: "success",
+          bonus_credits: tx.is_first_purchase ? Math.floor(tx.credits * 0.2) : (tx.bonus_credits || 0),
+        })
+        .eq("id", tx.id);
+
+      if (txError) {
+        console.error("Transaction status update failed but credits were added:", txError);
       }
           
       // Add to credit audit log for tracking purchased credits
@@ -759,16 +760,16 @@ export const Admin = () => {
 
       toast({
         title: "အတည်ပြုပြီး ✓",
-        description: `${totalCredits} Credits ထည့်သွင်းပေးပြီးပါပြီ။`,
+        description: `${totalCredits} Credits ထည့်သွင်းပေးပြီးပါပြီ (လက်ကျန်: ${resultObj?.new_balance})`,
       });
 
       fetchTransactions();
       calculateAnalytics();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error approving transaction:", error);
       toast({
-        title: "အမှား",
-        description: "အတည်ပြုရာတွင် ပြဿနာရှိပါသည်။",
+        title: "အမှား - Credits မထည့်သွင်းနိုင်ပါ",
+        description: error.message || "အတည်ပြုရာတွင် ပြဿနာရှိပါသည်။ ထပ်မံကြိုးစားပါ။",
         variant: "destructive",
       });
     } finally {
