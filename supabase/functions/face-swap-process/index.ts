@@ -156,8 +156,7 @@ serve(async (req) => {
     }
 
     const params = job.input_params as any;
-    const stage = params.stage || "init";
-    const SHOTSTACK_KEY = await getShotstackKey(supabaseAdmin);
+    const stage = params.stage || "swapping";
     const REPLICATE_KEY = await getReplicateKey(supabaseAdmin);
 
     if (!REPLICATE_KEY) {
@@ -167,93 +166,28 @@ serve(async (req) => {
     let result: any;
 
     switch (stage) {
-      // ===== INIT: Submit split renders or direct swap =====
-      case "init": {
-        const segments = params.segments as { trim: number; length: number }[];
-
-        if (segments.length === 1) {
-          // Single segment - skip splitting, go directly to face swap
-          console.log(`Job ${jobId}: Single segment, submitting direct face swap`);
-          const predId = await submitReplicateFaceSwap(REPLICATE_KEY, params.videoUrl, params.faceUrl);
-          params.stage = "swapping";
-          params.swapPredictions = [predId];
-          params.swappedUrls = [];
-          params.currentSwapIndex = 0;
-          await updateJobParams(supabaseAdmin, jobId, params);
-          result = { status: "processing", progress: 20, statusText: "Face Swap လုပ်နေသည်..." };
-        } else {
-          // Multiple segments - submit Shotstack split renders
-          if (!SHOTSTACK_KEY) throw new Error("Shotstack API not configured");
-          console.log(`Job ${jobId}: Submitting ${segments.length} split renders`);
-
-          const renderIds: string[] = [];
-          for (const seg of segments) {
-            const timeline = {
-              tracks: [{
-                clips: [{
-                  asset: { type: "video", src: params.videoUrl, trim: seg.trim },
-                  start: 0,
-                  length: seg.length,
-                }],
-              }],
-            };
-            const renderId = await submitShotstackRender(SHOTSTACK_KEY, timeline);
-            renderIds.push(renderId);
-          }
-
-          params.stage = "splitting";
-          params.splitRenderIds = renderIds;
-          params.splitUrls = new Array(segments.length).fill(null);
-          await updateJobParams(supabaseAdmin, jobId, params);
-          result = { status: "processing", progress: 5, statusText: `ဗီဒီယိုကို အပိုင်း ${segments.length} ပိုင်း ခွဲနေသည်...` };
-        }
-        break;
-      }
-
-      // ===== SPLITTING: Poll Shotstack renders =====
-      case "splitting": {
-        let allDone = true;
-        let completedCount = 0;
-
-        for (let i = 0; i < params.splitRenderIds.length; i++) {
-          if (params.splitUrls[i]) { completedCount++; continue; }
-          const poll = await pollShotstackRender(SHOTSTACK_KEY, params.splitRenderIds[i]);
-          if (poll.done && poll.url) {
-            params.splitUrls[i] = poll.url;
-            completedCount++;
-          } else if (poll.failed) {
-            throw new Error(`Video splitting failed for segment ${i + 1}`);
-          } else {
-            allDone = false;
-          }
-        }
-
-        if (allDone) {
-          // All segments split - start face swap for first segment
-          console.log(`Job ${jobId}: All ${params.splitRenderIds.length} segments split, starting face swap`);
-          const predId = await submitReplicateFaceSwap(REPLICATE_KEY, params.splitUrls[0], params.faceUrl);
-          params.stage = "swapping";
-          params.currentSwapIndex = 0;
-          params.swapPredictions = [predId];
-          params.swappedUrls = [];
-        }
-
-        await updateJobParams(supabaseAdmin, jobId, params);
-        const progress = 5 + (completedCount / params.splitRenderIds.length) * 15;
-        result = {
-          status: "processing",
-          progress: Math.round(progress),
-          statusText: `ဗီဒီယိုအပိုင်းခွဲနေသည် (${completedCount}/${params.splitRenderIds.length})...`,
-        };
-        break;
-      }
-
-      // ===== SWAPPING: Face swap each segment =====
+      // ===== SWAPPING: Face swap each pre-split segment =====
       case "swapping": {
+        const segmentUrls = params.segmentUrls as string[];
+        const totalSegments = segmentUrls.length;
         const idx = params.currentSwapIndex;
-        const predId = params.swapPredictions[idx];
-        const totalSegments = params.segments.length;
 
+        // Submit face swap for current segment if not yet started
+        if (!params.swapPredictions[idx]) {
+          console.log(`Job ${jobId}: Submitting face swap for segment ${idx + 1}/${totalSegments}`);
+          const predId = await submitReplicateFaceSwap(REPLICATE_KEY, segmentUrls[idx], params.faceUrl);
+          params.swapPredictions[idx] = predId;
+          await updateJobParams(supabaseAdmin, jobId, params);
+          result = {
+            status: "processing",
+            progress: 25 + (idx / totalSegments) * 55,
+            statusText: `Face Swap လုပ်နေသည် (${idx + 1}/${totalSegments})...`,
+          };
+          break;
+        }
+
+        // Poll current prediction
+        const predId = params.swapPredictions[idx];
         const poll = await pollReplicatePrediction(REPLICATE_KEY, predId);
 
         if (poll.done && poll.url) {
@@ -263,13 +197,14 @@ serve(async (req) => {
           if (params.swappedUrls.length >= totalSegments) {
             // All segments swapped
             if (totalSegments === 1) {
-              // Single segment - done, no merge needed
+              // Single segment - done, no merge needed (saves Shotstack call!)
               params.stage = "complete";
               params.resultUrl = poll.url;
             } else {
-              // Submit Shotstack merge
-              if (!SHOTSTACK_KEY) throw new Error("Shotstack API not configured");
-              console.log(`Job ${jobId}: All segments swapped, submitting merge`);
+              // Submit Shotstack merge (ONLY Shotstack call in entire pipeline!)
+              const SHOTSTACK_KEY = await getShotstackKey(supabaseAdmin);
+              if (!SHOTSTACK_KEY) throw new Error("Shotstack API not configured for final merge");
+              console.log(`Job ${jobId}: All segments swapped, submitting FINAL merge to Shotstack (1 API call)`);
 
               const clips = params.swappedUrls.map((url: string, i: number) => {
                 const seg = params.segments[i];
@@ -288,12 +223,8 @@ serve(async (req) => {
               params.mergeRenderId = mergeRenderId;
             }
           } else {
-            // Submit next segment face swap
-            const nextIdx = idx + 1;
-            const nextVideoUrl = totalSegments === 1 ? params.videoUrl : params.splitUrls[nextIdx];
-            const nextPredId = await submitReplicateFaceSwap(REPLICATE_KEY, nextVideoUrl, params.faceUrl);
-            params.currentSwapIndex = nextIdx;
-            params.swapPredictions.push(nextPredId);
+            // Move to next segment
+            params.currentSwapIndex = idx + 1;
           }
         } else if (poll.failed) {
           throw new Error(`Face swap failed for segment ${idx + 1}: ${poll.error || "Unknown error"}`);
@@ -301,7 +232,7 @@ serve(async (req) => {
 
         await updateJobParams(supabaseAdmin, jobId, params);
         const swapProgress = params.swappedUrls.length / totalSegments;
-        const progress = 20 + swapProgress * 60;
+        const progress = 25 + swapProgress * 55;
         result = {
           status: "processing",
           progress: Math.round(progress),
@@ -310,8 +241,9 @@ serve(async (req) => {
         break;
       }
 
-      // ===== MERGING: Poll Shotstack merge =====
+      // ===== MERGING: Poll Shotstack merge (only Shotstack call!) =====
       case "merging": {
+        const SHOTSTACK_KEY = await getShotstackKey(supabaseAdmin);
         const poll = await pollShotstackRender(SHOTSTACK_KEY, params.mergeRenderId);
         if (poll.done && poll.url) {
           params.stage = "complete";
@@ -336,7 +268,7 @@ serve(async (req) => {
           const { data: deductResult } = await supabaseAdmin.rpc("deduct_user_credits", {
             _user_id: job.user_id,
             _amount: job.credits_cost,
-            _action: params.isLiveCamera ? "Face Swap Pipeline (Live Camera)" : "Face Swap Pipeline",
+            _action: params.isLiveCamera ? "Face Swap (Live Camera)" : "Face Swap",
           });
           console.log(`Job ${jobId}: Credits deducted: ${job.credits_cost}`, deductResult);
         }
