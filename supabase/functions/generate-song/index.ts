@@ -144,7 +144,9 @@ async function submitSongTask(
       method: "POST",
       headers: { "X-API-Key": GOAPI_KEY, "Content-Type": "application/json" },
       body: JSON.stringify({
-        custom_mode: true, make_instrumental: true, input: { title: songTitle, tags: songTags, prompt: songLyrics },
+        custom_mode: true,
+        make_instrumental: false,
+        input: { title: songTitle, tags: songTags, prompt: songLyrics },
       }),
     });
 
