@@ -38,16 +38,45 @@ function escapeHtml(text: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function estimateVoiceoverSeconds(text: string): number {
-  const words = text.trim().split(/\s+/).filter(Boolean).length;
-  return Math.max(8, Math.ceil(words / 2.3));
+function estimateVoiceoverSeconds(text: string, language: string): number {
+  const content = text.trim();
+  if (!content) return 8;
+
+  const charCount = content.replace(/\s+/g, "").length;
+  const words = content.split(/\s+/).filter(Boolean).length;
+  const rateByLanguage: Record<string, number> = {
+    my: 7.5,
+    th: 10,
+    en: 2.35,
+  };
+
+  const estimated = language === "en"
+    ? words / rateByLanguage.en
+    : charCount / (rateByLanguage[language] || 8);
+
+  return Math.max(8, Math.ceil(estimated));
 }
 
-function splitVoiceoverToCaptions(text: string, totalDurationSec: number): Array<{ text: string; start: number; length: number }> {
-  const lines = text
-    .split(/[.!?။\n]+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+function buildCaptionLines(text: string): string[] {
+  return text
+    .replace(/\r/g, "\n")
+    .split(/\n+/)
+    .flatMap((block) => block.split(/[။!?]+/))
+    .map((line) => line.replace(/^[\-•\d.\s]+/, "").trim())
+    .filter(Boolean)
+    .map((line) => line.length > 68
+      ? line.match(/.{1,34}(?:\s|$)/g)?.map((part) => part.trim()).filter(Boolean) ?? [line]
+      : [line]
+    )
+    .flat();
+}
+
+function splitVoiceoverToCaptions(
+  text: string,
+  totalDurationSec: number,
+  preferredCaptions?: string[],
+): Array<{ text: string; start: number; length: number }> {
+  const lines = (preferredCaptions?.length ? preferredCaptions : buildCaptionLines(text)).filter(Boolean);
 
   if (lines.length === 0) return [];
 
@@ -55,7 +84,7 @@ function splitVoiceoverToCaptions(text: string, totalDurationSec: number): Array
   return lines.map((line, index) => ({
     text: line,
     start: Number((index * baseLength).toFixed(2)),
-    length: Number(Math.max(2.5, baseLength).toFixed(2)),
+    length: Number(Math.max(3, baseLength).toFixed(2)),
   }));
 }
 
@@ -71,8 +100,28 @@ async function uploadBytesToSignedUrl(
   return data?.signedUrl || "";
 }
 
-async function callAIWithFailover(supabaseAdmin: any, lovableKey: string, messages: any[]): Promise<any> {
-  // Try OpenAI GPT-4o first
+function normalizeAdScriptResponse(raw: any, fallbackLanguage: string) {
+  const scenes = Array.isArray(raw?.scenes) ? raw.scenes : [];
+  const subtitleLines = Array.isArray(raw?.subtitle_lines)
+    ? raw.subtitle_lines.map((line: unknown) => String(line || "").trim()).filter(Boolean)
+    : [];
+
+  return {
+    language: raw?.language || fallbackLanguage,
+    voiceover: String(raw?.voiceover || "").trim(),
+    scenes,
+    cta: String(raw?.cta || "Shop Now").trim(),
+    music_mood: String(raw?.music_mood || "uplifting cinematic").trim(),
+    subtitle_lines: subtitleLines,
+  };
+}
+
+async function callAIWithFailover(
+  supabaseAdmin: any,
+  lovableKey: string,
+  messages: any[],
+  fallbackLanguage: string,
+): Promise<any> {
   const openaiKey = await getOpenAIKey(supabaseAdmin);
   if (openaiKey) {
     try {
@@ -80,14 +129,14 @@ async function callAIWithFailover(supabaseAdmin: any, lovableKey: string, messag
       const resp = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "gpt-4o", messages, response_format: { type: "json_object" }, temperature: 0.7, max_tokens: 1500 }),
+        body: JSON.stringify({ model: "gpt-4o", messages, response_format: { type: "json_object" }, temperature: 0.55, max_tokens: 2200 }),
       });
       if (resp.ok) {
         const data = await resp.json();
         const content = data.choices?.[0]?.message?.content;
         if (content) {
           console.log("Auto-Ad AI: success with OpenAI GPT-4o");
-          try { return JSON.parse(content); } catch { return { voiceover: content, scenes: [], cta: "Shop Now" }; }
+          try { return normalizeAdScriptResponse(JSON.parse(content), fallbackLanguage); } catch { return normalizeAdScriptResponse({ voiceover: content }, fallbackLanguage); }
         }
       } else {
         const errText = await resp.text();
@@ -98,7 +147,6 @@ async function callAIWithFailover(supabaseAdmin: any, lovableKey: string, messag
     }
   }
 
-  // Fallback: Lovable AI Gateway
   const fallbackModels = ["google/gemini-3-flash-preview", "google/gemini-2.5-flash"];
   for (const model of fallbackModels) {
     try {
@@ -108,7 +156,7 @@ async function callAIWithFailover(supabaseAdmin: any, lovableKey: string, messag
       const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model, messages, response_format: { type: "json_object" }, temperature: 0.7, max_tokens: 1500 }),
+        body: JSON.stringify({ model, messages, response_format: { type: "json_object" }, temperature: 0.55, max_tokens: 2200 }),
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -117,7 +165,7 @@ async function callAIWithFailover(supabaseAdmin: any, lovableKey: string, messag
         const content = data.choices?.[0]?.message?.content;
         if (content) {
           console.log(`Auto-Ad AI: success with ${model}`);
-          try { return JSON.parse(content); } catch { return { voiceover: content, scenes: [], cta: "Shop Now" }; }
+          try { return normalizeAdScriptResponse(JSON.parse(content), fallbackLanguage); } catch { return normalizeAdScriptResponse({ voiceover: content }, fallbackLanguage); }
         }
       }
       const errText = await response.text();
@@ -126,7 +174,7 @@ async function callAIWithFailover(supabaseAdmin: any, lovableKey: string, messag
       console.warn(`${model} error: ${err.message}`);
     }
   }
-  return { voiceover: "", scenes: [], cta: "Shop Now" };
+  return normalizeAdScriptResponse({ voiceover: "", scenes: [], cta: "Shop Now" }, fallbackLanguage);
 }
 
 serve(async (req) => {
@@ -199,16 +247,36 @@ serve(async (req) => {
 
     const langMap: Record<string, string> = { my: "Myanmar (Burmese)", en: "English", th: "Thai" };
     const langName = langMap[language] || "Myanmar (Burmese)";
+    const requestedTimelineDuration = requestedDurationMin * 60;
+    const targetSceneCount = Math.max(images.length * 2, Math.min(16, requestedDurationMin * 4));
 
     const adScript = await callAIWithFailover(supabaseAdmin, LOVABLE_API_KEY, [
       {
         role: "system",
-        content: `You are a world-class advertising producer for Myanmaraistudio.com. Create a professional ${requestedDurationMin}-minute video ad script in ${langName}.
-        Include: voiceover narration, scene descriptions for ${images.length} product images, background music suggestion, call-to-action.
-        Return JSON: { "voiceover": "full narration text", "scenes": [{"description": "scene desc", "duration_seconds": 3}], "cta": "call to action", "music_mood": "upbeat/calm/dramatic" }`,
+        content: `You are a world-class advertising producer.
+Create the ad ONLY in ${langName}. Never switch languages. If the requested language is Myanmar, every line of voiceover, CTA, and subtitles must be fully in Myanmar Unicode script.
+Match the script length to about ${requestedTimelineDuration} seconds of spoken narration.
+If product details are short, expand only with safe marketing structure: hook, problem, benefits, usage, trust points, CTA. Do not invent fake medical or legal claims.
+If product details are too long for the chosen duration, compress to only the strongest selling points.
+Return strict JSON with this shape:
+{
+  "language": "${language}",
+  "voiceover": "full narration in ${langName}",
+  "subtitle_lines": ["short subtitle line 1", "short subtitle line 2"],
+  "scenes": [{"description": "visual direction matching uploaded product images", "duration_seconds": 4}],
+  "cta": "short CTA in ${langName}",
+  "music_mood": "clear music direction such as uplifting cinematic pop"
+}`,
       },
-      { role: "user", content: `Product: ${productDetails}. Number of product images: ${images.length}. Duration: ${requestedDurationMin} minutes.` },
-    ]);
+      {
+        role: "user",
+        content: `Selected language: ${language} (${langName})
+Requested duration: ${requestedDurationMin} minutes (${requestedTimelineDuration} seconds)
+Uploaded images: ${images.length}
+Target scene count: ${targetSceneCount}
+Product details:\n${productDetails}`,
+      },
+    ], language);
 
     console.log("Ad script generated");
 
@@ -287,7 +355,6 @@ serve(async (req) => {
       try {
         const aspectMap: Record<string, string> = { youtube: "16:9", fb_tiktok: "9:16", square: "1:1" };
         const aspectRatio = aspectMap[platform] || "16:9";
-        const requestedTimelineDuration = requestedDurationMin * 60;
 
         const heroImageBase64 = enhancedImageBase64 || images[0];
         const uploadedImageUrls: string[] = [];
@@ -312,14 +379,14 @@ serve(async (req) => {
 
         const scenePrompts = Array.isArray(adScript?.scenes) ? adScript.scenes : [];
         const estimatedVoiceoverDuration = adScript?.voiceover
-          ? estimateVoiceoverSeconds(adScript.voiceover)
+          ? estimateVoiceoverSeconds(adScript.voiceover, language)
           : requestedTimelineDuration;
         const totalTimelineDuration = Math.max(requestedTimelineDuration, estimatedVoiceoverDuration);
-        const targetSceneCount = Math.max(uploadedImageUrls.length, Math.min(12, requestedDurationMin * 4));
-        const sceneDuration = Number((totalTimelineDuration / targetSceneCount).toFixed(2));
+        const perPlatformSceneCount = Math.max(uploadedImageUrls.length * 2, Math.min(16, requestedDurationMin * 4));
+        const sceneDuration = Number((totalTimelineDuration / perPlatformSceneCount).toFixed(2));
         const sceneImages: string[] = [];
 
-        for (let si = 0; si < targetSceneCount; si++) {
+        for (let si = 0; si < perPlatformSceneCount; si++) {
           const sourceUrl = uploadedImageUrls[si % uploadedImageUrls.length];
           let finalSceneUrl = sourceUrl;
 
@@ -327,9 +394,10 @@ serve(async (req) => {
             try {
               const scenePrompt = scenePrompts[si]?.description || `Premium ${adStyle} product advertisement scene featuring ${productDetails}, visually elegant commercial styling for ${langName}, polished lighting, rich background, high-end branding`;
               const fd = new FormData();
-              fd.append("prompt", `${scenePrompt}. Keep the original product details consistent and make the composition beautiful, premium, and platform-ready.`);
+              fd.append("prompt", `${scenePrompt}. Match the uploaded product image faithfully, keep brand colors and product shape consistent, create tasteful commercial depth, premium background styling, and realistic ad composition.`);
               fd.append("output_format", "png");
               fd.append("aspect_ratio", aspectRatio);
+              fd.append("seed", String(1000 + si));
               const sceneResp = await fetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
                 method: "POST",
                 headers: { Authorization: `Bearer ${STABILITY_API_KEY}`, Accept: "image/*" },
@@ -363,42 +431,43 @@ serve(async (req) => {
           start: Number((i * sceneDuration).toFixed(2)),
           length: sceneDuration,
           fit: "cover",
-          effect: ["zoomIn", "zoomOut", "slideLeft", "slideRight", "slideUp"][i % 5],
-          transition: i > 0 ? { in: "fade" } : undefined,
+          effect: ["zoomIn", "zoomOut", "slideLeft", "slideRight", "carouselRight"][i % 5],
+          transition: i > 0 ? { in: "fade", out: "fade" } : undefined,
         }));
 
         const captionClips = showSubtitles && adScript?.voiceover
-          ? splitVoiceoverToCaptions(adScript.voiceover, totalTimelineDuration).map((caption) => ({
+          ? splitVoiceoverToCaptions(adScript.voiceover, totalTimelineDuration, adScript.subtitle_lines).map((caption) => ({
               asset: {
                 type: "html",
-                html: `${myanmarFontLink}<div style="display:flex;justify-content:center;align-items:center;width:100%;height:100%;padding:0 24px;"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:30px;font-weight:700;color:white;text-shadow:3px 3px 6px rgba(0,0,0,0.85);text-align:center;padding:12px 22px;background:rgba(0,0,0,0.45);border-radius:12px;line-height:1.45;">${escapeHtml(caption.text)}</p></div>`,
-                width: 1100,
-                height: 160,
+                html: `${myanmarFontLink}<div style="display:flex;justify-content:center;align-items:flex-end;width:100%;height:100%;padding:0 28px 18px;"><div style="max-width:90%;background:rgba(0,0,0,0.58);padding:14px 22px;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,0.35);"><p style="margin:0;font-family:'Noto Sans Myanmar',sans-serif;font-size:32px;font-weight:700;color:white;text-shadow:0 2px 8px rgba(0,0,0,0.7);text-align:center;line-height:1.45;letter-spacing:0.01em;">${escapeHtml(caption.text)}</p></div></div>`,
+                width: 1180,
+                height: 220,
               },
               start: caption.start,
-              length: Math.min(caption.length, Math.max(totalTimelineDuration - caption.start, 0.5)),
+              length: Math.min(caption.length, Math.max(totalTimelineDuration - caption.start, 0.8)),
               position: "bottom",
-              offset: { y: 0.03 },
+              offset: { y: 0.01 },
             }))
           : [];
 
         const ctaClip = {
           asset: {
             type: "html",
-            html: `${myanmarFontLink}<div style="display:flex;justify-content:center;align-items:center;width:100%;height:100%;padding:0 24px;"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:36px;color:white;text-shadow:3px 3px 6px rgba(0,0,0,0.85);text-align:center;padding:20px 28px;background:rgba(0,0,0,0.38);border-radius:16px;font-weight:700;">${escapeHtml(adScript?.cta || "Shop Now!")}</p></div>`,
+            html: `${myanmarFontLink}<div style="display:flex;justify-content:center;align-items:center;width:100%;height:100%;padding:0 24px;"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:36px;color:white;text-shadow:3px 3px 6px rgba(0,0,0,0.85);text-align:center;padding:20px 28px;background:rgba(0,0,0,0.42);border-radius:16px;font-weight:700;">${escapeHtml(adScript?.cta || "Shop Now!")}</p></div>`,
             width: 900,
             height: 140,
           },
           start: Math.max(totalTimelineDuration - Math.min(8, sceneDuration * 2), 0),
           length: Math.min(8, Math.max(sceneDuration * 2, 4)),
           position: "bottom",
-          offset: { y: 0.09 },
+          offset: { y: 0.1 },
         };
 
+        const soundtrack = voiceoverUrl ? { src: voiceoverUrl, volume: 1 } : undefined;
         const shotstackPayload = {
           timeline: {
             background: "#000000",
-            soundtrack: voiceoverUrl ? { src: voiceoverUrl, volume: 1 } : undefined,
+            soundtrack,
             tracks: [
               { clips },
               { clips: [...captionClips, ctaClip] },
