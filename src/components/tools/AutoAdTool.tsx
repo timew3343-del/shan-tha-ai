@@ -157,28 +157,20 @@ export const AutoAdTool = ({ userId, onBack }: AutoAdToolProps) => {
         return;
       }
 
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/auto-ad`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            images: images.map(img => img.split(",")[1]),
-            productDetails: productDetails.trim(),
-            language,
-            adStyle,
-            showSubtitles,
-            videoDurationMinutes: parseInt(adDuration) || 1,
-            platforms: selectedPlatforms,
-          }),
-        }
-      );
+      const { data: result, error } = await supabase.functions.invoke("auto-ad", {
+        body: {
+          images: images.map(img => img.split(",")[1]),
+          productDetails: productDetails.trim(),
+          language,
+          adStyle,
+          showSubtitles,
+          videoDurationMinutes: parseInt(adDuration) || 1,
+          platforms: selectedPlatforms,
+        },
+      });
 
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Auto ad generation failed");
+      if (error) throw new Error(error.message || "Auto ad generation failed");
+      if (!result) throw new Error("Auto ad generation failed");
 
       setResultVideos(result.videos || []);
       setProgress(100);
