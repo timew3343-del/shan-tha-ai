@@ -38,16 +38,45 @@ function escapeHtml(text: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function estimateVoiceoverSeconds(text: string): number {
-  const words = text.trim().split(/\s+/).filter(Boolean).length;
-  return Math.max(8, Math.ceil(words / 2.3));
+function estimateVoiceoverSeconds(text: string, language: string): number {
+  const content = text.trim();
+  if (!content) return 8;
+
+  const charCount = content.replace(/\s+/g, "").length;
+  const words = content.split(/\s+/).filter(Boolean).length;
+  const rateByLanguage: Record<string, number> = {
+    my: 7.5,
+    th: 10,
+    en: 2.35,
+  };
+
+  const estimated = language === "en"
+    ? words / rateByLanguage.en
+    : charCount / (rateByLanguage[language] || 8);
+
+  return Math.max(8, Math.ceil(estimated));
 }
 
-function splitVoiceoverToCaptions(text: string, totalDurationSec: number): Array<{ text: string; start: number; length: number }> {
-  const lines = text
-    .split(/[.!?။\n]+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+function buildCaptionLines(text: string): string[] {
+  return text
+    .replace(/\r/g, "\n")
+    .split(/\n+/)
+    .flatMap((block) => block.split(/[။!?]+/))
+    .map((line) => line.replace(/^[\-•\d.\s]+/, "").trim())
+    .filter(Boolean)
+    .map((line) => line.length > 68
+      ? line.match(/.{1,34}(?:\s|$)/g)?.map((part) => part.trim()).filter(Boolean) ?? [line]
+      : [line]
+    )
+    .flat();
+}
+
+function splitVoiceoverToCaptions(
+  text: string,
+  totalDurationSec: number,
+  preferredCaptions?: string[],
+): Array<{ text: string; start: number; length: number }> {
+  const lines = (preferredCaptions?.length ? preferredCaptions : buildCaptionLines(text)).filter(Boolean);
 
   if (lines.length === 0) return [];
 
@@ -55,7 +84,7 @@ function splitVoiceoverToCaptions(text: string, totalDurationSec: number): Array
   return lines.map((line, index) => ({
     text: line,
     start: Number((index * baseLength).toFixed(2)),
-    length: Number(Math.max(2.5, baseLength).toFixed(2)),
+    length: Number(Math.max(3, baseLength).toFixed(2)),
   }));
 }
 
