@@ -327,21 +327,20 @@ Start DIRECTLY with [Intro] - no intro text, no explanations, no titles.`;
       };
       const langInfo = langMap[language || "my"] || langMap.my;
 
-      // Build instrumental-focused tags (no voice tags - vocals handled by TTS separately)
       const songTags = [
         genreTag,
         moodTag,
-        "Instrumental",
-        "Background Music",
-        "No Vocals",
+        selectedVoice,
+        langInfo.lang,
         "Studio Quality",
         "High Fidelity",
+        "Professional Song",
+        "Natural Singing",
       ].join(", ");
-      console.log(`Dynamic SunoAPI tags (instrumental): ${songTags}`);
+      console.log(`Dynamic SunoAPI tags (full song): ${songTags}`);
       console.log(`User selections -> genre:${genre}, mood:${mood}, voice:${voiceType}, lang:${language}`);
 
-      // For instrumental, just provide mood/style guidance (no lyrics needed for singing)
-      const songLyrics = `[Instrumental] [${genreTag}] [${moodTag}] [No Vocals]\n\n` + (processedLyrics || topic || "A beautiful instrumental piece");
+      const songLyrics = `${langInfo.tags}\n[Genre: ${genreTag}] [Mood: ${moodTag}] [Quality: Studio Quality]\n\n${processedLyrics || lyrics || topic || "A beautiful song"}`;
 
       const { taskId, provider } = await submitSongTask(supabaseAdmin, songTitle, songTags, songLyrics);
 
