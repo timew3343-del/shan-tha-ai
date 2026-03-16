@@ -191,18 +191,20 @@ serve(async (req) => {
 
     console.log("Ad script generated");
 
-    // Step 2: Enhance first image with Stability AI
-    console.log("Step 2: Enhancing product images...");
-    let enhancedImageBase64: string | null = null;
+    // Step 2: Prepare visual + audio assets for each platform
+    console.log("Step 2: Preparing ad assets...");
+    const resultVideos: { platform: string; url: string }[] = [];
+    const SHOTSTACK_KEY = keyMap.shotstack_api_key || Deno.env.get("SHOTSTACK_API_KEY");
+    const openaiKey = await getOpenAIKey(supabaseAdmin);
 
+    let enhancedImageBase64: string | null = null;
     if (STABILITY_API_KEY && images.length > 0) {
       try {
         const imgBytes = Uint8Array.from(atob(images[0]), (c) => c.charCodeAt(0));
         const imgBlob = new Blob([imgBytes], { type: "image/png" });
-
         const formData = new FormData();
         formData.append("image", imgBlob, "product.png");
-        formData.append("prompt", "Professional advertising product photography, studio lighting, premium background, commercial quality");
+        formData.append("prompt", `Professional product photography for a ${adStyle} ${langName} advertisement, premium commercial composition, luxury lighting, polished textures`);
         formData.append("search_prompt", "background");
         formData.append("output_format", "png");
 
@@ -213,91 +215,115 @@ serve(async (req) => {
         });
 
         if (enhanceResponse.ok) {
-          const resultBuffer = await enhanceResponse.arrayBuffer();
-          // Use chunked base64 encoding to avoid stack overflow
-          enhancedImageBase64 = arrayBufferToBase64(resultBuffer);
+          enhancedImageBase64 = arrayBufferToBase64(await enhanceResponse.arrayBuffer());
           console.log("Hero image enhanced successfully");
-        } else {
-          const errText = await enhanceResponse.text();
-          console.warn("Image enhancement failed:", enhanceResponse.status, errText.substring(0, 100));
         }
       } catch (enhErr) {
         console.error("Image enhancement error:", enhErr);
       }
     }
 
-    // Step 3: Generate video for each platform using Shotstack
-    console.log("Step 3: Generating videos via Shotstack...");
-    const resultVideos: { platform: string; url: string }[] = [];
-    const SHOTSTACK_KEY = Deno.env.get("SHOTSTACK_API_KEY");
+    let voiceoverUrl = "";
+    if (adScript?.voiceover && openaiKey) {
+      try {
+        const voiceMap: Record<string, string> = {
+          my: "nova",
+          en: "alloy",
+          th: "shimmer",
+        };
+        const ttsResp = await fetch("https://api.openai.com/v1/audio/speech", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${openaiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "tts-1-hd",
+            voice: voiceMap[language] || "nova",
+            input: adScript.voiceover,
+            format: "mp3",
+          }),
+        });
+
+        if (ttsResp.ok) {
+          const audioBuffer = await ttsResp.arrayBuffer();
+          voiceoverUrl = await uploadBytesToSignedUrl(
+            supabaseAdmin,
+            `${userId}/auto-ad-voiceover-${Date.now()}.mp3`,
+            audioBuffer,
+            "audio/mpeg",
+          );
+          console.log("Voiceover audio generated");
+        } else {
+          console.warn("Voiceover generation failed", ttsResp.status);
+        }
+      } catch (ttsErr) {
+        console.error("Voiceover generation error:", ttsErr);
+      }
+    }
 
     for (const platform of platforms) {
       try {
-        // Upload product image to storage for Shotstack access
-        let productImageUrl = "";
-        const imageToUse = enhancedImageBase64 || images[0];
-        if (imageToUse) {
-          let rawBase64 = imageToUse;
-          if (rawBase64.includes(",")) rawBase64 = rawBase64.split(",")[1];
-          const imgBytes = Uint8Array.from(atob(rawBase64), (c) => c.charCodeAt(0));
-          const imgFileName = `ad-img-${userId}-${Date.now()}.png`;
-          await supabaseAdmin.storage.from("videos").upload(imgFileName, imgBytes.buffer, { contentType: "image/png" });
-          const { data: imgSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(imgFileName, 86400 * 7);
-          productImageUrl = imgSigned?.signedUrl || "";
+        const aspectMap: Record<string, string> = { youtube: "16:9", fb_tiktok: "9:16", square: "1:1" };
+        const aspectRatio = aspectMap[platform] || "16:9";
+        const totalDurationSec = requestedDurationMin * 60;
+
+        const heroImageBase64 = enhancedImageBase64 || images[0];
+        const uploadedImageUrls: string[] = [];
+        for (let i = 0; i < images.length; i++) {
+          const raw = (i === 0 ? heroImageBase64 : images[i])?.includes(",") ? (i === 0 ? heroImageBase64 : images[i]).split(",")[1] : (i === 0 ? heroImageBase64 : images[i]);
+          if (!raw) continue;
+          const bytes = Uint8Array.from(atob(raw), (c) => c.charCodeAt(0));
+          const imgUrl = await uploadBytesToSignedUrl(
+            supabaseAdmin,
+            `${userId}/auto-ad-img-${platform}-${Date.now()}-${i}.png`,
+            bytes.buffer,
+            "image/png",
+          );
+          if (imgUrl) uploadedImageUrls.push(imgUrl);
         }
 
-        if (!productImageUrl) {
+        if (uploadedImageUrls.length === 0) {
           console.warn(`No product image for ${platform}, skipping`);
           continue;
         }
 
-        // Generate additional scene images with Stability AI
-        // Calculate scenes needed based on requested duration
-        const totalDurationSec = requestedDurationMin * 60;
-        const sceneDuration = 8; // seconds per scene
-        const numScenesNeeded = Math.max(Math.ceil(totalDurationSec / sceneDuration), 3);
-        const additionalScenesNeeded = numScenesNeeded - 1; // -1 for the product image already added
-        console.log(`Auto Ad: generating ${additionalScenesNeeded} additional scenes for ${requestedDurationMin}min video`);
+        const sceneDuration = Math.max(5, Math.round(totalDurationSec / Math.max(adScript?.scenes?.length || uploadedImageUrls.length, 1)));
+        const targetSceneCount = Math.max(3, Math.ceil(totalDurationSec / sceneDuration));
+        const sceneImages: string[] = [];
+        const scenePrompts = Array.isArray(adScript?.scenes) ? adScript.scenes : [];
 
-        const sceneImages: string[] = [productImageUrl];
-        if (STABILITY_API_KEY) {
-          const sceneThemes = [
-            "Professional product showcase, studio lighting",
-            "Product in use, lifestyle scene",
-            "Happy customer using product",
-            "Product benefits infographic style",
-            "Premium brand presentation",
-            "Call to action scene, modern advertisement ending",
-          ];
-          for (let si = 0; si < additionalScenesNeeded; si++) {
-            const theme = sceneThemes[si % sceneThemes.length];
-            const prompt = `${theme}, ${adStyle} style, ${language === "my" ? "Myanmar" : "international"} advertising, cinematic lighting, variation ${si + 1}, 16:9`;
+        for (let si = 0; si < targetSceneCount; si++) {
+          const sourceUrl = uploadedImageUrls[si % uploadedImageUrls.length];
+          let finalSceneUrl = sourceUrl;
+
+          if (STABILITY_API_KEY) {
             try {
+              const scenePrompt = scenePrompts[si]?.description || `Premium ${adStyle} product advertisement scene, ${productDetails}, ${langName} market, elegant composition, detailed background, polished cinematic lighting`;
               const fd = new FormData();
-              fd.append("prompt", prompt);
+              fd.append("prompt", `${scenePrompt}. Aspect ratio ${aspectRatio}. Beautiful image-to-video keyframe style, premium product commercial.`);
               fd.append("output_format", "png");
-              fd.append("aspect_ratio", "16:9");
+              fd.append("aspect_ratio", aspectRatio);
               const sceneResp = await fetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
                 method: "POST",
                 headers: { Authorization: `Bearer ${STABILITY_API_KEY}`, Accept: "image/*" },
                 body: fd,
               });
               if (sceneResp.ok) {
-                const sceneBuffer = await sceneResp.arrayBuffer();
-                const sceneBase64 = arrayBufferToBase64(sceneBuffer);
-                const sceneBytes = Uint8Array.from(atob(sceneBase64), (c) => c.charCodeAt(0));
-                const sceneFileName = `ad-scene-${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.png`;
-                await supabaseAdmin.storage.from("videos").upload(sceneFileName, sceneBytes.buffer, { contentType: "image/png" });
-                const { data: sceneSigned } = await supabaseAdmin.storage.from("videos").createSignedUrl(sceneFileName, 86400 * 7);
-                if (sceneSigned?.signedUrl) sceneImages.push(sceneSigned.signedUrl);
-                console.log(`Ad scene ${sceneImages.length}/${numScenesNeeded} for ${platform}`);
-              } else {
-                await sceneResp.text();
+                const sceneUrl = await uploadBytesToSignedUrl(
+                  supabaseAdmin,
+                  `${userId}/auto-ad-scene-${platform}-${Date.now()}-${si}.png`,
+                  await sceneResp.arrayBuffer(),
+                  "image/png",
+                );
+                if (sceneUrl) finalSceneUrl = sceneUrl;
               }
             } catch (e) {
               console.warn("Scene generation error:", e);
             }
           }
+
+          sceneImages.push(finalSceneUrl);
         }
 
         if (!SHOTSTACK_KEY) {
@@ -305,66 +331,74 @@ serve(async (req) => {
           continue;
         }
 
-        // Determine aspect ratio from platform
-        const aspectMap: Record<string, string> = { youtube: "16:9", fb_tiktok: "9:16", square: "1:1" };
-        const aspectRatio = aspectMap[platform] || "16:9";
-
-        // Build Shotstack timeline
+        const totalTimelineDuration = sceneImages.length * sceneDuration;
+        const myanmarFontLink = `<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;700&display=swap" rel="stylesheet">`;
         const clips = sceneImages.map((url, i) => ({
           asset: { type: "image", src: url },
           start: i * sceneDuration,
           length: sceneDuration,
           fit: "cover",
-          transition: i > 0 ? { in: "fade" } : undefined,
-          effect: "zoomIn",
+          effect: ["slideLeft", "zoomOut", "slideUp", "slideRight", "zoomIn"][i % 5],
+          transition: i > 0 ? { in: ["fade", "dissolve", "wipeRight", "wipeLeft"][i % 4] } : undefined,
         }));
 
-        // Add CTA text overlay
-        const ctaText = adScript?.cta || "Shop Now!";
-        const totalDuration = sceneImages.length * sceneDuration;
-        const myanmarFontLink = `<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;700&display=swap" rel="stylesheet">`;
-        const textClips = [{
+        const textClips: any[] = [{
           asset: {
             type: "html",
-            html: `${myanmarFontLink}<p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:36px;color:white;text-shadow:3px 3px 6px black;text-align:center;padding:20px;font-weight:bold;">${ctaText}</p>`,
-            width: 800, height: 120,
+            html: `${myanmarFontLink}<div style="display:flex;justify-content:center;align-items:center;width:100%;height:100%;"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:36px;color:white;text-shadow:3px 3px 6px rgba(0,0,0,0.85);text-align:center;padding:20px 28px;background:rgba(0,0,0,0.38);border-radius:16px;font-weight:700;">${escapeHtml(adScript?.cta || "Shop Now!")}</p></div>`,
+            width: 900,
+            height: 140,
           },
-          start: totalDuration - sceneDuration,
-          length: sceneDuration,
+          start: Math.max(totalTimelineDuration - Math.min(8, sceneDuration), 0),
+          length: Math.min(8, sceneDuration),
           position: "bottom",
-          offset: { y: 0.1 },
+          offset: { y: 0.08 },
           transition: { in: "fade" },
         }];
 
-        // Add voiceover subtitle if enabled
         if (showSubtitles && adScript?.voiceover) {
-          const voLines = adScript.voiceover.split(/[.!?။]/).filter((l: string) => l.trim());
-          const lineDur = totalDuration / Math.max(voLines.length, 1);
-          voLines.forEach((line: string, i: number) => {
+          const voLines = adScript.voiceover
+            .split(/[.!?။]/)
+            .map((line: string) => line.trim())
+            .filter(Boolean);
+          const lineDur = Math.max(totalTimelineDuration / Math.max(voLines.length, 1), 3);
+          voLines.slice(0, Math.ceil(totalTimelineDuration / lineDur)).forEach((line: string, i: number) => {
             textClips.push({
               asset: {
                 type: "html",
-                html: `${myanmarFontLink}<p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:24px;color:white;text-shadow:2px 2px 4px black;text-align:center;padding:10px;">${line.trim()}</p>`,
-                width: 800, height: 80,
+                html: `${myanmarFontLink}<div style="display:flex;justify-content:center;align-items:center;width:100%;height:100%;"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:32px;font-weight:700;color:white;text-shadow:3px 3px 6px rgba(0,0,0,0.85);text-align:center;padding:12px 22px;background:rgba(0,0,0,0.45);border-radius:12px;line-height:1.45;">${escapeHtml(line)}</p></div>`,
+                width: 1100,
+                height: 150,
               },
               start: i * lineDur,
-              length: lineDur,
+              length: Math.min(lineDur, totalTimelineDuration - i * lineDur),
               position: "bottom",
-              offset: { y: 0.02 },
+              offset: { y: 0.03 },
               transition: { in: "fade", out: "fade" },
             });
           });
         }
 
+        const tracks: any[] = [];
+        if (voiceoverUrl) {
+          tracks.push({
+            clips: [{
+              asset: { type: "audio", src: voiceoverUrl, volume: 1, trim: totalTimelineDuration },
+              start: 0,
+              length: totalTimelineDuration,
+            }],
+          });
+        }
+        tracks.push({ clips: textClips });
+        tracks.push({ clips });
+
         const shotstackPayload = {
           timeline: {
             background: "#000000",
-            tracks: [
-              { clips: textClips },
-              { clips },
-            ],
+            soundtracks: [],
+            tracks,
           },
-          output: { format: "mp4", resolution: "hd", aspectRatio },
+          output: { format: "mp4", resolution: "hd", aspectRatio, duration: totalTimelineDuration },
         };
 
         console.log(`Sending to Shotstack for ${platform}...`);
