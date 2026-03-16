@@ -29,6 +29,27 @@ async function getOpenAIKey(supabaseAdmin: any): Promise<string | null> {
   return configMap["openai_api_key"] || null;
 }
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+async function uploadBytesToSignedUrl(
+  supabaseAdmin: any,
+  fileName: string,
+  bytes: ArrayBuffer,
+  contentType: string,
+  expiresIn = 86400 * 7,
+): Promise<string> {
+  await supabaseAdmin.storage.from("videos").upload(fileName, bytes, { contentType, upsert: true });
+  const { data } = await supabaseAdmin.storage.from("videos").createSignedUrl(fileName, expiresIn);
+  return data?.signedUrl || "";
+}
+
 async function callAIWithFailover(supabaseAdmin: any, lovableKey: string, messages: any[]): Promise<any> {
   // Try OpenAI GPT-4o first
   const openaiKey = await getOpenAIKey(supabaseAdmin);
