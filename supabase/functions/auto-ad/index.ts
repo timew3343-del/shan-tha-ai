@@ -355,7 +355,6 @@ Product details:\n${productDetails}`,
       try {
         const aspectMap: Record<string, string> = { youtube: "16:9", fb_tiktok: "9:16", square: "1:1" };
         const aspectRatio = aspectMap[platform] || "16:9";
-        const requestedTimelineDuration = requestedDurationMin * 60;
 
         const heroImageBase64 = enhancedImageBase64 || images[0];
         const uploadedImageUrls: string[] = [];
@@ -380,11 +379,11 @@ Product details:\n${productDetails}`,
 
         const scenePrompts = Array.isArray(adScript?.scenes) ? adScript.scenes : [];
         const estimatedVoiceoverDuration = adScript?.voiceover
-          ? estimateVoiceoverSeconds(adScript.voiceover)
+          ? estimateVoiceoverSeconds(adScript.voiceover, language)
           : requestedTimelineDuration;
         const totalTimelineDuration = Math.max(requestedTimelineDuration, estimatedVoiceoverDuration);
-        const targetSceneCount = Math.max(uploadedImageUrls.length, Math.min(12, requestedDurationMin * 4));
-        const sceneDuration = Number((totalTimelineDuration / targetSceneCount).toFixed(2));
+        const perPlatformSceneCount = Math.max(uploadedImageUrls.length * 2, Math.min(16, requestedDurationMin * 4));
+        const sceneDuration = Number((totalTimelineDuration / perPlatformSceneCount).toFixed(2));
         const sceneImages: string[] = [];
 
         for (let si = 0; si < targetSceneCount; si++) {
