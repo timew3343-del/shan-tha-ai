@@ -112,8 +112,12 @@ async function submitSongTask(
         method: "POST",
         headers: { "Authorization": `Bearer ${SUNO_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          customMode: true, instrumental: true,
-          title: songTitle, tags: songTags, prompt: songLyrics, model: "V4",
+          customMode: true,
+          instrumental: false,
+          title: songTitle,
+          tags: songTags,
+          prompt: songLyrics,
+          model: "V4",
           callBackUrl: "https://example.com/callback",
         }),
       });
