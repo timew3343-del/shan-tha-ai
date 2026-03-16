@@ -100,8 +100,28 @@ async function uploadBytesToSignedUrl(
   return data?.signedUrl || "";
 }
 
-async function callAIWithFailover(supabaseAdmin: any, lovableKey: string, messages: any[]): Promise<any> {
-  // Try OpenAI GPT-4o first
+function normalizeAdScriptResponse(raw: any, fallbackLanguage: string) {
+  const scenes = Array.isArray(raw?.scenes) ? raw.scenes : [];
+  const subtitleLines = Array.isArray(raw?.subtitle_lines)
+    ? raw.subtitle_lines.map((line: unknown) => String(line || "").trim()).filter(Boolean)
+    : [];
+
+  return {
+    language: raw?.language || fallbackLanguage,
+    voiceover: String(raw?.voiceover || "").trim(),
+    scenes,
+    cta: String(raw?.cta || "Shop Now").trim(),
+    music_mood: String(raw?.music_mood || "uplifting cinematic").trim(),
+    subtitle_lines: subtitleLines,
+  };
+}
+
+async function callAIWithFailover(
+  supabaseAdmin: any,
+  lovableKey: string,
+  messages: any[],
+  fallbackLanguage: string,
+): Promise<any> {
   const openaiKey = await getOpenAIKey(supabaseAdmin);
   if (openaiKey) {
     try {
@@ -109,14 +129,14 @@ async function callAIWithFailover(supabaseAdmin: any, lovableKey: string, messag
       const resp = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "gpt-4o", messages, response_format: { type: "json_object" }, temperature: 0.7, max_tokens: 1500 }),
+        body: JSON.stringify({ model: "gpt-4o", messages, response_format: { type: "json_object" }, temperature: 0.55, max_tokens: 2200 }),
       });
       if (resp.ok) {
         const data = await resp.json();
         const content = data.choices?.[0]?.message?.content;
         if (content) {
           console.log("Auto-Ad AI: success with OpenAI GPT-4o");
-          try { return JSON.parse(content); } catch { return { voiceover: content, scenes: [], cta: "Shop Now" }; }
+          try { return normalizeAdScriptResponse(JSON.parse(content), fallbackLanguage); } catch { return normalizeAdScriptResponse({ voiceover: content }, fallbackLanguage); }
         }
       } else {
         const errText = await resp.text();
@@ -127,7 +147,6 @@ async function callAIWithFailover(supabaseAdmin: any, lovableKey: string, messag
     }
   }
 
-  // Fallback: Lovable AI Gateway
   const fallbackModels = ["google/gemini-3-flash-preview", "google/gemini-2.5-flash"];
   for (const model of fallbackModels) {
     try {
@@ -137,7 +156,7 @@ async function callAIWithFailover(supabaseAdmin: any, lovableKey: string, messag
       const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model, messages, response_format: { type: "json_object" }, temperature: 0.7, max_tokens: 1500 }),
+        body: JSON.stringify({ model, messages, response_format: { type: "json_object" }, temperature: 0.55, max_tokens: 2200 }),
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -146,7 +165,7 @@ async function callAIWithFailover(supabaseAdmin: any, lovableKey: string, messag
         const content = data.choices?.[0]?.message?.content;
         if (content) {
           console.log(`Auto-Ad AI: success with ${model}`);
-          try { return JSON.parse(content); } catch { return { voiceover: content, scenes: [], cta: "Shop Now" }; }
+          try { return normalizeAdScriptResponse(JSON.parse(content), fallbackLanguage); } catch { return normalizeAdScriptResponse({ voiceover: content }, fallbackLanguage); }
         }
       }
       const errText = await response.text();
@@ -155,7 +174,7 @@ async function callAIWithFailover(supabaseAdmin: any, lovableKey: string, messag
       console.warn(`${model} error: ${err.message}`);
     }
   }
-  return { voiceover: "", scenes: [], cta: "Shop Now" };
+  return normalizeAdScriptResponse({ voiceover: "", scenes: [], cta: "Shop Now" }, fallbackLanguage);
 }
 
 serve(async (req) => {
