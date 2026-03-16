@@ -386,7 +386,7 @@ Product details:\n${productDetails}`,
         const sceneDuration = Number((totalTimelineDuration / perPlatformSceneCount).toFixed(2));
         const sceneImages: string[] = [];
 
-        for (let si = 0; si < targetSceneCount; si++) {
+        for (let si = 0; si < perPlatformSceneCount; si++) {
           const sourceUrl = uploadedImageUrls[si % uploadedImageUrls.length];
           let finalSceneUrl = sourceUrl;
 
@@ -394,9 +394,10 @@ Product details:\n${productDetails}`,
             try {
               const scenePrompt = scenePrompts[si]?.description || `Premium ${adStyle} product advertisement scene featuring ${productDetails}, visually elegant commercial styling for ${langName}, polished lighting, rich background, high-end branding`;
               const fd = new FormData();
-              fd.append("prompt", `${scenePrompt}. Keep the original product details consistent and make the composition beautiful, premium, and platform-ready.`);
+              fd.append("prompt", `${scenePrompt}. Match the uploaded product image faithfully, keep brand colors and product shape consistent, create tasteful commercial depth, premium background styling, and realistic ad composition.`);
               fd.append("output_format", "png");
               fd.append("aspect_ratio", aspectRatio);
+              fd.append("seed", String(1000 + si));
               const sceneResp = await fetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
                 method: "POST",
                 headers: { Authorization: `Bearer ${STABILITY_API_KEY}`, Accept: "image/*" },
