@@ -584,24 +584,9 @@ serve(async (req) => {
               processed++;
               console.log(`Song merge job ${job.id} completed!`);
             } else if (renderStatus === "failed") {
-              // Fallback: use instrumental only
-              console.warn("Shotstack merge failed, using instrumental as fallback");
-              const fallbackUrl = params?.instrumentalUrl;
-              
-              await supabaseAdmin.from("user_outputs").insert({
-                user_id: job.user_id,
-                tool_id: "song_mtv",
-                tool_name: "Song & MTV",
-                output_type: "audio",
-                content: params?.cleanLyrics || "Song generated",
-                file_url: fallbackUrl,
-              });
-              
               await supabaseAdmin.from("generation_jobs").update({
-                status: "completed",
-                output_url: fallbackUrl,
-                credits_deducted: true,
-                error_message: "Merge failed - instrumental only",
+                status: "failed",
+                error_message: statusData.response?.error || "Audio merge failed",
               }).eq("id", job.id);
               processed++;
             }

@@ -429,9 +429,11 @@ export const SongMTVTool = ({ userId, onBack }: SongMTVToolProps) => {
         return;
       }
 
-      // Legacy sync response (shouldn't happen with new code, but just in case)
-      if (result.audio) setResultAudio(result.audio);
-      if (result.video) setResultVideo(result.video);
+      // Legacy/sync fallback mapping
+      if (result.audio || result.audioUrl || result.output_url) {
+        setResultAudio(result.audio || result.audioUrl || result.output_url);
+      }
+      if (result.video || result.videoUrl) setResultVideo(result.video || result.videoUrl);
       if (result.lyrics) setResultLyrics(result.lyrics);
       setProgress(100);
       refetchCredits();

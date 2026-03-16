@@ -112,8 +112,12 @@ async function submitSongTask(
         method: "POST",
         headers: { "Authorization": `Bearer ${SUNO_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          customMode: true, instrumental: true,
-          title: songTitle, tags: songTags, prompt: songLyrics, model: "V4",
+          customMode: true,
+          instrumental: false,
+          title: songTitle,
+          tags: songTags,
+          prompt: songLyrics,
+          model: "V4",
           callBackUrl: "https://example.com/callback",
         }),
       });
@@ -140,7 +144,9 @@ async function submitSongTask(
       method: "POST",
       headers: { "X-API-Key": GOAPI_KEY, "Content-Type": "application/json" },
       body: JSON.stringify({
-        custom_mode: true, make_instrumental: true, input: { title: songTitle, tags: songTags, prompt: songLyrics },
+        custom_mode: true,
+        make_instrumental: false,
+        input: { title: songTitle, tags: songTags, prompt: songLyrics },
       }),
     });
 
@@ -321,21 +327,20 @@ Start DIRECTLY with [Intro] - no intro text, no explanations, no titles.`;
       };
       const langInfo = langMap[language || "my"] || langMap.my;
 
-      // Build instrumental-focused tags (no voice tags - vocals handled by TTS separately)
       const songTags = [
         genreTag,
         moodTag,
-        "Instrumental",
-        "Background Music",
-        "No Vocals",
+        selectedVoice,
+        langInfo.lang,
         "Studio Quality",
         "High Fidelity",
+        "Professional Song",
+        "Natural Singing",
       ].join(", ");
-      console.log(`Dynamic SunoAPI tags (instrumental): ${songTags}`);
+      console.log(`Dynamic SunoAPI tags (full song): ${songTags}`);
       console.log(`User selections -> genre:${genre}, mood:${mood}, voice:${voiceType}, lang:${language}`);
 
-      // For instrumental, just provide mood/style guidance (no lyrics needed for singing)
-      const songLyrics = `[Instrumental] [${genreTag}] [${moodTag}] [No Vocals]\n\n` + (processedLyrics || topic || "A beautiful instrumental piece");
+      const songLyrics = `${langInfo.tags}\n[Genre: ${genreTag}] [Mood: ${moodTag}] [Quality: Studio Quality]\n\n${processedLyrics || lyrics || topic || "A beautiful song"}`;
 
       const { taskId, provider } = await submitSongTask(supabaseAdmin, songTitle, songTags, songLyrics);
 
