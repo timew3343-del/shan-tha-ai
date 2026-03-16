@@ -34,8 +34,29 @@ function escapeHtml(text: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
+    .replace(/\"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function estimateVoiceoverSeconds(text: string): number {
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(8, Math.ceil(words / 2.3));
+}
+
+function splitVoiceoverToCaptions(text: string, totalDurationSec: number): Array<{ text: string; start: number; length: number }> {
+  const lines = text
+    .split(/[.!?။\n]+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) return [];
+
+  const baseLength = totalDurationSec / lines.length;
+  return lines.map((line, index) => ({
+    text: line,
+    start: Number((index * baseLength).toFixed(2)),
+    length: Number(Math.max(2.5, baseLength).toFixed(2)),
+  }));
 }
 
 async function uploadBytesToSignedUrl(
