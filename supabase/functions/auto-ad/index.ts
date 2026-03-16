@@ -247,16 +247,36 @@ serve(async (req) => {
 
     const langMap: Record<string, string> = { my: "Myanmar (Burmese)", en: "English", th: "Thai" };
     const langName = langMap[language] || "Myanmar (Burmese)";
+    const requestedTimelineDuration = requestedDurationMin * 60;
+    const targetSceneCount = Math.max(images.length * 2, Math.min(16, requestedDurationMin * 4));
 
     const adScript = await callAIWithFailover(supabaseAdmin, LOVABLE_API_KEY, [
       {
         role: "system",
-        content: `You are a world-class advertising producer for Myanmaraistudio.com. Create a professional ${requestedDurationMin}-minute video ad script in ${langName}.
-        Include: voiceover narration, scene descriptions for ${images.length} product images, background music suggestion, call-to-action.
-        Return JSON: { "voiceover": "full narration text", "scenes": [{"description": "scene desc", "duration_seconds": 3}], "cta": "call to action", "music_mood": "upbeat/calm/dramatic" }`,
+        content: `You are a world-class advertising producer.
+Create the ad ONLY in ${langName}. Never switch languages. If the requested language is Myanmar, every line of voiceover, CTA, and subtitles must be fully in Myanmar Unicode script.
+Match the script length to about ${requestedTimelineDuration} seconds of spoken narration.
+If product details are short, expand only with safe marketing structure: hook, problem, benefits, usage, trust points, CTA. Do not invent fake medical or legal claims.
+If product details are too long for the chosen duration, compress to only the strongest selling points.
+Return strict JSON with this shape:
+{
+  "language": "${language}",
+  "voiceover": "full narration in ${langName}",
+  "subtitle_lines": ["short subtitle line 1", "short subtitle line 2"],
+  "scenes": [{"description": "visual direction matching uploaded product images", "duration_seconds": 4}],
+  "cta": "short CTA in ${langName}",
+  "music_mood": "clear music direction such as uplifting cinematic pop"
+}`,
       },
-      { role: "user", content: `Product: ${productDetails}. Number of product images: ${images.length}. Duration: ${requestedDurationMin} minutes.` },
-    ]);
+      {
+        role: "user",
+        content: `Selected language: ${language} (${langName})
+Requested duration: ${requestedDurationMin} minutes (${requestedTimelineDuration} seconds)
+Uploaded images: ${images.length}
+Target scene count: ${targetSceneCount}
+Product details:\n${productDetails}`,
+      },
+    ], language);
 
     console.log("Ad script generated");
 
