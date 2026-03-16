@@ -34,8 +34,29 @@ function escapeHtml(text: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
+    .replace(/\"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function estimateVoiceoverSeconds(text: string): number {
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(8, Math.ceil(words / 2.3));
+}
+
+function splitVoiceoverToCaptions(text: string, totalDurationSec: number): Array<{ text: string; start: number; length: number }> {
+  const lines = text
+    .split(/[.!?။\n]+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) return [];
+
+  const baseLength = totalDurationSec / lines.length;
+  return lines.map((line, index) => ({
+    text: line,
+    start: Number((index * baseLength).toFixed(2)),
+    length: Number(Math.max(2.5, baseLength).toFixed(2)),
+  }));
 }
 
 async function uploadBytesToSignedUrl(
@@ -266,12 +287,13 @@ serve(async (req) => {
       try {
         const aspectMap: Record<string, string> = { youtube: "16:9", fb_tiktok: "9:16", square: "1:1" };
         const aspectRatio = aspectMap[platform] || "16:9";
-        const totalDurationSec = requestedDurationMin * 60;
+        const requestedTimelineDuration = requestedDurationMin * 60;
 
         const heroImageBase64 = enhancedImageBase64 || images[0];
         const uploadedImageUrls: string[] = [];
         for (let i = 0; i < images.length; i++) {
-          const raw = (i === 0 ? heroImageBase64 : images[i])?.includes(",") ? (i === 0 ? heroImageBase64 : images[i]).split(",")[1] : (i === 0 ? heroImageBase64 : images[i]);
+          const sourceImage = i === 0 ? heroImageBase64 : images[i];
+          const raw = sourceImage?.includes(",") ? sourceImage.split(",")[1] : sourceImage;
           if (!raw) continue;
           const bytes = Uint8Array.from(atob(raw), (c) => c.charCodeAt(0));
           const imgUrl = await uploadBytesToSignedUrl(
@@ -288,10 +310,14 @@ serve(async (req) => {
           continue;
         }
 
-        const sceneDuration = Math.max(5, Math.round(totalDurationSec / Math.max(adScript?.scenes?.length || uploadedImageUrls.length, 1)));
-        const targetSceneCount = Math.max(3, Math.ceil(totalDurationSec / sceneDuration));
-        const sceneImages: string[] = [];
         const scenePrompts = Array.isArray(adScript?.scenes) ? adScript.scenes : [];
+        const estimatedVoiceoverDuration = adScript?.voiceover
+          ? estimateVoiceoverSeconds(adScript.voiceover)
+          : requestedTimelineDuration;
+        const totalTimelineDuration = Math.max(requestedTimelineDuration, estimatedVoiceoverDuration);
+        const targetSceneCount = Math.max(uploadedImageUrls.length, Math.min(12, requestedDurationMin * 4));
+        const sceneDuration = Number((totalTimelineDuration / targetSceneCount).toFixed(2));
+        const sceneImages: string[] = [];
 
         for (let si = 0; si < targetSceneCount; si++) {
           const sourceUrl = uploadedImageUrls[si % uploadedImageUrls.length];
@@ -299,9 +325,9 @@ serve(async (req) => {
 
           if (STABILITY_API_KEY) {
             try {
-              const scenePrompt = scenePrompts[si]?.description || `Premium ${adStyle} product advertisement scene, ${productDetails}, ${langName} market, elegant composition, detailed background, polished cinematic lighting`;
+              const scenePrompt = scenePrompts[si]?.description || `Premium ${adStyle} product advertisement scene featuring ${productDetails}, visually elegant commercial styling for ${langName}, polished lighting, rich background, high-end branding`;
               const fd = new FormData();
-              fd.append("prompt", `${scenePrompt}. Aspect ratio ${aspectRatio}. Beautiful image-to-video keyframe style, premium product commercial.`);
+              fd.append("prompt", `${scenePrompt}. Keep the original product details consistent and make the composition beautiful, premium, and platform-ready.`);
               fd.append("output_format", "png");
               fd.append("aspect_ratio", aspectRatio);
               const sceneResp = await fetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
@@ -331,74 +357,54 @@ serve(async (req) => {
           continue;
         }
 
-        const totalTimelineDuration = sceneImages.length * sceneDuration;
         const myanmarFontLink = `<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;700&display=swap" rel="stylesheet">`;
         const clips = sceneImages.map((url, i) => ({
           asset: { type: "image", src: url },
-          start: i * sceneDuration,
+          start: Number((i * sceneDuration).toFixed(2)),
           length: sceneDuration,
           fit: "cover",
-          effect: ["slideLeft", "zoomOut", "slideUp", "slideRight", "zoomIn"][i % 5],
-          transition: i > 0 ? { in: ["fade", "dissolve", "wipeRight", "wipeLeft"][i % 4] } : undefined,
+          effect: ["zoomIn", "zoomOut", "slideLeft", "slideRight", "slideUp"][i % 5],
+          transition: i > 0 ? { in: "fade" } : undefined,
         }));
 
-        const textClips: any[] = [{
+        const captionClips = showSubtitles && adScript?.voiceover
+          ? splitVoiceoverToCaptions(adScript.voiceover, totalTimelineDuration).map((caption) => ({
+              asset: {
+                type: "html",
+                html: `${myanmarFontLink}<div style="display:flex;justify-content:center;align-items:center;width:100%;height:100%;padding:0 24px;"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:30px;font-weight:700;color:white;text-shadow:3px 3px 6px rgba(0,0,0,0.85);text-align:center;padding:12px 22px;background:rgba(0,0,0,0.45);border-radius:12px;line-height:1.45;">${escapeHtml(caption.text)}</p></div>`,
+                width: 1100,
+                height: 160,
+              },
+              start: caption.start,
+              length: Math.min(caption.length, Math.max(totalTimelineDuration - caption.start, 0.5)),
+              position: "bottom",
+              offset: { y: 0.03 },
+            }))
+          : [];
+
+        const ctaClip = {
           asset: {
             type: "html",
-            html: `${myanmarFontLink}<div style="display:flex;justify-content:center;align-items:center;width:100%;height:100%;"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:36px;color:white;text-shadow:3px 3px 6px rgba(0,0,0,0.85);text-align:center;padding:20px 28px;background:rgba(0,0,0,0.38);border-radius:16px;font-weight:700;">${escapeHtml(adScript?.cta || "Shop Now!")}</p></div>`,
+            html: `${myanmarFontLink}<div style="display:flex;justify-content:center;align-items:center;width:100%;height:100%;padding:0 24px;"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:36px;color:white;text-shadow:3px 3px 6px rgba(0,0,0,0.85);text-align:center;padding:20px 28px;background:rgba(0,0,0,0.38);border-radius:16px;font-weight:700;">${escapeHtml(adScript?.cta || "Shop Now!")}</p></div>`,
             width: 900,
             height: 140,
           },
-          start: Math.max(totalTimelineDuration - Math.min(8, sceneDuration), 0),
-          length: Math.min(8, sceneDuration),
+          start: Math.max(totalTimelineDuration - Math.min(8, sceneDuration * 2), 0),
+          length: Math.min(8, Math.max(sceneDuration * 2, 4)),
           position: "bottom",
-          offset: { y: 0.08 },
-          transition: { in: "fade" },
-        }];
-
-        if (showSubtitles && adScript?.voiceover) {
-          const voLines = adScript.voiceover
-            .split(/[.!?။]/)
-            .map((line: string) => line.trim())
-            .filter(Boolean);
-          const lineDur = Math.max(totalTimelineDuration / Math.max(voLines.length, 1), 3);
-          voLines.slice(0, Math.ceil(totalTimelineDuration / lineDur)).forEach((line: string, i: number) => {
-            textClips.push({
-              asset: {
-                type: "html",
-                html: `${myanmarFontLink}<div style="display:flex;justify-content:center;align-items:center;width:100%;height:100%;"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:32px;font-weight:700;color:white;text-shadow:3px 3px 6px rgba(0,0,0,0.85);text-align:center;padding:12px 22px;background:rgba(0,0,0,0.45);border-radius:12px;line-height:1.45;">${escapeHtml(line)}</p></div>`,
-                width: 1100,
-                height: 150,
-              },
-              start: i * lineDur,
-              length: Math.min(lineDur, totalTimelineDuration - i * lineDur),
-              position: "bottom",
-              offset: { y: 0.03 },
-              transition: { in: "fade", out: "fade" },
-            });
-          });
-        }
-
-        const tracks: any[] = [];
-        if (voiceoverUrl) {
-          tracks.push({
-            clips: [{
-              asset: { type: "audio", src: voiceoverUrl, volume: 1, trim: totalTimelineDuration },
-              start: 0,
-              length: totalTimelineDuration,
-            }],
-          });
-        }
-        tracks.push({ clips: textClips });
-        tracks.push({ clips });
+          offset: { y: 0.09 },
+        };
 
         const shotstackPayload = {
           timeline: {
             background: "#000000",
-            soundtracks: [],
-            tracks,
+            soundtrack: voiceoverUrl ? { src: voiceoverUrl, volume: 1 } : undefined,
+            tracks: [
+              { clips },
+              { clips: [...captionClips, ctaClip] },
+            ],
           },
-          output: { format: "mp4", resolution: "hd", aspectRatio, duration: totalTimelineDuration },
+          output: { format: "mp4", resolution: "hd", aspectRatio },
         };
 
         console.log(`Sending to Shotstack for ${platform}...`);
