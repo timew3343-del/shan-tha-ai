@@ -431,42 +431,43 @@ Product details:\n${productDetails}`,
           start: Number((i * sceneDuration).toFixed(2)),
           length: sceneDuration,
           fit: "cover",
-          effect: ["zoomIn", "zoomOut", "slideLeft", "slideRight", "slideUp"][i % 5],
-          transition: i > 0 ? { in: "fade" } : undefined,
+          effect: ["zoomIn", "zoomOut", "slideLeft", "slideRight", "carouselRight"][i % 5],
+          transition: i > 0 ? { in: "fade", out: "fade" } : undefined,
         }));
 
         const captionClips = showSubtitles && adScript?.voiceover
-          ? splitVoiceoverToCaptions(adScript.voiceover, totalTimelineDuration).map((caption) => ({
+          ? splitVoiceoverToCaptions(adScript.voiceover, totalTimelineDuration, adScript.subtitle_lines).map((caption) => ({
               asset: {
                 type: "html",
-                html: `${myanmarFontLink}<div style="display:flex;justify-content:center;align-items:center;width:100%;height:100%;padding:0 24px;"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:30px;font-weight:700;color:white;text-shadow:3px 3px 6px rgba(0,0,0,0.85);text-align:center;padding:12px 22px;background:rgba(0,0,0,0.45);border-radius:12px;line-height:1.45;">${escapeHtml(caption.text)}</p></div>`,
-                width: 1100,
-                height: 160,
+                html: `${myanmarFontLink}<div style="display:flex;justify-content:center;align-items:flex-end;width:100%;height:100%;padding:0 28px 18px;"><div style="max-width:90%;background:rgba(0,0,0,0.58);padding:14px 22px;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,0.35);"><p style="margin:0;font-family:'Noto Sans Myanmar',sans-serif;font-size:32px;font-weight:700;color:white;text-shadow:0 2px 8px rgba(0,0,0,0.7);text-align:center;line-height:1.45;letter-spacing:0.01em;">${escapeHtml(caption.text)}</p></div></div>`,
+                width: 1180,
+                height: 220,
               },
               start: caption.start,
-              length: Math.min(caption.length, Math.max(totalTimelineDuration - caption.start, 0.5)),
+              length: Math.min(caption.length, Math.max(totalTimelineDuration - caption.start, 0.8)),
               position: "bottom",
-              offset: { y: 0.03 },
+              offset: { y: 0.01 },
             }))
           : [];
 
         const ctaClip = {
           asset: {
             type: "html",
-            html: `${myanmarFontLink}<div style="display:flex;justify-content:center;align-items:center;width:100%;height:100%;padding:0 24px;"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:36px;color:white;text-shadow:3px 3px 6px rgba(0,0,0,0.85);text-align:center;padding:20px 28px;background:rgba(0,0,0,0.38);border-radius:16px;font-weight:700;">${escapeHtml(adScript?.cta || "Shop Now!")}</p></div>`,
+            html: `${myanmarFontLink}<div style="display:flex;justify-content:center;align-items:center;width:100%;height:100%;padding:0 24px;"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:36px;color:white;text-shadow:3px 3px 6px rgba(0,0,0,0.85);text-align:center;padding:20px 28px;background:rgba(0,0,0,0.42);border-radius:16px;font-weight:700;">${escapeHtml(adScript?.cta || "Shop Now!")}</p></div>`,
             width: 900,
             height: 140,
           },
           start: Math.max(totalTimelineDuration - Math.min(8, sceneDuration * 2), 0),
           length: Math.min(8, Math.max(sceneDuration * 2, 4)),
           position: "bottom",
-          offset: { y: 0.09 },
+          offset: { y: 0.1 },
         };
 
+        const soundtrack = voiceoverUrl ? { src: voiceoverUrl, volume: 1 } : undefined;
         const shotstackPayload = {
           timeline: {
             background: "#000000",
-            soundtrack: voiceoverUrl ? { src: voiceoverUrl, volume: 1 } : undefined,
+            soundtrack,
             tracks: [
               { clips },
               { clips: [...captionClips, ctaClip] },
