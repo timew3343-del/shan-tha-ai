@@ -59,13 +59,7 @@ export default function AIAvatarTool() {
         console.error('Avatar generation error:', error);
       } else if (data && data.success) {
         toast.success('Avatar generated successfully!');
-        addOutput({
-          tool: 'AI Avatar Generation',
-          type: 'image',
-          content: data.avatarUrl,
-          metadata: { prompt: values.prompt, gender: values.gender, age: values.age, ethnicity: values.ethnicity, creditsUsed: data.creditsUsed },
-          timestamp: new Date().toISOString(),
-        });
+        saveOutput('image', data.avatarUrl);
       } else {
         toast.error(data?.error || 'Failed to generate avatar.');
       }

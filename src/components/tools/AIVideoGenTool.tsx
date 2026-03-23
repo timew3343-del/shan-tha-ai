@@ -56,13 +56,7 @@ export default function AIVideoGenTool() {
         console.error('Video generation error:', error);
       } else if (data && data.success) {
         toast.success('Video generated successfully!');
-        addOutput({
-          tool: 'AI Video Generation',
-          type: 'video',
-          content: data.videoUrl,
-          metadata: { prompt: values.prompt, style: values.style, duration: values.duration, creditsUsed: data.creditsUsed },
-          timestamp: new Date().toISOString(),
-        });
+        saveOutput('video', data.videoUrl);
       } else {
         toast.error(data?.error || 'Failed to generate video.');
       }

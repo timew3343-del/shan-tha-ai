@@ -124,25 +124,6 @@ export const ImageToVideoTool = ({ userId }: { userId?: string }) => {
             )}
           </Button>
         </div>
-
-        <div className="space-y-4 mt-8">
-          {outputs.map((output) => (
-            <div key={output.id} className="border rounded-xl p-4 bg-card text-card-foreground shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <h4 className="font-semibold text-lg">AI Video #{output.id.slice(-4)}</h4>
-                  <p className="text-sm text-muted-foreground line-clamp-1">Prompt: {output.metadata?.prompt || "No prompt"}</p>
-                </div>
-                <Button variant="ghost" size="icon" asChild>
-                  <a href={output.value} download={`ai_video_${output.id}.mp4`} target="_blank" rel="noopener noreferrer">
-                    <Download className="w-5 h-5" />
-                  </a>
-                </Button>
-              </div>
-              <video controls src={output.value} className="w-full rounded-lg" />
-            </div>
-          ))}
-        </div>
       </CardContent>
     </Card>
   );

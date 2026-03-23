@@ -25,7 +25,7 @@ export const VoiceCloneTool = ({ userId }: { userId?: string }) => {
   };
 
   const handleCloneVoice = async () => {
-    if (!user) {
+    if (!userId) {
       toast({ title: "Login လိုအပ်ပါသည်", description: "အသံကူးယူရန်အတွက် Login ဝင်ပေးပါ။", variant: "destructive" });
       return;
     }

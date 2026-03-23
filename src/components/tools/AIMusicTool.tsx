@@ -117,21 +117,10 @@ export const AIMusicTool = ({ userId }: { userId?: string }) => {
             )}
           </Button>
         </div>
-
-        {outputs.length === 0 && !isLoading && (
-          <FirstOutputGuide
-            title="AI Music Generation Tool"
-            description="သင်၏ စိတ်ကူးများကို သီချင်းအဖြစ် ဖန်တီးပါ။"
-            steps={[
-              "သင်ဖန်တီးလိုသော သီချင်းအမျိုးအစား သို့မဟုတ် စိတ်ကူးကို ရိုက်ထည့်ပါ။",
-              "သီချင်းပုံစံ (Style Tags) များကို သတ်မှတ်ပါ။",
-              "'သီချင်းဖန်တီးရန်' ခလုတ်ကို နှိပ်ပါ။",
-              "သင်၏ ဖန်တီးထားသော သီချင်းကို နားဆင်ပြီး download လုပ်ပါ။",
-            ]}
-          />
-        )}
-
-        <div className="space-y-4 mt-8">
+      </CardContent>
+    </Card>
+  );
+};
           {outputs.map((output) => (
             <div key={output.id} className="border rounded-xl p-4 bg-card text-card-foreground shadow-sm hover:shadow-md transition-shadow">
               <div className="flex justify-between items-start mb-3">

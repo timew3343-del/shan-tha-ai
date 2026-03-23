@@ -56,13 +56,7 @@ export default function AIAnimationTool() {
         console.error('Animation generation error:', error);
       } else if (data && data.success) {
         toast.success('Animation generated successfully!');
-        addOutput({
-          tool: 'AI Animation Generation',
-          type: 'video',
-          content: data.animationUrl,
-          metadata: { prompt: values.prompt, style: values.style, duration: values.duration, creditsUsed: data.creditsUsed },
-          timestamp: new Date().toISOString(),
-        });
+        saveOutput('video', data.animationUrl);
       } else {
         toast.error(data?.error || 'Failed to generate animation.');
       }
