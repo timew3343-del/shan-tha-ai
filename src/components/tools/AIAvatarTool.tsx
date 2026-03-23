@@ -22,8 +22,7 @@ const formSchema = z.object({
 type AvatarFormValues = z.infer<typeof formSchema>;
 
 export default function AIAvatarTool() {
-  const { user, session } = useAuth();
-  const { addOutput } = useToolOutput();
+  const { saveOutput } = useToolOutput("ai-avatar", "AI Avatar");
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<AvatarFormValues>({
