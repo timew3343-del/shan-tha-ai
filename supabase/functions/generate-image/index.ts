@@ -312,10 +312,6 @@ serve(async (req) => {
             console.error("Secondary Vertex AI Imagen 4 failed:", secondaryVertexResp.status, await secondaryVertexResp.text());
           }
         } else {
-          console.error("Vertex AI Imagen 4 failed:", vertexResp.status, await vertexResp.text());
-        }stringify(data).substring(0, 300));
-          }
-        } else {
           const errText = await vertexResp.text();
           console.warn(`Vertex AI failed: ${vertexResp.status} - ${errText.substring(0, 300)}`);
         }
