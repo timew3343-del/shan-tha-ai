@@ -21,8 +21,7 @@ const formSchema = z.object({
 type AnimationFormValues = z.infer<typeof formSchema>;
 
 export default function AIAnimationTool() {
-  const { user, session } = useAuth();
-  const { addOutput } = useToolOutput();
+  const { saveOutput } = useToolOutput("ai-animation", "AI Animation");
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<AnimationFormValues>({
