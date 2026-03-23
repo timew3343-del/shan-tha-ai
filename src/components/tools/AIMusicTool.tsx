@@ -5,19 +5,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Music, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useUser } from "@/hooks/useUser";
-import { useCreditBalance } from "@/hooks/useCreditBalance";
 import { useToolOutput } from "@/hooks/useToolOutput";
-import { FirstOutputGuide } from "@/components/FirstOutputGuide";
+import { useCredits } from "@/hooks/useCredits";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 
-export const AIMusicTool = () => {
+export const AIMusicTool = ({ userId }: { userId?: string }) => {
   const { toast } = useToast();
-  const { user } = useUser();
-  const { creditBalance, refreshCreditBalance } = useCreditBalance();
-  const { addOutput, getOutputsForTool } = useToolOutput("ai-music-generation");
-  const outputs = getOutputsForTool();
+  const { refetch: refreshCreditBalance } = useCredits(userId);
+  const { saveOutput } = useToolOutput("ai-music-generation", "AI Music");
 
   const [prompt, setPrompt] = useState("");
   const [tags, setTags] = useState("pop, upbeat, happy");
