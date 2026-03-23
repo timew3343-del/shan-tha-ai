@@ -34,7 +34,8 @@ export default function AIAnimationTool() {
   });
 
   const onSubmit = async (values: AnimationFormValues) => {
-    if (!user || !session) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
       toast.error('You need to be logged in to use this tool.');
       return;
     }
