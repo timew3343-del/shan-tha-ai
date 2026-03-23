@@ -21,8 +21,7 @@ const formSchema = z.object({
 type VideoFormValues = z.infer<typeof formSchema>;
 
 export default function AIVideoGenTool() {
-  const { user, session } = useAuth();
-  const { addOutput } = useToolOutput();
+  const { saveOutput } = useToolOutput("ai-video-gen", "AI Video Gen");
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<VideoFormValues>({
