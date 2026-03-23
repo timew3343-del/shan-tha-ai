@@ -21,7 +21,7 @@ export const AIMusicTool = ({ userId }: { userId?: string }) => {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleGenerateMusic = async () => {
-    if (!user) {
+    if (!userId) {
       toast({ title: "Login လိုအပ်ပါသည်", description: "သီချင်းဖန်တီးရန်အတွက် Login ဝင်ပေးပါ။", variant: "destructive" });
       return;
     }
