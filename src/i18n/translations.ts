@@ -77,6 +77,9 @@ const toolTranslations: Record<string, Record<string, string>> = {
 
     // Tool Names
     'tool.imageGen': 'ပုံထုတ်ရန်', 'tool.imageGen.desc': 'AI ဖြင့် ပုံဖန်တီးခြင်း',
+    'tool.musicGen': 'သီချင်းထုတ်ရန်', 'tool.musicGen.desc': 'AI ဖြင့် သီချင်းဖန်တီးခြင်း',
+    'tool.voiceClone': 'အသံကူးယူရန်', 'tool.voiceClone.desc': 'AI ဖြင့် အသံကူးယူခြင်း',
+    'tool.imageToVideo': 'ပုံမှဗီဒီယိုသို့', 'tool.imageToVideo.desc': 'ပုံကို လှုပ်ရှားဗီဒီယိုအဖြစ် ပြောင်းလဲခြင်း',
     'tool.upscale': '4K Upscale', 'tool.upscale.desc': 'ပုံကြည်လင်ပြတ်သားမှုမြှင့်တင်ရန်',
     'tool.bgRemove': 'နောက်ခံဖယ်ရှားရန်', 'tool.bgRemove.desc': 'Background ဖယ်ရှားခြင်း',
     'tool.bgStudio': 'နောက်ခံအလှပြောင်းရန်', 'tool.bgStudio.desc': 'ကုန်ပစ္စည်းပုံရိပ်များကို နောက်ခံအလှများ အလိုအလျောက် ပြောင်းလဲပေးခြင်း',
