@@ -36,7 +36,8 @@ export default function AIAvatarTool() {
   });
 
   const onSubmit = async (values: AvatarFormValues) => {
-    if (!user || !session) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
       toast.error('You need to be logged in to use this tool.');
       return;
     }
