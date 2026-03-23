@@ -24,7 +24,7 @@ export const ImageToVideoTool = ({ userId }: { userId?: string }) => {
   };
 
   const handleGenerateVideo = async () => {
-    if (!user) {
+    if (!userId) {
       toast({ title: "Login လိုအပ်ပါသည်", description: "ဗီဒီယိုထုတ်ရန်အတွက် Login ဝင်ပေးပါ။", variant: "destructive" });
       return;
     }
