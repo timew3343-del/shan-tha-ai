@@ -217,7 +217,7 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
             className="w-24 h-24 border-2 border-dashed border-primary/30 rounded-xl flex flex-col items-center justify-center gap-1 hover:bg-primary/5 transition-colors"
           >
             <Plus className="w-6 h-6 text-primary" />
-            <span className="text-xs text-muted-foreground font-mya<span>ပုံထည့်ပါ</span>
+            <span className="text-xs text-muted-foreground font-myanmar">ပုံထည့်ပါ</span>
           </button>
         )}
         
