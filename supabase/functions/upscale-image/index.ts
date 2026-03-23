@@ -101,9 +101,19 @@ serve(async (req) => {
     }
 
     // Prioritize env secret over DB for security
-    const REPLICATE_API_KEY = Deno.env.get("REPLICATE_API_KEY");
+    let REPLICATE_API_KEY_PRIMARY = Deno.env.get("REPLICATE_API_KEY_PRIMARY");
+    if (!REPLICATE_API_KEY_PRIMARY) {
+      const { data: primaryKey } = await supabaseAdmin.from("app_settings").select("value").eq("key", "REPLICATE_API_KEY_PRIMARY").maybeSingle();
+      REPLICATE_API_KEY_PRIMARY = primaryKey?.value;
+    }
+
+    let REPLICATE_API_KEY_SECONDARY = Deno.env.get("REPLICATE_API_KEY_SECONDARY");
+    if (!REPLICATE_API_KEY_SECONDARY) {
+      const { data: secondaryKey } = await supabaseAdmin.from("app_settings").select("value").eq("key", "REPLICATE_API_KEY_SECONDARY").maybeSingle();
+      REPLICATE_API_KEY_SECONDARY = secondaryKey?.value;
+    }
     
-    if (!REPLICATE_API_KEY) {
+    if (!REPLICATE_API_KEY_PRIMARY && !REPLICATE_API_KEY_SECONDARY) {
       return new Response(JSON.stringify({ error: "API လက်ကျန်ငွေ မလုံလောက်ပါ သို့မဟုတ် API ချိတ်ဆက်မှု ခေတ္တပြတ်တောက်နေပါသည်။" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -116,7 +126,7 @@ serve(async (req) => {
     const createResponse = await fetch("https://api.replicate.com/v1/predictions", {
       method: "POST",
       headers: {
-        Authorization: `Token ${REPLICATE_API_KEY}`,
+        Authorization: `Token ${REPLICATE_API_KEY_PRIMARY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -128,6 +138,25 @@ serve(async (req) => {
         },
       }),
     });
+
+    if (!createResponse.ok && REPLICATE_API_KEY_SECONDARY) {
+      console.warn("Primary Replicate API key failed, trying secondary key.");
+      createResponse = await fetch("https://api.replicate.com/v1/predictions", {
+        method: "POST",
+        headers: {
+          Authorization: `Token ${REPLICATE_API_KEY_SECONDARY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          version: "42fed1c4974146d4d2414e2be2c5277c7fcf05fcc3a73abf41610695738c1d7b",
+          input: {
+            image: `data:image/png;base64,${imageBase64}`,
+            scale: 4,
+            face_enhance: true,
+          },
+        }),
+      });
+    }
 
     if (!createResponse.ok) {
       const errorText = await createResponse.text();
@@ -162,7 +191,7 @@ serve(async (req) => {
       attempts++;
 
       const pollResponse = await fetch(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
-        headers: { Authorization: `Token ${REPLICATE_API_KEY}` },
+        headers: { Authorization: `Token ${REPLICATE_API_KEY_PRIMARY || REPLICATE_API_KEY_SECONDARY}` },
       });
       result = await pollResponse.json();
       console.log(`Poll attempt ${attempts}: ${result.status}`);

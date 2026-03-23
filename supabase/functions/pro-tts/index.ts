@@ -157,13 +157,26 @@ serve(async (req) => {
     console.log(`[Pro TTS] Input: "${finalText.substring(0, 80)}..." | Target: ${targetLang}`);
 
     // Try GEMINI_API_KEY first (direct), then LOVABLE_API_KEY (gateway)
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    let GEMINI_API_KEY_PRIMARY = Deno.env.get("GEMINI_API_KEY_PRIMARY");
+    if (!GEMINI_API_KEY_PRIMARY) {
+      const { data: primaryKey } = await supabaseAdmin.from("app_settings").select("value").eq("key", "GEMINI_API_KEY_PRIMARY").maybeSingle();
+      GEMINI_API_KEY_PRIMARY = primaryKey?.value;
+    }
+
+    let GEMINI_API_KEY_SECONDARY = Deno.env.get("GEMINI_API_KEY_SECONDARY");
+    if (!GEMINI_API_KEY_SECONDARY) {
+      const { data: secondaryKey } = await supabaseAdmin.from("app_settings").select("value").eq("key", "GEMINI_API_KEY_SECONDARY").maybeSingle();
+      GEMINI_API_KEY_SECONDARY = secondaryKey?.value;
+    }
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
     let translated: string | null = null;
 
-    if (GEMINI_API_KEY) {
-      translated = await translateWithGeminiDirect(finalText, targetLang, GEMINI_API_KEY);
+    if (GEMINI_API_KEY_PRIMARY) {
+      translated = await translateWithGeminiDirect(finalText, targetLang, GEMINI_API_KEY_PRIMARY);
+    } else if (GEMINI_API_KEY_SECONDARY) {
+      console.warn("[Pro TTS] Primary Gemini API key not found or failed, trying secondary key.");
+      translated = await translateWithGeminiDirect(finalText, targetLang, GEMINI_API_KEY_SECONDARY);
     }
 
     if (!translated && LOVABLE_API_KEY) {

@@ -8,12 +8,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-interface GenerateVideoRequest {
+interface GenerateAnimationRequest {
   prompt: string;
   style?: string;
   duration?: string;
-  speechText?: string;
-  bgMusic?: string;
 }
 
 // ─── Vertex AI JWT Auth (Placeholder for potential future use) ─────────────────────────────────────
@@ -94,7 +92,7 @@ serve(async (req) => {
     const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
     const userIsAdmin = isAdminData === true;
 
-    let body: GenerateVideoRequest;
+    let body: GenerateAnimationRequest;
     try {
       body = await req.json();
     } catch {
@@ -103,7 +101,7 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { prompt, style, duration, speechText, bgMusic } = body;
+    const { prompt, style, duration } = body;
 
     if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
       return new Response(
@@ -120,7 +118,7 @@ serve(async (req) => {
 
     // ─── Credit cost ────────────────────────────────────────
     const { data: costSetting } = await supabaseAdmin
-      .from("app_settings").select("value").eq("key", "credit_cost_ai_video_generation").maybeSingle();
+      .from("app_settings").select("value").eq("key", "credit_cost_ai_animation_generation").maybeSingle();
 
     let creditCost: number;
     if (costSetting?.value) {
@@ -129,7 +127,7 @@ serve(async (req) => {
       const { data: marginSetting } = await supabaseAdmin
         .from("app_settings").select("value").eq("key", "profit_margin").maybeSingle();
       const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
-      creditCost = Math.ceil(30 * (1 + profitMargin / 100)); // Higher cost for video
+      creditCost = Math.ceil(20 * (1 + profitMargin / 100)); // Higher cost for animation
     }
 
     const { data: profile } = await supabaseAdmin
@@ -164,70 +162,65 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Generating video: "${prompt.substring(0, 60)}..." style=${style} duration=${duration}`);
+    console.log(`Generating animation: "${prompt.substring(0, 60)}..." style=${style} duration=${duration}`);
 
-    let generatedVideoUrl: string | null = null;
+    let generatedAnimationUrl: string | null = null;
 
-    // ─── Video Generation API (Placeholder) ───────────
-    // This section would integrate with an actual Text-to-Video API.
+    // ─── Animation Generation API (Placeholder) ───────────
+    // This section would integrate with an actual Text-to-Animation API.
     // For now, it's a placeholder that simulates success.
-    let VIDEO_API_KEY_PRIMARY = Deno.env.get("VIDEO_API_KEY_PRIMARY");
-    let VIDEO_API_KEY_SECONDARY = Deno.env.get("VIDEO_API_KEY_SECONDARY");
+    const ANIMATION_API_KEY_PRIMARY = Deno.env.get("ANIMATION_API_KEY_PRIMARY");
+    const ANIMATION_API_KEY_SECONDARY = Deno.env.get("ANIMATION_API_KEY_SECONDARY");
 
-    if (!VIDEO_API_KEY_PRIMARY) {
-      const { data: primaryVSetting } = await supabaseAdmin
-        .from("app_settings").select("value").eq("key", "video_api_key_primary").maybeSingle();
-      if (primaryVSetting?.value) VIDEO_API_KEY_PRIMARY = primaryVSetting.value;
+    let currentAnimationApiKey = ANIMATION_API_KEY_PRIMARY;
+    let animationApiUrl = "https://api.example.com/generate-animation"; // Replace with actual API endpoint
+
+    if (!currentAnimationApiKey) {
+      const { data: primaryASetting } = await supabaseAdmin
+        .from("app_settings").select("value").eq("key", "animation_api_key_primary").maybeSingle();
+      if (primaryASetting?.value) currentAnimationApiKey = primaryASetting.value;
     }
 
-    if (!VIDEO_API_KEY_SECONDARY) {
-      const { data: secondaryVSetting } = await supabaseAdmin
-        .from("app_settings").select("value").eq("key", "video_api_key_secondary").maybeSingle();
-      if (secondaryVSetting?.value) VIDEO_API_KEY_SECONDARY = secondaryVSetting.value;
+    if (!currentAnimationApiKey && ANIMATION_API_KEY_SECONDARY) {
+      const { data: secondaryASetting } = await supabaseAdmin
+        .from("app_settings").select("value").eq("key", "animation_api_key_secondary").maybeSingle();
+      if (secondaryASetting?.value) currentAnimationApiKey = secondaryASetting.value;
     }
 
-    let currentVideoApiKey = VIDEO_API_KEY_PRIMARY;
-    let videoApiUrl = "https://api.example.com/generate-video"; // Replace with actual API endpoint
-
-    if (!currentVideoApiKey && VIDEO_API_KEY_SECONDARY) {
-      currentVideoApiKey = VIDEO_API_KEY_SECONDARY;
-      console.log("Using secondary video API key.");
-    }
-
-    if (!currentVideoApiKey) {
-      throw new Error("Video API key not configured.");
+    if (!currentAnimationApiKey) {
+      throw new Error("Animation API key not configured.");
     }
 
     try {
       // Simulate API call
-      // const videoResp = await fetch(videoApiUrl, {
+      // const animationResp = await fetch(animationApiUrl, {
       //   method: "POST",
-      //   headers: { "Authorization": `Bearer ${currentVideoApiKey}`, "Content-Type": "application/json" },
-      //   body: JSON.stringify({ prompt, style, duration, speechText, bgMusic }),
+      //   headers: { "Authorization": `Bearer ${currentAnimationApiKey}`, "Content-Type": "application/json" },
+      //   body: JSON.stringify({ prompt, style, duration }),
       // });
 
-      // if (videoResp.ok) {
-      //   const data = await videoResp.json();
-      //   generatedVideoUrl = data.videoUrl; // Assuming API returns a video URL
+      // if (animationResp.ok) {
+      //   const data = await animationResp.json();
+      //   generatedAnimationUrl = data.videoUrl; // Assuming API returns a video URL
       // } else {
-      //   console.error("Video API error:", await videoResp.text());
-      //   throw new Error("Failed to generate video from primary API.");
+      //   console.error("Animation API error:", await animationResp.text());
+      //   throw new Error("Failed to generate animation from primary API.");
       // }
 
       // Placeholder for successful generation
-      generatedVideoUrl = `https://example.com/videos/${userId}-${Date.now()}.mp4`;
-      console.log("Video generated successfully (simulated).");
+      generatedAnimationUrl = `https://example.com/animations/${userId}-${Date.now()}.mp4`;
+      console.log("Animation generated successfully (simulated).");
 
     } catch (e: any) {
-      console.error("Video generation failed:", e.message);
+      console.error("Animation generation failed:", e.message);
       return new Response(
-        JSON.stringify({ error: `Video generation failed: ${e.message}` }),
+        JSON.stringify({ error: `Animation generation failed: ${e.message}` }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (!generatedVideoUrl) {
-      throw new Error("No video URL returned.");
+    if (!generatedAnimationUrl) {
+      throw new Error("No animation URL returned.");
     }
 
     // Save output to user store
@@ -235,24 +228,24 @@ serve(async (req) => {
       .from("user_outputs")
       .insert({
         user_id: userId,
-        tool_name: "AI Video Generation",
+        tool_name: "AI Animation",
         output_type: "video",
-        output_content: generatedVideoUrl,
-        metadata: { prompt, style, duration, speechText, bgMusic, creditsUsed: creditCost },
+        output_content: generatedAnimationUrl,
+        metadata: { prompt, style, duration, creditsUsed: creditCost },
       })
       .select()
       .single();
 
     if (saveError) {
-      console.error("Error saving video output:", saveError);
+      console.error("Error saving animation output:", saveError);
       return new Response(
-        JSON.stringify({ error: "Failed to save video output" }),
+        JSON.stringify({ error: "Failed to save animation output" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     return new Response(
-      JSON.stringify({ success: true, videoUrl: generatedVideoUrl, creditsUsed: creditCost, outputId: savedOutput.id }),
+      JSON.stringify({ success: true, animationUrl: generatedAnimationUrl, creditsUsed: creditCost, outputId: savedOutput.id }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: any) {

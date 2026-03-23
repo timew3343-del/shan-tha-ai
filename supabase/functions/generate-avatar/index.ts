@@ -8,12 +8,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-interface GenerateImageRequest {
+interface GenerateAvatarRequest {
   prompt: string;
-  referenceImage?: string;
-  aspectRatio?: string;
-  width?: number;
-  height?: number;
 }
 
 // ─── Vertex AI JWT Auth ─────────────────────────────────────
@@ -108,7 +104,7 @@ serve(async (req) => {
     const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
     const userIsAdmin = isAdminData === true;
 
-    let body: GenerateImageRequest;
+    let body: GenerateAvatarRequest;
     try {
       body = await req.json();
     } catch {
@@ -117,8 +113,8 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { prompt, referenceImage, aspectRatio } = body;
-    const requestedAspectRatio = aspectRatio || "1:1";
+    const { prompt } = body;
+    
 
     if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
       return new Response(
@@ -126,22 +122,17 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    if (prompt.length > 5000) {
+    if (prompt.length > 1000) {
       return new Response(
-        JSON.stringify({ error: "Prompt too long (max 5000 characters)" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    if (referenceImage && referenceImage.length > 10485760) {
-      return new Response(
-        JSON.stringify({ error: "Reference image too large (max 10MB)" }),
+        JSON.stringify({ error: "Prompt too long (max 1000 characters)" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
+
     // ─── Credit cost ────────────────────────────────────────
     const { data: costSetting } = await supabaseAdmin
-      .from("app_settings").select("value").eq("key", "credit_cost_image_generation").maybeSingle();
+      .from("app_settings").select("value").eq("key", "credit_cost_ai_avatar_generation").maybeSingle();
 
     let creditCost: number;
     if (costSetting?.value) {
@@ -150,7 +141,7 @@ serve(async (req) => {
       const { data: marginSetting } = await supabaseAdmin
         .from("app_settings").select("value").eq("key", "profit_margin").maybeSingle();
       const profitMargin = marginSetting?.value ? parseInt(marginSetting.value, 10) : 40;
-      creditCost = Math.ceil(2 * (1 + profitMargin / 100));
+      creditCost = Math.ceil(10 * (1 + profitMargin / 100));
     }
 
     const { data: profile } = await supabaseAdmin
@@ -219,9 +210,9 @@ serve(async (req) => {
       }
     }
 
-    console.log(`Generating image: "${finalPrompt.substring(0, 60)}..." aspect=${requestedAspectRatio}`);
+    console.log(`Generating avatar: "${finalPrompt.substring(0, 60)}..."`);
 
-    let generatedImage: string | null = null;
+    let generatedAvatar: string | null = null;
 
     // ─── Strategy 1: Vertex AI Imagen 4 (PRIMARY) ───────────
     // Check env secret first, then app_settings (admin-uploaded JSON)
@@ -249,21 +240,19 @@ serve(async (req) => {
         let model = "imagen-4.0-generate-001";
         let endpoint = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${model}:predict`;
 
-        const resolution = getVertexResolution(requestedAspectRatio);
+        const resolution = { width: 1024, height: 1024 }; // Fixed for avatar
         const requestBody: any = {
-          instances: [{ prompt: finalPrompt }],
+          instances: [{ prompt: `a professional avatar of a person, ${finalPrompt}` }],
           parameters: {
             sampleCount: 1,
-            aspectRatio: requestedAspectRatio,
+
             outputOptions: { mimeType: "image/png" },
+            width: resolution.width,
+            height: resolution.height,
           },
         };
 
-        // Add reference image if provided
-        if (referenceImage) {
-          const b64 = referenceImage.includes(",") ? referenceImage.split(",")[1] : referenceImage;
-          requestBody.instances[0].image = { bytesBase64Encoded: b64 };
-        }
+
 
         const vertexResp = await fetch(endpoint, {
           method: "POST",
@@ -277,8 +266,8 @@ serve(async (req) => {
           const data = await vertexResp.json();
           const b64Image = data.predictions?.[0]?.bytesBase64Encoded;
           if (b64Image) {
-            generatedImage = `data:image/png;base64,${b64Image}`;
-            console.log("Vertex AI Imagen 4 image generated successfully");
+            generatedAvatar = `data:image/png;base64,${b64Image}`;
+            console.log("Vertex AI avatar generated successfully");
           } else {
             console.warn("Vertex AI returned no image data:", JSON.stringify(data));
           }
@@ -303,8 +292,8 @@ serve(async (req) => {
             const data = await secondaryVertexResp.json();
             const b64Image = data.predictions?.[0]?.bytesBase64Encoded;
             if (b64Image) {
-              generatedImage = `data:image/png;base64,${b64Image}`;
-              console.log("Secondary Vertex AI Imagen 4 image generated successfully");
+              generatedAvatar = `data:image/png;base64,${b64Image}`;
+              console.log("Vertex AI avatar generated successfully");
             } else {
               console.warn("Secondary Vertex AI returned no image data:", JSON.stringify(data));
             }
@@ -312,140 +301,94 @@ serve(async (req) => {
             console.error("Secondary Vertex AI Imagen 4 failed:", secondaryVertexResp.status, await secondaryVertexResp.text());
           }
         } else {
-          console.error("Vertex AI Imagen 4 failed:", vertexResp.status, await vertexResp.text());
-        }stringify(data).substring(0, 300));
-          }
-        } else {
-          const errText = await vertexResp.text();
-          console.warn(`Vertex AI failed: ${vertexResp.status} - ${errText.substring(0, 300)}`);
+          console.error("Primary Vertex AI Imagen 4 failed:", vertexResp.status, await vertexResp.text());
         }
       } catch (e: any) {
-        console.warn(`Vertex AI error: ${e.message}`);
+        console.error("Vertex AI Imagen 4 error:", e.message);
       }
     }
 
-    // ─── Strategy 2: Stability AI (BACKUP) ──────────────────
-    const STABILITY_API_KEY = Deno.env.get("STABILITY_API_KEY");
-    if (!generatedImage && STABILITY_API_KEY) {
-      try {
-        console.log("Falling back to Stability AI...");
-        const fd = new FormData();
-        fd.append("prompt", finalPrompt);
-        fd.append("output_format", "png");
-        fd.append("aspect_ratio", requestedAspectRatio);
-
-        if (referenceImage) {
-          const base64Data = referenceImage.includes(",") ? referenceImage.split(",")[1] : referenceImage;
-          const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-          const blob = new Blob([binaryData], { type: "image/png" });
-          fd.append("image", blob, "reference.png");
-          fd.append("mode", "image-to-image");
-          fd.append("strength", "0.65");
-        }
-
-        const stabResp = await fetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${STABILITY_API_KEY}`, Accept: "image/*" },
-          body: fd,
-        });
-
-        if (stabResp.ok) {
-          const buf = await stabResp.arrayBuffer();
-          const base64 = btoa(new Uint8Array(buf).reduce((data, byte) => data + String.fromCharCode(byte), ""));
-          generatedImage = `data:image/png;base64,${base64}`;
-          console.log("Stability AI image generated successfully (fallback)");
-        } else {
-          const errText = await stabResp.text();
-          console.warn(`Stability AI failed: ${stabResp.status} - ${errText.substring(0, 200)}`);
-        }
-      } catch (e: any) {
-        console.warn(`Stability AI error: ${e.message}`);
+    // ─── Strategy 2: Stability AI (Fallback) ────────────────
+    if (!generatedAvatar) {
+      let STABILITY_API_KEY = Deno.env.get("STABILITY_API_KEY");
+      if (!STABILITY_API_KEY) {
+        const { data: stabilitySetting } = await supabaseAdmin
+          .from("app_settings").select("value").eq("key", "stability_api_key").maybeSingle();
+        if (stabilitySetting?.value) STABILITY_API_KEY = stabilitySetting.value;
       }
-    }
 
-    // ─── Strategy 3: Lovable AI Gateway (last resort) ───────
-    if (!generatedImage && LOVABLE_API_KEY) {
-      try {
-        console.log("Falling back to Lovable AI Gateway...");
-        const messages: any[] = [];
-        if (referenceImage) {
-          messages.push({
-            role: "user",
-            content: [
-              { type: "text", text: `Generate an image based on this reference: ${finalPrompt}` },
-              { type: "image_url", image_url: { url: referenceImage } },
-            ],
+      if (STABILITY_API_KEY) {
+        try {
+          console.log("Trying Stability AI Text-to-Image for Avatar...");
+          const stabilityResp = await fetch("https://api.stability.ai/v1/generation/stable-diffusion-v1-6/text-to-image", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              Authorization: `Bearer ${STABILITY_API_KEY}`,
+            },
+            body: JSON.stringify({
+              text_prompts: [{ text: `a professional avatar of a person, ${finalPrompt}` }],
+              cfg_scale: 7,
+              clip_guidance_preset: "FAST_BLUE",
+              height: 1024,
+              width: 1024,
+              samples: 1,
+              steps: 30,
+              style_preset: "photographic", // Best for avatars
+            }),
           });
-        } else {
-          messages.push({ role: "user", content: `Generate an image: ${finalPrompt}` });
-        }
 
-        const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "google/gemini-2.5-flash-image", messages, modalities: ["image", "text"] }),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const choice = data.choices?.[0]?.message;
-          generatedImage =
-            choice?.images?.[0]?.image_url?.url ||
-            choice?.images?.[0]?.url ||
-            choice?.image_url ||
-            choice?.content_parts?.find((p: any) => p.type === "image")?.image_url?.url ||
-            null;
-          if (!generatedImage && choice?.content && typeof choice.content === "string" && choice.content.startsWith("data:image")) {
-            generatedImage = choice.content;
+          if (stabilityResp.ok) {
+            const data = await stabilityResp.json();
+            if (data.artifacts && data.artifacts.length > 0) {
+              generatedAvatar = `data:image/png;base64,${data.artifacts[0].base64}`;
+              console.log("Stability AI avatar generated successfully");
+            } else {
+              console.warn("Stability AI returned no image data:", JSON.stringify(data));
+            }
+          } else {
+            console.error("Stability AI Text-to-Image failed:", stabilityResp.status, await stabilityResp.text());
           }
-          if (generatedImage) console.log("Lovable AI image generated (last resort)");
+        } catch (e: any) {
+          console.error("Stability AI Text-to-Image error:", e.message);
         }
-      } catch (e: any) {
-        console.warn(`Lovable AI error: ${e.message}`);
       }
     }
 
-    if (!generatedImage) {
-      return new Response(JSON.stringify({ error: "ပုံထုတ်ခြင်း မအောင်မြင်ပါ။ ထပ်မံကြိုးစားပါ။" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    // ─── Deduct credits ─────────────────────────────────────
-    let newBalance = profile.credit_balance;
-    if (!userIsAdmin) {
-      const { data: deductResult } = await supabaseAdmin.rpc("deduct_user_credits", {
-        _user_id: userId, _amount: creditCost, _action: "Image generation",
-      });
-      newBalance = deductResult?.new_balance ?? (profile.credit_balance - creditCost);
-    }
-
-    // Save output to user store
-    if (generatedImage) {
-      const { error: saveError } = await supabaseAdmin
-        .from("user_outputs")
-        .insert({
-          user_id: userId,
-          tool_name: "image-generation",
-          output_type: "image",
-          output_url: generatedImage, // Assuming generatedImage is a URL or can be stored directly
-          metadata: { prompt: finalPrompt, aspectRatio: requestedAspectRatio, referenceImage: referenceImage ? true : false },
-          credits_used: creditCost,
-        });
-
-      if (saveError) {
-        console.error("Error saving user output:", saveError);
-        // Continue even if saving fails, but log the error
-      }
-    }
-
-    return new Response(
-        JSON.stringify({ generatedImage: generatedImage, creditsUsed: creditCost }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    if (!generatedAvatar) {
+      return new Response(
+        JSON.stringify({ error: "Avatar ထုတ်လုပ်ရာတွင် အမှားအယွင်း ဖြစ်ပေါ်နေပါသည်။" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
-  } catch (error: any) {
-    console.error("Generate image error:", error);
+    }
+
+    // ─── Save to user outputs ───────────────────────────────
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from("user_outputs")
+      .upload(`${userId}/avatars/${Date.now()}.png`, base64Decode(generatedAvatar.split(",")[1]), {
+        contentType: "image/png",
+      });
+
+    if (uploadError) {
+      console.error("Avatar upload error:", uploadError);
+      return new Response(
+        JSON.stringify({ error: "Avatar ကို သိမ်းဆည်းရာတွင် အမှားအယွင်း ဖြစ်ပေါ်နေပါသည်။" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { data: publicUrlData } = supabaseAdmin.storage.from("user_outputs").getPublicUrl(uploadData.path);
+    const avatarUrl = publicUrlData.publicUrl;
+
     return new Response(
-      JSON.stringify({ error: error.message || "Internal server error" }),
+      JSON.stringify({ success: true, avatarUrl, creditsUsed: creditCost }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (error: any) {
+    console.error("Error in generate-avatar function:", error.message);
+    return new Response(
+      JSON.stringify({ error: error.message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
