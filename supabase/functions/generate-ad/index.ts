@@ -197,6 +197,48 @@ serve(async (req) => {
       );
     }
 
+    // Deduct credits before processing
+    if (!userIsAdmin) {
+      const { error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
+        _user_id: userId, _amount: creditCost, _action: "ad_generation"
+      });
+
+      if (creditError) {
+        console.error("Credit deduction error:", creditError);
+       // Save output to user store
+    if (enhancedImage || video) {
+      const { error: saveError } = await supabaseAdmin
+        .from("user_outputs")
+        .insert({
+          user_id: userId,
+          tool_name: "AI ကြော်ငြာ ဖန်တီးရန်",
+          output_type: video ? "video" : "image",
+          output_url: video || enhancedImage,
+          metadata: { 
+            productDescription: productDescription,
+            adStyle: adStyle,
+            duration: duration,
+            language: language,
+            voiceGender: voiceGender,
+            adScript: adScript,
+            hasVideo: video ? true : false,
+            hasImage: enhancedImage ? true : false
+          },
+          credits_used: creditCost,
+        });
+
+      if (saveError) {
+        console.error("Error saving user output:", saveError);
+        // Continue even if saving fails, but log the error
+      }
+    }
+
+    return new Response(
+        JSON.stringify({ adScript, enhancedImage, video, creditsUsed: creditCost }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );     }
+    }
+
     if (!userIsAdmin && profile.credit_balance < creditCost) {
       return new Response(
         JSON.stringify({

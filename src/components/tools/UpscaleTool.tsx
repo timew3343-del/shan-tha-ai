@@ -35,7 +35,7 @@ export const UpscaleTool = ({ userId, onBack }: UpscaleToolProps) => {
   const [progress, setProgress] = useState(0);
   const [selectedPreset, setSelectedPreset] = useState("original");
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const { showGuide, markAsLearned, saveOutput } = useToolOutput("upscale", "4K Upscaler");
+  const { showGuide, markAsLearned, saveOutput } = useToolOutput("upscale", "ပုံကြည်လင်အောင်ပြုလုပ်ရန်");
 
   const creditCost = costs.upscale || 1;
 
@@ -106,7 +106,7 @@ export const UpscaleTool = ({ userId, onBack }: UpscaleToolProps) => {
     if (!sourceImage) {
       toast({
         title: "ပုံထည့်ပါ",
-        description: "Upscale လုပ်ရန် ပုံတစ်ပုံ ထည့်ပါ",
+        description: "ကြည်လင်အောင်ပြုလုပ်ရန် ပုံတစ်ပုံ ထည့်ပါ",
         variant: "destructive",
       });
       return;
@@ -115,7 +115,7 @@ export const UpscaleTool = ({ userId, onBack }: UpscaleToolProps) => {
     if ((credits || 0) < creditCost) {
       toast({
         title: "ခရက်ဒစ် မလုံလောက်ပါ",
-        description: `4K Upscale အတွက် ${creditCost} Credit လိုအပ်ပါသည်`,
+        description: `ပုံကြည်လင်အောင်ပြုလုပ်ရန် ${creditCost} Credit လိုအပ်ပါသည်`,
         variant: "destructive",
       });
       return;
@@ -171,13 +171,13 @@ export const UpscaleTool = ({ userId, onBack }: UpscaleToolProps) => {
 
       toast({
         title: "အောင်မြင်ပါသည်",
-        description: `4K Upscale ပြီးပါပြီ (${result.creditsUsed} Credit)`,
+        description: `ပုံကြည်လင်အောင်ပြုလုပ်ပြီးပါပြီ (${result.creditsUsed} Credit)`,
       });
     } catch (error: any) {
       console.error("Upscale error:", error);
       toast({
         title: "အမှားရှိပါသည်",
-        description: error.message || "Upscale လုပ်ရာတွင် ပြဿနာရှိပါသည်",
+        description: error.message || "ပုံကြည်လင်အောင်ပြုလုပ်ရာတွင် ပြဿနာရှိပါသည်",
         variant: "destructive",
       });
     } finally {
@@ -194,12 +194,12 @@ export const UpscaleTool = ({ userId, onBack }: UpscaleToolProps) => {
       className="space-y-4 p-4 pb-24"
     >
       <ToolHeader 
-        title="4K Upscaler" 
-        subtitle="ပုံကို 4K Resolution သို့ မြှင့်တင်ရန်"
+        title="ပုံကြည်လင်အောင်ပြုလုပ်ရန်" 
+        subtitle="ပုံများကို 4K အထိ ကြည်လင်အောင် ပြုလုပ်ပေးပါ"
         onBack={onBack} 
       />
 
-      <FirstOutputGuide toolName="4K Upscaler" steps={["ပုံထည့်ပါ", "4K Upscale နှိပ်ပါ", "ရလဒ် Download လုပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
+      <FirstOutputGuide toolName="ပုံကြည်လင်အောင်ပြုလုပ်ရန်" steps={["ပုံထည့်ပါ", "ကြည်လင်အောင်ပြုလုပ်မည် ခလုတ်ကို နှိပ်ပါ", "ရလဒ်ပုံကို ဒေါင်းလုဒ်လုပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
 
       {/* Source Image Upload */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">
@@ -215,7 +215,7 @@ export const UpscaleTool = ({ userId, onBack }: UpscaleToolProps) => {
         ) : (
           <button onClick={() => imageInputRef.current?.click()} className="w-full h-32 border-2 border-dashed border-primary/30 rounded-xl flex flex-col items-center justify-center gap-2 hover:bg-primary/5 transition-colors">
             <Upload className="w-8 h-8 text-primary" />
-            <span className="text-sm text-muted-foreground font-myanmar">ပုံထည့်ရန် နှိပ်ပါ</span>
+            <span className="text-sm text-muted-foreground font-myanmar">ပုံထည့်ပါ</span>
           </button>
         )}
         <input ref={imageInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
@@ -251,7 +251,7 @@ export const UpscaleTool = ({ userId, onBack }: UpscaleToolProps) => {
           className="space-y-2"
         >
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span className="font-myanmar">4K သို့ မြှင့်တင်နေသည်...</span>
+            <span className="font-myanmar">ပုံကြည်လင်အောင်ပြုလုပ်နေသည်...</span>
             <span>{Math.round(progress)}%</span>
           </div>
           <Progress value={progress} className="h-2" />
@@ -267,12 +267,12 @@ export const UpscaleTool = ({ userId, onBack }: UpscaleToolProps) => {
         {isLoading ? (
           <>
             <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-            Upscale လုပ်နေသည်...
+            ကြည်လင်အောင်ပြုလုပ်နေသည်...
           </>
         ) : (
           <>
             <ZoomIn className="w-5 h-5 mr-2" />
-            4K Upscale ({creditCost} Credit)
+            ကြည်လင်အောင်ပြုလုပ်မည် ({creditCost} Credit)
           </>
         )}
       </Button>

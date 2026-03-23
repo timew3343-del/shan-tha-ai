@@ -82,7 +82,7 @@ export const ProTTSTool = ({ userId, onBack }: Props) => {
   const { toast } = useToast();
   const { credits, refetch } = useCredits(userId);
   const { costs } = useCreditCosts();
-  const { showGuide, saveOutput } = useToolOutput("pro_tts", "Pro Text to Speech");
+  const { showGuide, saveOutput } = useToolOutput("pro_tts", "စာသားမှ အသံဖန်တီးရန်");
 
   const [text, setText] = useState("");
   const [language, setLanguage] = useState("Myanmar (Burmese)");
@@ -122,9 +122,9 @@ export const ProTTSTool = ({ userId, onBack }: Props) => {
         ? `[${language}] ${data.translatedText}` 
         : text.substring(0, 200);
       saveOutput("audio", contentForHistory);
-      toast({ title: "အသံထွက်ပြီးပါပြီ!", description: `${data.creditsUsed} Cr သုံးခဲ့သည်` });
+      toast({ title: "အောင်မြင်ပါသည်", description: `အသံဖန်တီးပြီးပါပြီ (${data.creditsUsed} Credit)` });
     } catch (e: any) {
-      toast({ title: "အမှားရှိပါသည်", description: e.message, variant: "destructive" });
+      toast({ title: "အမှားရှိပါသည်", description: e.message || "အသံဖန်တီးရာတွင် ပြဿနာရှိပါသည်", variant: "destructive" });
     } finally { setIsLoading(false); }
   };
 
@@ -148,20 +148,20 @@ export const ProTTSTool = ({ userId, onBack }: Props) => {
 
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4 p-4 pb-24">
-      <ToolHeader title="Pro Text to Speech" subtitle="ElevenLabs Multilingual v2 | 30 အသံ | 20 ဘာသာစကား" onBack={onBack} />
-      {showGuide && <FirstOutputGuide toolName="Pro Text to Speech" steps={["စာသားရိုက်ထည့်ပါ", "ဘာသာစကားနှင့် အသံရွေးပါ", "အသံထွက်မည် ခလုတ်နှိပ်ပါ"]} show={showGuide} />}
+      <ToolHeader title="စာသားမှ အသံဖန်တီးရန်" subtitle="စာသားများကို သဘာဝကျသော အသံများအဖြစ် ဖန်တီးပေးပါ" onBack={onBack} />
+      {showGuide && <FirstOutputGuide toolName="စာသားမှ အသံဖန်တီးရန်" steps={["စာသားထည့်ပါ", "အသံရွေးချယ်ပါ", "အသံဖန်တီးမည် ခလုတ်ကို နှိပ်ပါ"]} show={showGuide} />}
 
       <div className="gradient-card rounded-2xl p-4 border border-primary/20 space-y-4">
         {/* Text Input */}
         <div>
-          <label className="text-xs text-muted-foreground font-myanmar">စာသားရိုက်ထည့်ပါ (အများဆုံး 5000 လုံး)</label>
-          <Textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="ဒီနေရာမှာ စာရိုက်ထည့်ပါ..." className="mt-1 min-h-[100px] font-myanmar" maxLength={5000} />
+          <label className="text-xs text-muted-foreground font-myanmar">စာသားထည့်ပါ (အများဆုံး 5000 လုံး)</label>
+          <Textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="ဤနေရာတွင် စာသားထည့်ပါ..." className="mt-1 min-h-[100px] font-myanmar" maxLength={5000} />
           <p className="text-[10px] text-muted-foreground text-right mt-1">{text.length}/5000</p>
         </div>
 
         {/* Language */}
         <div>
-          <label className="text-xs text-muted-foreground font-myanmar">Target ဘာသာစကား</label>
+          <label className="text-xs text-muted-foreground font-myanmar">ဘာသာစကား ရွေးချယ်ပါ</label>
           <Select value={language} onValueChange={setLanguage}>
             <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -178,7 +178,7 @@ export const ProTTSTool = ({ userId, onBack }: Props) => {
 
         {/* Gender */}
         <div>
-          <label className="text-xs text-muted-foreground font-myanmar">အသံ အမျိုးအစား</label>
+          <label className="text-xs text-muted-foreground font-myanmar">အသံအမျိုးအစား</label>
           <div className="flex gap-2 mt-1">
             <Button variant={gender === "male" ? "default" : "outline"} size="sm" onClick={() => { setGender("male"); setVoiceId(VOICES.find(v => v.gender === "male")?.id || ""); }} className="flex-1">👨 အမျိုးသား</Button>
             <Button variant={gender === "female" ? "default" : "outline"} size="sm" onClick={() => { setGender("female"); setVoiceId("EXAVITQu4vr4xnSDxMaL"); }} className="flex-1">👩 အမျိုးသမီး</Button>
@@ -203,7 +203,7 @@ export const ProTTSTool = ({ userId, onBack }: Props) => {
         {/* Speed Slider */}
         <div>
           <div className="flex justify-between items-center">
-            <label className="text-xs text-muted-foreground font-myanmar">အသံနှုန်း (Speed)</label>
+            <label className="text-xs text-muted-foreground font-myanmar">အသံအမြန်နှုန်း</label>
             <span className="text-xs font-medium text-primary">{speed.toFixed(1)}x</span>
           </div>
           <Slider value={[speed]} onValueChange={([v]) => setSpeed(v)} min={0.5} max={2.0} step={0.1} className="mt-2" />
@@ -212,7 +212,7 @@ export const ProTTSTool = ({ userId, onBack }: Props) => {
         {/* Stability */}
         <div>
           <div className="flex justify-between items-center">
-            <label className="text-xs text-muted-foreground font-myanmar">Stability (တည်ငြိမ်မှု)</label>
+            <label className="text-xs text-muted-foreground font-myanmar">တည်ငြိမ်မှု</label>
             <span className="text-xs font-medium text-primary">{(stability * 100).toFixed(0)}%</span>
           </div>
           <Slider value={[stability]} onValueChange={([v]) => setStability(v)} min={0} max={1} step={0.05} className="mt-2" />
@@ -221,7 +221,7 @@ export const ProTTSTool = ({ userId, onBack }: Props) => {
         {/* Similarity Boost */}
         <div>
           <div className="flex justify-between items-center">
-            <label className="text-xs text-muted-foreground font-myanmar">Clarity (ကြည်လင်မှု)</label>
+            <label className="text-xs text-muted-foreground font-myanmar">ကြည်လင်ပြတ်သားမှု</label>
             <span className="text-xs font-medium text-primary">{(similarityBoost * 100).toFixed(0)}%</span>
           </div>
           <Slider value={[similarityBoost]} onValueChange={([v]) => setSimilarityBoost(v)} min={0} max={1} step={0.05} className="mt-2" />
@@ -230,7 +230,7 @@ export const ProTTSTool = ({ userId, onBack }: Props) => {
 
       {/* Generate Button */}
       <Button onClick={handleGenerate} disabled={isLoading || !text.trim() || credits < cost} className="w-full bg-primary text-primary-foreground rounded-2xl py-4">
-        {isLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />အသံထွက်နေသည်...</> : <><Volume2 className="w-4 h-4 mr-2" />အသံထွက်မည် ({cost} Cr)</>}
+        {isLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />အသံဖန်တီးနေသည်...</> : <><Volume2 className="w-4 h-4 mr-2" />အသံဖန်တီးမည် ({cost} Credit)</>}
       </Button>
 
       {/* Output */}
@@ -247,7 +247,7 @@ export const ProTTSTool = ({ userId, onBack }: Props) => {
 
           <div className="flex gap-2">
             <Button onClick={togglePlayback} variant="outline" className="flex-1">
-              {isPlaying ? <><Pause className="w-4 h-4 mr-2" />ခဏရပ်</> : <><Play className="w-4 h-4 mr-2" />နားထောင်မည်</>}
+              {isPlaying ? <><Pause className="w-4 h-4 mr-2" />ခေတ္တရပ်နားမည်</> : <><Play className="w-4 h-4 mr-2" />ဖွင့်ရန်</>}
             </Button>
             <Button onClick={handleDownload} variant="outline" className="flex-1">
               <Download className="w-4 h-4 mr-2" />Download

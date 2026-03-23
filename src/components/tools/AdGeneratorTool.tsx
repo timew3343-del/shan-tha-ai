@@ -291,7 +291,7 @@ export const AdGeneratorTool = ({ userId, onBack }: AdGeneratorToolProps) => {
         onBack={onBack}
       />
 
-      <FirstOutputGuide toolName="AI Ad Generator" steps={["ကုန်ပစ္စည်း ပုံထည့်ပါ", "ဖော်ပြချက် ရေးပါ", "Style ရွေးပါ", "Generate နှိပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
+      <FirstOutputGuide toolName="AI ကြော်ငြာ ဖန်တီးရန်" steps={["ထုတ်ကုန်ပုံထည့်ပါ", "ထုတ်ကုန်ဖော်ပြချက်ထည့်ပါ", "ကြော်ငြာဖန်တီးမည် ခလုတ်ကို နှိပ်ပါ", "ရလဒ်ကို ဒေါင်းလုဒ်လုပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
 
       {/* Product Image Upload */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">

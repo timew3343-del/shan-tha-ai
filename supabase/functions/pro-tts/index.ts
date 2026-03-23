@@ -135,6 +135,18 @@ serve(async (req) => {
         return new Response(JSON.stringify({ error: "Insufficient credits", required: creditCost, balance: profile?.credit_balance || 0 }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
+
+      // Deduct credits before processing
+      const { error: creditError } = await supabaseAdmin.rpc("deduct_user_credits", {
+        _user_id: userId, _amount: creditCost, _action: "Pro TTS (ElevenLabs)"
+      });
+      if (creditError) {
+        console.error("Credit deduction error:", creditError);
+        return new Response(
+          JSON.stringify({ error: "Failed to deduct credits" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // Step 1: Translate text to target language
@@ -210,17 +222,6 @@ serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Deduct credits
-    let newBalance = profile?.credit_balance || 0;
-    if (!userIsAdmin) {
-      const { data: deductResult } = await supabaseAdmin.rpc("deduct_user_credits", {
-        _user_id: userId, _amount: creditCost, _action: "Pro TTS (ElevenLabs)"
-      });
-      newBalance = deductResult?.new_balance ?? (profile!.credit_balance - creditCost);
-    } else {
-      console.log("[Pro TTS] Admin free access - skipping credit deduction");
-    }
-
     const audioBuffer = await ttsResponse.arrayBuffer();
     const audioBase64 = base64Encode(audioBuffer);
 
@@ -246,7 +247,7 @@ serve(async (req) => {
       translatedText: wasTranslated ? finalText : undefined,
       targetLanguage: targetLang,
       creditsUsed: userIsAdmin ? 0 : creditCost,
-      newBalance,
+      newBalance: profile!.credit_balance - creditCost,
     }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (error: any) {

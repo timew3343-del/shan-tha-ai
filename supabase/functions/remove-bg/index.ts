@@ -109,6 +109,22 @@ serve(async (req) => {
       .eq("user_id", userId)
       .single();
 
+        // Deduct credits before processing
+    if (!userIsAdmin) {
+      const { error: creditError } = await supabaseAdmin
+        .from("profiles")
+        .update({ credit_balance: profile.credit_balance - creditCost })
+        .eq("user_id", userId);
+
+      if (creditError) {
+        console.error("Credit deduction error:", creditError);
+        return new Response(
+          JSON.stringify({ error: "Failed to deduct credits" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     if (!userIsAdmin && (!profile || profile.credit_balance < creditCost)) {
       return new Response(
         JSON.stringify({ error: "ခရက်ဒစ် မလုံလောက်ပါ", required: creditCost }),
@@ -220,10 +236,29 @@ serve(async (req) => {
     // Save output to user_outputs
     try {
       await supabaseAdmin.from("user_outputs").insert({
-        user_id: userId, tool_id: "remove_bg", tool_name: "Background Removal",
+        user_id: userId, tool_id: "remove_bg", tool_name: "Bg Remove",
         output_type: "image", file_url: result.output,
       });
     } catch (e) { console.warn("Failed to save BG removal output:", e); }
+
+        // Save output to user_outputs
+    if (result.output) {
+      const { error: saveError } = await supabaseAdmin
+        .from("user_outputs")
+        .insert({
+          user_id: userId,
+          tool_name: "Bg Remove",
+          output_type: "image",
+          output_url: result.output,
+          metadata: { originalImageSize: imageBase64.length },
+          credits_used: creditCost,
+        });
+
+      if (saveError) {
+        console.error("Error saving user output:", saveError);
+        // Continue even if saving fails, but log the error
+      }
+    }
 
     return new Response(
       JSON.stringify({

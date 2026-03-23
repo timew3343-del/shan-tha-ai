@@ -30,7 +30,7 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
   const [statusText, setStatusText] = useState("");
   const [selectedAspect, setSelectedAspect] = useState<{ key: string; w: number; h: number; ratio: string }>({ key: "square", w: 1024, h: 1024, ratio: "1:1" });
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { showGuide, markAsLearned, saveOutput } = useToolOutput("image-gen", "ပုံထုတ်ရန်");
+  const { showGuide, markAsLearned, saveOutput } = useToolOutput("image-gen", "ပုံဖန်တီးရန်");
 
   // Progress simulation with status updates
   useEffect(() => {
@@ -40,7 +40,7 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
       const statuses = [
         "Prompt ကို ပြင်ဆင်နေသည်...",
         "AI မော်ဒယ်သို့ ပို့နေသည်...",
-        "ပုံထုတ်နေသည်...",
+        "ပုံဖန်တီးနေသည်...",
         "အပြီးသတ်နေသည်...",
       ];
       let statusIndex = 0;
@@ -91,7 +91,7 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
     if (!prompt.trim()) {
       toast({
         title: "စာသားထည့်ပါ",
-        description: "ပုံဆွဲရန် prompt စာသားထည့်ပါ",
+        description: "ပုံဖန်တီးရန် ဖော်ပြချက် ထည့်ပါ",
         variant: "destructive",
       });
       return;
@@ -100,7 +100,7 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
     if (!userId) {
       toast({
         title: "လော့ဂ်အင်လုပ်ပါ",
-        description: "ပုံထုတ်ရန် အကောင့်ဝင်ပါ",
+        description: "ပုံဖန်တီးရန် အကောင့်ဝင်ပါ",
         variant: "destructive",
       });
       return;
@@ -115,7 +115,7 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
       if (!session?.access_token) {
         toast({
           title: "လော့ဂ်အင်လုပ်ပါ",
-          description: "ပုံထုတ်ရန် အကောင့်ဝင်ပါ",
+          description: "ပုံဖန်တီးရန် အကောင့်ဝင်ပါ",
           variant: "destructive",
         });
         return;
@@ -137,7 +137,7 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
         if (data.error === "Insufficient credits") {
           toast({
             title: "ခရက်ဒစ် မလုံလောက်ပါ",
-            description: `ပုံထုတ်ရန် ${data.required} Credits လိုအပ်ပါသည်`,
+            description: `ပုံဖန်တီးရန် ${data.required} Credits လိုအပ်ပါသည်`,
             variant: "destructive",
           });
         } else {
@@ -153,14 +153,14 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
         saveOutput("image", finalImage);
         toast({
           title: "အောင်မြင်ပါသည်",
-          description: `ပုံထုတ်ပြီးပါပြီ (${data.creditsUsed} Credits)`,
+          description: `ပုံဖန်တီးပြီးပါပြီ (${data.creditsUsed} Credits)`,
         });
       }
     } catch (error: any) {
       console.error("Image generation error:", error);
       toast({
         title: "အမှားရှိပါသည်",
-        description: error.message || "ပုံထုတ်ရာတွင် ပြဿနာရှိပါသည်",
+        description: error.message || "ပုံဖန်တီးရာတွင် ပြဿနာရှိပါသည်",
         variant: "destructive",
       });
     } finally {
@@ -184,12 +184,12 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
       className="space-y-4 p-4 pb-24"
     >
       <ToolHeader 
-        title="ပုံထုတ်ရန်" 
-        subtitle="AI ဖြင့် ပုံဆွဲခြင်း"
+        title="ပုံဖန်တီးရန်" 
+        subtitle="AI ဖြင့် ပုံများ ဖန်တီးခြင်း"
         onBack={onBack} 
       />
 
-      <FirstOutputGuide toolName="ပုံထုတ်ရန်" steps={["Prompt စာသား ထည့်ပါ", "Generate ခလုတ်ကို နှိပ်ပါ", "ရလဒ်ပုံကို Download လုပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
+      <FirstOutputGuide toolName="ပုံဖန်တီးရန်" steps={["ဖော်ပြချက် ထည့်ပါ", "ဖန်တီးမည် ခလုတ်ကို နှိပ်ပါ", "ရလဒ်ပုံကို ဒေါင်းလုဒ်လုပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
 
       {/* Reference Image Upload */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">
@@ -217,7 +217,7 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
             className="w-24 h-24 border-2 border-dashed border-primary/30 rounded-xl flex flex-col items-center justify-center gap-1 hover:bg-primary/5 transition-colors"
           >
             <Plus className="w-6 h-6 text-primary" />
-            <span className="text-xs text-muted-foreground font-myanmar">ပုံထည့်ရန်</span>
+            <span className="text-xs text-muted-foreground font-mya<span>ပုံထည့်ပါ</span>
           </button>
         )}
         
@@ -265,7 +265,7 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
           ပုံဖော်ပြချက်
         </label>
         <Textarea
-          placeholder="ဥပမာ - နေဝင်ချိန် ပင်လယ်ကမ်းခြေ ပုံဆွဲပေးပါ..."
+          placeholder="ဥပမာ - နေဝင်ချိန် ပင်လယ်ကမ်းခြေ ပုံတစ်ပုံ ဖန်တီးပေးပါ..."
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           className="min-h-[80px] bg-background/50 border-primary/30 rounded-xl resize-none text-sm font-myanmar"
@@ -280,7 +280,7 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
           className="space-y-2"
         >
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span className="font-myanmar">{statusText || "ပုံထုတ်နေသည်..."}</span>
+            <span className="font-myanmar">{statusText || "ပုံဖန်တီးနေသည်..."}</span>
             <span>{Math.round(progress)}%</span>
           </div>
           <Progress value={progress} className="h-2" />
@@ -296,12 +296,12 @@ export const ImageTool = ({ userId, onBack }: ImageToolProps) => {
         {isLoading ? (
           <>
             <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-            ပုံထုတ်နေသည်...
+            ပုံဖန်တီးနေသည်...
           </>
         ) : (
           <>
             <Image className="w-5 h-5 mr-2" />
-            ပုံထုတ်မည် ({costs.image_generation} Credits)
+            ပုံဖန်တီးမည် ({costs.image_generation} Credits)
           </>
         )}
       </Button>

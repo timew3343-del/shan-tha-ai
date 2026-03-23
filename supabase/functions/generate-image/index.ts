@@ -162,6 +162,22 @@ serve(async (req) => {
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+        // Deduct credits before processing
+    if (!userIsAdmin) {
+      const { error: creditError } = await supabaseAdmin
+        .from("profiles")
+        .update({ credit_balance: profile.credit_balance - creditCost })
+        .eq("user_id", userId);
+
+      if (creditError) {
+        console.error("Credit deduction error:", creditError);
+        return new Response(
+          JSON.stringify({ error: "Failed to deduct credits" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     if (!userIsAdmin && profile.credit_balance < creditCost) {
       return new Response(
         JSON.stringify({ error: "Insufficient credits", required: creditCost, balance: profile.credit_balance }),
@@ -363,10 +379,29 @@ serve(async (req) => {
       newBalance = deductResult?.new_balance ?? (profile.credit_balance - creditCost);
     }
 
+    // Save output to user store
+    if (generatedImage) {
+      const { error: saveError } = await supabaseAdmin
+        .from("user_outputs")
+        .insert({
+          user_id: userId,
+          tool_name: "image-generation",
+          output_type: "image",
+          output_url: generatedImage, // Assuming generatedImage is a URL or can be stored directly
+          metadata: { prompt: finalPrompt, aspectRatio: requestedAspectRatio, referenceImage: referenceImage ? true : false },
+          credits_used: creditCost,
+        });
+
+      if (saveError) {
+        console.error("Error saving user output:", saveError);
+        // Continue even if saving fails, but log the error
+      }
+    }
+
     return new Response(
-      JSON.stringify({ success: true, image: generatedImage, creditsUsed: userIsAdmin ? 0 : creditCost, newBalance }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+        JSON.stringify({ generatedImage: generatedImage, creditsUsed: creditCost }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
   } catch (error: any) {
     console.error("Generate image error:", error);
     return new Response(

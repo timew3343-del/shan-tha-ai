@@ -206,7 +206,7 @@ serve(async (req) => {
     // Save output to user_outputs
     try {
       await supabaseAdmin.from("user_outputs").insert({
-        user_id: userId, tool_id: "upscale", tool_name: "Image Upscale",
+        user_id: userId, tool_id: "upscale", tool_name: "4K Upscale",
         output_type: "image", file_url: result.output,
       });
     } catch (e) { console.warn("Failed to save upscale output:", e); }

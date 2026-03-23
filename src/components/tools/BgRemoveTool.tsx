@@ -26,7 +26,7 @@ export const BgRemoveTool = ({ userId, onBack }: BgRemoveToolProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const { showGuide, markAsLearned, saveOutput } = useToolOutput("bg-remove", "Background Remover");
+  const { showGuide, markAsLearned, saveOutput } = useToolOutput("bg-remove", "နောက်ခံဖယ်ရှားရန်");
 
   const creditCost = costs.bg_remove || 1;
 
@@ -60,7 +60,7 @@ export const BgRemoveTool = ({ userId, onBack }: BgRemoveToolProps) => {
     if (!sourceImage) {
       toast({
         title: "ပုံထည့်ပါ",
-        description: "Background ဖယ်ရန် ပုံတစ်ပုံ ထည့်ပါ",
+        description: "နောက်ခံဖယ်ရှားရန် ပုံတစ်ပုံ ထည့်ပါ",
         variant: "destructive",
       });
       return;
@@ -69,7 +69,7 @@ export const BgRemoveTool = ({ userId, onBack }: BgRemoveToolProps) => {
     if ((credits || 0) < creditCost) {
       toast({
         title: "ခရက်ဒစ် မလုံလောက်ပါ",
-        description: `Background Remove အတွက် ${creditCost} Credit လိုအပ်ပါသည်`,
+        description: `နောက်ခံဖယ်ရှားရန် ${creditCost} Credit လိုအပ်ပါသည်`,
         variant: "destructive",
       });
       return;
@@ -123,13 +123,13 @@ export const BgRemoveTool = ({ userId, onBack }: BgRemoveToolProps) => {
 
       toast({
         title: "အောင်မြင်ပါသည်",
-        description: `Background ဖယ်ပြီးပါပြီ (${result.creditsUsed} Credit)`,
+        description: `နောက်ခံဖယ်ရှားပြီးပါပြီ (${result.creditsUsed} Credit)`,
       });
     } catch (error: any) {
       console.error("BG Remove error:", error);
       toast({
         title: "အမှားရှိပါသည်",
-        description: error.message || "Background ဖယ်ရာတွင် ပြဿနာရှိပါသည်",
+        description: error.message || "နောက်ခံဖယ်ရှားရာတွင် ပြဿနာရှိပါသည်",
         variant: "destructive",
       });
     } finally {
@@ -146,12 +146,12 @@ export const BgRemoveTool = ({ userId, onBack }: BgRemoveToolProps) => {
       className="space-y-4 p-4 pb-24"
     >
       <ToolHeader 
-        title="Background Remover" 
-        subtitle="ပုံမှ Background ကို ချက်ခြင်းဖယ်ရှားရန်"
+        title="နောက်ခံဖယ်ရှားရန်" 
+        subtitle="ပုံများမှ နောက်ခံများကို ဖယ်ရှားပေးပါ"
         onBack={onBack} 
       />
 
-      <FirstOutputGuide toolName="Background Remover" steps={["ပုံထည့်ပါ", "Background ဖယ်မည် နှိပ်ပါ", "ရလဒ် Download လုပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
+      <FirstOutputGuide toolName="နောက်ခံဖယ်ရှားရန်" steps={["ပုံထည့်ပါ", "နောက်ခံဖယ်ရှားမည် ခလုတ်ကို နှိပ်ပါ", "ရလဒ်ပုံကို ဒေါင်းလုဒ်လုပ်ပါ"]} show={showGuide} onDismiss={markAsLearned} />
 
       {/* Source Image Upload */}
       <div className="gradient-card rounded-2xl p-4 border border-primary/20">
@@ -180,7 +180,7 @@ export const BgRemoveTool = ({ userId, onBack }: BgRemoveToolProps) => {
             className="w-full h-32 border-2 border-dashed border-primary/30 rounded-xl flex flex-col items-center justify-center gap-2 hover:bg-primary/5 transition-colors"
           >
             <Upload className="w-8 h-8 text-primary" />
-            <span className="text-sm text-muted-foreground font-myanmar">ပုံထည့်ရန် နှိပ်ပါ</span>
+            <span className="text-sm text-muted-foreground font-myanmar">ပုံထည့်ပါ</span>
           </button>
         )}
         
@@ -201,7 +201,7 @@ export const BgRemoveTool = ({ userId, onBack }: BgRemoveToolProps) => {
           className="space-y-2"
         >
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span className="font-myanmar">Background ဖယ်ရှားနေသည်...</span>
+            <span className="font-myanmar">နောက်ခံဖယ်ရှားနေသည်...</span>
             <span>{Math.round(progress)}%</span>
           </div>
           <Progress value={progress} className="h-2" />
@@ -217,12 +217,12 @@ export const BgRemoveTool = ({ userId, onBack }: BgRemoveToolProps) => {
         {isLoading ? (
           <>
             <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-            Background ဖယ်နေသည်...
+            နောက်ခံဖယ်ရှားနေသည်...
           </>
         ) : (
           <>
             <Eraser className="w-5 h-5 mr-2" />
-            Background ဖယ်မည် ({creditCost} Credit)
+            နောက်ခံဖယ်ရှားမည် ({creditCost} Credit)
           </>
         )}
       </Button>
