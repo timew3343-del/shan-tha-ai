@@ -120,8 +120,6 @@ export const AIMusicTool = ({ userId }: { userId?: string }) => {
       </CardContent>
     </Card>
   );
-};
-          {outputs.map((output) => (
             <div key={output.id} className="border rounded-xl p-4 bg-card text-card-foreground shadow-sm hover:shadow-md transition-shadow">
               <div className="flex justify-between items-start mb-3">
                 <div>
