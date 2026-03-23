@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useToolOutput } from "@/hooks/useToolOutput";
 import { useCredits } from "@/hooks/useCredits";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 
 export const AIMusicTool = ({ userId }: { userId?: string }) => {
@@ -73,7 +73,7 @@ export const AIMusicTool = ({ userId }: { userId?: string }) => {
             <Label htmlFor="prompt">Music Prompt / Lyrics</Label>
             <Textarea
               id="prompt"
-              placeholder="သင်ဖန်တီးလိုသော သီချင်းအမျိုးအစား သို့မဟုတ် စိတ်ကူးကို ရိုက်ထည့်ပါ။ (ဥပမာ: 'ပျော်ရွှင်စရာ ပေါ့ပ်သီချင်း', 'စိတ်အေးချမ်းဖွယ် တူရိယာသံ')"
+              placeholder="သင်ဖန်တီးလိုသော သီချင်းအမျိုးအစား သို့မဟုတ် စိတ်ကူးကို ရိုက်ထည့်ပါ။"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               rows={5}
@@ -116,25 +116,6 @@ export const AIMusicTool = ({ userId }: { userId?: string }) => {
               <><Music className="w-5 h-5 mr-2" />သီချင်းဖန်တီးရန်</>
             )}
           </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-            <div key={output.id} className="border rounded-xl p-4 bg-card text-card-foreground shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <h4 className="font-semibold text-lg">{output.metadata?.title || "Untitled Song"}</h4>
-                  <p className="text-sm text-muted-foreground line-clamp-1">Prompt: {output.metadata?.prompt}</p>
-                </div>
-                <Button variant="ghost" size="icon" asChild>
-                  <a href={output.value} download={`ai_music_${output.id}.mp3`} target="_blank" rel="noopener noreferrer">
-                    <Download className="w-5 h-5" />
-                  </a>
-                </Button>
-              </div>
-              <audio controls src={output.value} className="w-full" />
-            </div>
-          ))}
         </div>
       </CardContent>
     </Card>
