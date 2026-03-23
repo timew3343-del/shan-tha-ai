@@ -5,18 +5,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Video, Download, Upload, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useUser } from "@/hooks/useUser";
-import { useCreditBalance } from "@/hooks/useCreditBalance";
-import { useToolOutput } from "@/hooks/useToolOutput";
+import { useCredits } from "@/hooks/useCredits";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 
-export const ImageToVideoTool = () => {
+export const ImageToVideoTool = ({ userId }: { userId?: string }) => {
   const { toast } = useToast();
-  const { user } = useUser();
-  const { refreshCreditBalance } = useCreditBalance();
-  const { addOutput, getOutputsForTool } = useToolOutput("image-to-video");
-  const outputs = getOutputsForTool();
+  const { refetch: refreshCreditBalance } = useCredits(userId);
 
   const [prompt, setPrompt] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
