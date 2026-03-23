@@ -5,18 +5,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Video, Download, Upload, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useUser } from "@/hooks/useUser";
-import { useCreditBalance } from "@/hooks/useCreditBalance";
-import { useToolOutput } from "@/hooks/useToolOutput";
+import { useCredits } from "@/hooks/useCredits";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 
-export const ImageToVideoTool = () => {
+export const ImageToVideoTool = ({ userId }: { userId?: string }) => {
   const { toast } = useToast();
-  const { user } = useUser();
-  const { refreshCreditBalance } = useCreditBalance();
-  const { addOutput, getOutputsForTool } = useToolOutput("image-to-video");
-  const outputs = getOutputsForTool();
+  const { refetch: refreshCreditBalance } = useCredits(userId);
 
   const [prompt, setPrompt] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -29,7 +24,7 @@ export const ImageToVideoTool = () => {
   };
 
   const handleGenerateVideo = async () => {
-    if (!user) {
+    if (!userId) {
       toast({ title: "Login လိုအပ်ပါသည်", description: "ဗီဒီယိုထုတ်ရန်အတွက် Login ဝင်ပေးပါ။", variant: "destructive" });
       return;
     }
@@ -128,25 +123,6 @@ export const ImageToVideoTool = () => {
               <><Video className="w-5 h-5 mr-2" />ဗီဒီယိုထုတ်ရန်</>
             )}
           </Button>
-        </div>
-
-        <div className="space-y-4 mt-8">
-          {outputs.map((output) => (
-            <div key={output.id} className="border rounded-xl p-4 bg-card text-card-foreground shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <h4 className="font-semibold text-lg">AI Video #{output.id.slice(-4)}</h4>
-                  <p className="text-sm text-muted-foreground line-clamp-1">Prompt: {output.metadata?.prompt || "No prompt"}</p>
-                </div>
-                <Button variant="ghost" size="icon" asChild>
-                  <a href={output.value} download={`ai_video_${output.id}.mp4`} target="_blank" rel="noopener noreferrer">
-                    <Download className="w-5 h-5" />
-                  </a>
-                </Button>
-              </div>
-              <video controls src={output.value} className="w-full rounded-lg" />
-            </div>
-          ))}
         </div>
       </CardContent>
     </Card>

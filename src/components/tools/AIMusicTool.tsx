@@ -5,19 +5,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Music, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useUser } from "@/hooks/useUser";
-import { useCreditBalance } from "@/hooks/useCreditBalance";
 import { useToolOutput } from "@/hooks/useToolOutput";
-import { FirstOutputGuide } from "@/components/FirstOutputGuide";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { useCredits } from "@/hooks/useCredits";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 
-export const AIMusicTool = () => {
+export const AIMusicTool = ({ userId }: { userId?: string }) => {
   const { toast } = useToast();
-  const { user } = useUser();
-  const { creditBalance, refreshCreditBalance } = useCreditBalance();
-  const { addOutput, getOutputsForTool } = useToolOutput("ai-music-generation");
-  const outputs = getOutputsForTool();
+  const { refetch: refreshCreditBalance } = useCredits(userId);
+  const { saveOutput } = useToolOutput("ai-music-generation", "AI Music");
 
   const [prompt, setPrompt] = useState("");
   const [tags, setTags] = useState("pop, upbeat, happy");
@@ -25,7 +21,7 @@ export const AIMusicTool = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleGenerateMusic = async () => {
-    if (!user) {
+    if (!userId) {
       toast({ title: "Login လိုအပ်ပါသည်", description: "သီချင်းဖန်တီးရန်အတွက် Login ဝင်ပေးပါ။", variant: "destructive" });
       return;
     }
@@ -77,7 +73,7 @@ export const AIMusicTool = () => {
             <Label htmlFor="prompt">Music Prompt / Lyrics</Label>
             <Textarea
               id="prompt"
-              placeholder="သင်ဖန်တီးလိုသော သီချင်းအမျိုးအစား သို့မဟုတ် စိတ်ကူးကို ရိုက်ထည့်ပါ။ (ဥပမာ: 'ပျော်ရွှင်စရာ ပေါ့ပ်သီချင်း', 'စိတ်အေးချမ်းဖွယ် တူရိယာသံ')"
+              placeholder="သင်ဖန်တီးလိုသော သီချင်းအမျိုးအစား သို့မဟုတ် စိတ်ကူးကို ရိုက်ထည့်ပါ။"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               rows={5}
@@ -120,38 +116,6 @@ export const AIMusicTool = () => {
               <><Music className="w-5 h-5 mr-2" />သီချင်းဖန်တီးရန်</>
             )}
           </Button>
-        </div>
-
-        {outputs.length === 0 && !isLoading && (
-          <FirstOutputGuide
-            title="AI Music Generation Tool"
-            description="သင်၏ စိတ်ကူးများကို သီချင်းအဖြစ် ဖန်တီးပါ။"
-            steps={[
-              "သင်ဖန်တီးလိုသော သီချင်းအမျိုးအစား သို့မဟုတ် စိတ်ကူးကို ရိုက်ထည့်ပါ။",
-              "သီချင်းပုံစံ (Style Tags) များကို သတ်မှတ်ပါ။",
-              "'သီချင်းဖန်တီးရန်' ခလုတ်ကို နှိပ်ပါ။",
-              "သင်၏ ဖန်တီးထားသော သီချင်းကို နားဆင်ပြီး download လုပ်ပါ။",
-            ]}
-          />
-        )}
-
-        <div className="space-y-4 mt-8">
-          {outputs.map((output) => (
-            <div key={output.id} className="border rounded-xl p-4 bg-card text-card-foreground shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <h4 className="font-semibold text-lg">{output.metadata?.title || "Untitled Song"}</h4>
-                  <p className="text-sm text-muted-foreground line-clamp-1">Prompt: {output.metadata?.prompt}</p>
-                </div>
-                <Button variant="ghost" size="icon" asChild>
-                  <a href={output.value} download={`ai_music_${output.id}.mp3`} target="_blank" rel="noopener noreferrer">
-                    <Download className="w-5 h-5" />
-                  </a>
-                </Button>
-              </div>
-              <audio controls src={output.value} className="w-full" />
-            </div>
-          ))}
         </div>
       </CardContent>
     </Card>
