@@ -6,7 +6,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// Safe base64 encoding for large buffers (fixes "Maximum call stack size exceeded")
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   const chunkSize = 8192;
@@ -18,7 +17,6 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(result);
 }
 
-// Fetch OpenAI key dynamically from app_settings
 async function getOpenAIKey(supabaseAdmin: any): Promise<string | null> {
   const { data: settings } = await supabaseAdmin
     .from("app_settings").select("key, value")
@@ -41,19 +39,12 @@ function escapeHtml(text: string): string {
 function estimateVoiceoverSeconds(text: string, language: string): number {
   const content = text.trim();
   if (!content) return 8;
-
   const charCount = content.replace(/\s+/g, "").length;
   const words = content.split(/\s+/).filter(Boolean).length;
-  const rateByLanguage: Record<string, number> = {
-    my: 7.5,
-    th: 10,
-    en: 2.35,
-  };
-
+  const rateByLanguage: Record<string, number> = { my: 7.5, th: 10, en: 2.35 };
   const estimated = language === "en"
     ? words / rateByLanguage.en
     : charCount / (rateByLanguage[language] || 8);
-
   return Math.max(8, Math.ceil(estimated));
 }
 
@@ -77,9 +68,7 @@ function splitVoiceoverToCaptions(
   preferredCaptions?: string[],
 ): Array<{ text: string; start: number; length: number }> {
   const lines = (preferredCaptions?.length ? preferredCaptions : buildCaptionLines(text)).filter(Boolean);
-
   if (lines.length === 0) return [];
-
   const baseLength = totalDurationSec / lines.length;
   return lines.map((line, index) => ({
     text: line,
@@ -105,7 +94,6 @@ function normalizeAdScriptResponse(raw: any, fallbackLanguage: string) {
   const subtitleLines = Array.isArray(raw?.subtitle_lines)
     ? raw.subtitle_lines.map((line: unknown) => String(line || "").trim()).filter(Boolean)
     : [];
-
   return {
     language: raw?.language || fallbackLanguage,
     voiceover: String(raw?.voiceover || "").trim(),
@@ -177,6 +165,92 @@ async function callAIWithFailover(
   return normalizeAdScriptResponse({ voiceover: "", scenes: [], cta: "Shop Now" }, fallbackLanguage);
 }
 
+// ===== TTS: ElevenLabs (primary for Myanmar/Thai) + OpenAI fallback (English) =====
+async function generateVoiceover(
+  supabaseAdmin: any,
+  voiceoverText: string,
+  language: string,
+): Promise<{ audioBuffer: ArrayBuffer | null; provider: string }> {
+  if (!voiceoverText?.trim()) return { audioBuffer: null, provider: "none" };
+
+  // For Myanmar and Thai, use ElevenLabs Multilingual v2 (supports these languages natively)
+  // For English, try OpenAI first then ElevenLabs fallback
+  const useElevenLabsPrimary = language === "my" || language === "th";
+
+  // --- ElevenLabs Multilingual v2 ---
+  const elevenLabsKey = Deno.env.get("ELEVENLABS_API_KEY");
+  if (elevenLabsKey && (useElevenLabsPrimary || language === "en")) {
+    try {
+      // Voice selection: use a clear, natural-sounding voice
+      const voiceId = "EXAVITQu4vr4xnSDxMaL"; // "Bella" - works well with Multilingual v2
+      console.log(`[Auto-Ad TTS] ElevenLabs Multilingual v2: lang=${language}, voiceId=${voiceId}`);
+
+      const elevenResp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+        method: "POST",
+        headers: {
+          "xi-api-key": elevenLabsKey,
+          "Content-Type": "application/json",
+          "Accept": "audio/mpeg",
+        },
+        body: JSON.stringify({
+          text: voiceoverText,
+          model_id: "eleven_multilingual_v2",
+          voice_settings: {
+            stability: 0.6,
+            similarity_boost: 0.78,
+            style: 0.35,
+            use_speaker_boost: true,
+          },
+        }),
+      });
+
+      if (elevenResp.ok) {
+        const audioBuffer = await elevenResp.arrayBuffer();
+        console.log(`[Auto-Ad TTS] ElevenLabs SUCCESS: ${audioBuffer.byteLength} bytes`);
+        return { audioBuffer, provider: "elevenlabs" };
+      } else {
+        const errText = await elevenResp.text();
+        console.warn(`[Auto-Ad TTS] ElevenLabs failed: ${elevenResp.status} - ${errText.substring(0, 150)}`);
+      }
+    } catch (err: any) {
+      console.warn(`[Auto-Ad TTS] ElevenLabs error: ${err.message}`);
+    }
+  }
+
+  // --- OpenAI TTS fallback (only useful for English) ---
+  if (language === "en") {
+    const openaiKey = await getOpenAIKey(supabaseAdmin);
+    if (openaiKey) {
+      try {
+        console.log("[Auto-Ad TTS] OpenAI TTS fallback for English");
+        const ttsResp = await fetch("https://api.openai.com/v1/audio/speech", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "tts-1-hd",
+            voice: "alloy",
+            input: voiceoverText,
+            format: "mp3",
+          }),
+        });
+        if (ttsResp.ok) {
+          const audioBuffer = await ttsResp.arrayBuffer();
+          console.log(`[Auto-Ad TTS] OpenAI SUCCESS: ${audioBuffer.byteLength} bytes`);
+          return { audioBuffer, provider: "openai" };
+        } else {
+          console.warn(`[Auto-Ad TTS] OpenAI failed: ${ttsResp.status}`);
+          const _ = await ttsResp.text(); // consume body
+        }
+      } catch (err: any) {
+        console.warn(`[Auto-Ad TTS] OpenAI error: ${err.message}`);
+      }
+    }
+  }
+
+  console.warn("[Auto-Ad TTS] No TTS provider available for language:", language);
+  return { audioBuffer: null, provider: "none" };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -195,12 +269,10 @@ serve(async (req) => {
     }
 
     const userId = user.id;
-
-    // Check admin
     const { data: isAdminData } = await supabaseAdmin.rpc("has_role", { _user_id: userId, _role: "admin" });
     const userIsAdmin = isAdminData === true;
 
-    const { images, productDetails, language, resolution, platforms, adStyle, showSubtitles, videoDurationMinutes } = await req.json();
+    const { images, productDetails, language, platforms, adStyle, showSubtitles, videoDurationMinutes } = await req.json();
     const requestedDurationMin = Math.min(Math.max(videoDurationMinutes || 1, 1), 10);
 
     if (!images?.length || !productDetails) {
@@ -209,7 +281,7 @@ serve(async (req) => {
 
     console.log(`Auto Ad: user=${userId}, images=${images.length}, platforms=${platforms.join(",")}, lang=${language}, duration=${requestedDurationMin}min`);
 
-    // Get credit cost from admin settings
+    // Credit cost calculation
     const { data: costSetting } = await supabaseAdmin.from("app_settings").select("value").eq("key", "credit_cost_auto_ad").maybeSingle();
     let creditCost: number;
     if (costSetting?.value) {
@@ -224,13 +296,13 @@ serve(async (req) => {
       creditCost = perPlatformCost * platforms.length;
     }
 
-    // Admin bypass + Check balance
+    // Balance check
     const { data: profile } = await supabaseAdmin.from("profiles").select("credit_balance").eq("user_id", userId).single();
     if (!userIsAdmin && (!profile || profile.credit_balance < creditCost)) {
       return new Response(JSON.stringify({ error: "ခရက်ဒစ် မလုံလောက်ပါ", required: creditCost }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Get API keys
+    // API keys
     const { data: apiKeySettings } = await supabaseAdmin.from("app_settings").select("key, value").in("key", ["stability_api_key", "shotstack_api_key"]);
     const keyMap: Record<string, string> = {};
     apiKeySettings?.forEach((k: any) => { keyMap[k.key] = k.value || ""; });
@@ -242,9 +314,8 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "AI service not configured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Step 1: Generate ad script with AI failover
+    // ===== Step 1: Generate ad script =====
     console.log("Step 1: Generating ad script...");
-
     const langMap: Record<string, string> = { my: "Myanmar (Burmese)", en: "English", th: "Thai" };
     const langName = langMap[language] || "Myanmar (Burmese)";
     const requestedTimelineDuration = requestedDurationMin * 60;
@@ -278,14 +349,32 @@ Product details:\n${productDetails}`,
       },
     ], language);
 
-    console.log("Ad script generated");
+    console.log(`Ad script generated: voiceover=${adScript?.voiceover?.length || 0} chars, subtitles=${adScript?.subtitle_lines?.length || 0}`);
 
-    // Step 2: Prepare visual + audio assets for each platform
-    console.log("Step 2: Preparing ad assets...");
+    // ===== Step 2: Generate voiceover with ElevenLabs (Myanmar/Thai) or OpenAI (English) =====
+    console.log("Step 2: Generating voiceover...");
+    let voiceoverUrl = "";
+    if (adScript?.voiceover) {
+      const { audioBuffer, provider } = await generateVoiceover(supabaseAdmin, adScript.voiceover, language);
+      if (audioBuffer) {
+        voiceoverUrl = await uploadBytesToSignedUrl(
+          supabaseAdmin,
+          `${userId}/auto-ad-voiceover-${Date.now()}.mp3`,
+          audioBuffer,
+          "audio/mpeg",
+        );
+        console.log(`Voiceover generated via ${provider}: ${voiceoverUrl ? "OK" : "FAILED"}`);
+      } else {
+        console.warn("No voiceover audio generated - TTS failed for all providers");
+      }
+    }
+
+    // ===== Step 3: Prepare visual assets & render per platform =====
+    console.log("Step 3: Preparing visual assets...");
     const resultVideos: { platform: string; url: string }[] = [];
     const SHOTSTACK_KEY = keyMap.shotstack_api_key || Deno.env.get("SHOTSTACK_API_KEY");
-    const openaiKey = await getOpenAIKey(supabaseAdmin);
 
+    // Enhance hero image
     let enhancedImageBase64: string | null = null;
     if (STABILITY_API_KEY && images.length > 0) {
       try {
@@ -306,48 +395,11 @@ Product details:\n${productDetails}`,
         if (enhanceResponse.ok) {
           enhancedImageBase64 = arrayBufferToBase64(await enhanceResponse.arrayBuffer());
           console.log("Hero image enhanced successfully");
+        } else {
+          const _ = await enhanceResponse.text();
         }
       } catch (enhErr) {
         console.error("Image enhancement error:", enhErr);
-      }
-    }
-
-    let voiceoverUrl = "";
-    if (adScript?.voiceover && openaiKey) {
-      try {
-        const voiceMap: Record<string, string> = {
-          my: "nova",
-          en: "alloy",
-          th: "shimmer",
-        };
-        const ttsResp = await fetch("https://api.openai.com/v1/audio/speech", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${openaiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "tts-1-hd",
-            voice: voiceMap[language] || "nova",
-            input: adScript.voiceover,
-            format: "mp3",
-          }),
-        });
-
-        if (ttsResp.ok) {
-          const audioBuffer = await ttsResp.arrayBuffer();
-          voiceoverUrl = await uploadBytesToSignedUrl(
-            supabaseAdmin,
-            `${userId}/auto-ad-voiceover-${Date.now()}.mp3`,
-            audioBuffer,
-            "audio/mpeg",
-          );
-          console.log("Voiceover audio generated");
-        } else {
-          console.warn("Voiceover generation failed", ttsResp.status);
-        }
-      } catch (ttsErr) {
-        console.error("Voiceover generation error:", ttsErr);
       }
     }
 
@@ -377,6 +429,7 @@ Product details:\n${productDetails}`,
           continue;
         }
 
+        // Generate scene images
         const scenePrompts = Array.isArray(adScript?.scenes) ? adScript.scenes : [];
         const estimatedVoiceoverDuration = adScript?.voiceover
           ? estimateVoiceoverSeconds(adScript.voiceover, language)
@@ -411,6 +464,8 @@ Product details:\n${productDetails}`,
                   "image/png",
                 );
                 if (sceneUrl) finalSceneUrl = sceneUrl;
+              } else {
+                const _ = await sceneResp.text();
               }
             } catch (e) {
               console.warn("Scene generation error:", e);
@@ -425,6 +480,7 @@ Product details:\n${productDetails}`,
           continue;
         }
 
+        // Build Shotstack timeline
         const myanmarFontLink = `<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;700&display=swap" rel="stylesheet">`;
         const clips = sceneImages.map((url, i) => ({
           asset: { type: "image", src: url },
@@ -435,27 +491,28 @@ Product details:\n${productDetails}`,
           transition: i > 0 ? { in: "fade", out: "fade" } : undefined,
         }));
 
+        // Subtitle clips - ensure they appear properly
         const captionClips = showSubtitles && adScript?.voiceover
           ? splitVoiceoverToCaptions(adScript.voiceover, totalTimelineDuration, adScript.subtitle_lines).map((caption) => ({
               asset: {
                 type: "html",
-                html: `${myanmarFontLink}<div style="display:flex;justify-content:center;align-items:flex-end;width:100%;height:100%;padding:0 28px 18px;"><div style="max-width:90%;background:rgba(0,0,0,0.58);padding:14px 22px;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,0.35);"><p style="margin:0;font-family:'Noto Sans Myanmar',sans-serif;font-size:32px;font-weight:700;color:white;text-shadow:0 2px 8px rgba(0,0,0,0.7);text-align:center;line-height:1.45;letter-spacing:0.01em;">${escapeHtml(caption.text)}</p></div></div>`,
+                html: `${myanmarFontLink}<div style="display:flex;justify-content:center;align-items:flex-end;width:100%;height:100%;padding:0 28px 18px;"><div style="max-width:90%;background:rgba(0,0,0,0.58);padding:14px 22px;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,0.35);"><p style="margin:0;font-family:'Noto Sans Myanmar',sans-serif;font-size:44px;font-weight:700;color:white;text-shadow:0 2px 8px rgba(0,0,0,0.7);text-align:center;line-height:1.45;letter-spacing:0.01em;">${escapeHtml(caption.text)}</p></div></div>`,
                 width: 1180,
-                height: 220,
+                height: 280,
               },
               start: caption.start,
               length: Math.min(caption.length, Math.max(totalTimelineDuration - caption.start, 0.8)),
               position: "bottom",
-              offset: { y: 0.01 },
+              offset: { y: 0.02 },
             }))
           : [];
 
         const ctaClip = {
           asset: {
             type: "html",
-            html: `${myanmarFontLink}<div style="display:flex;justify-content:center;align-items:center;width:100%;height:100%;padding:0 24px;"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:36px;color:white;text-shadow:3px 3px 6px rgba(0,0,0,0.85);text-align:center;padding:20px 28px;background:rgba(0,0,0,0.42);border-radius:16px;font-weight:700;">${escapeHtml(adScript?.cta || "Shop Now!")}</p></div>`,
+            html: `${myanmarFontLink}<div style="display:flex;justify-content:center;align-items:center;width:100%;height:100%;padding:0 24px;"><p style="font-family:'Noto Sans Myanmar',sans-serif;font-size:44px;color:white;text-shadow:3px 3px 6px rgba(0,0,0,0.85);text-align:center;padding:20px 28px;background:rgba(0,0,0,0.42);border-radius:16px;font-weight:700;">${escapeHtml(adScript?.cta || "Shop Now!")}</p></div>`,
             width: 900,
-            height: 140,
+            height: 160,
           },
           start: Math.max(totalTimelineDuration - Math.min(8, sceneDuration * 2), 0),
           length: Math.min(8, Math.max(sceneDuration * 2, 4)),
@@ -476,7 +533,7 @@ Product details:\n${productDetails}`,
           output: { format: "mp4", resolution: "hd", aspectRatio },
         };
 
-        console.log(`Sending to Shotstack for ${platform}...`);
+        console.log(`Sending to Shotstack for ${platform}... (voiceover=${!!voiceoverUrl}, subtitles=${captionClips.length})`);
         const renderResp = await fetch("https://api.shotstack.io/v1/render", {
           method: "POST",
           headers: { "x-api-key": SHOTSTACK_KEY, "Content-Type": "application/json" },
@@ -507,7 +564,6 @@ Product details:\n${productDetails}`,
           if (status === "done") {
             const renderUrl = checkData.response?.url;
             if (renderUrl) {
-              // Download and upload to storage
               const videoResp = await fetch(renderUrl);
               const videoBuffer = await videoResp.arrayBuffer();
               console.log(`Downloaded ${videoBuffer.byteLength} bytes for ${platform}`);
@@ -529,9 +585,9 @@ Product details:\n${productDetails}`,
       }
     }
 
-    // Deduct credits after success (skip for admin)
+    // Deduct credits
     if (!userIsAdmin) {
-      const { data: deductResult } = await supabaseAdmin.rpc("deduct_user_credits", {
+      await supabaseAdmin.rpc("deduct_user_credits", {
         _user_id: userId, _amount: creditCost, _action: "auto_ad",
       });
       await supabaseAdmin.from("credit_audit_log").insert({
@@ -539,10 +595,10 @@ Product details:\n${productDetails}`,
         description: `Auto Ad: ${platforms.join(",")} ${language}`,
       });
     } else {
-      console.log("Admin free access - skipping credit deduction for Auto Ad");
+      console.log("Admin free access - skipping credit deduction");
     }
 
-    // Save outputs to user_outputs (server-side)
+    // Save outputs
     const platformLabels: Record<string, string> = { youtube: "YouTube (16:9)", fb_tiktok: "FB/TikTok (9:16)", square: "Square (1:1)" };
     for (const vid of resultVideos) {
       if (vid.url) {
@@ -556,7 +612,7 @@ Product details:\n${productDetails}`,
         });
       }
     }
-    console.log(`Auto Ad completed, ${resultVideos.length} videos saved to store`);
+    console.log(`Auto Ad completed: ${resultVideos.length} videos`);
 
     const { data: updatedProfile } = await supabaseAdmin.from("profiles").select("credit_balance").eq("user_id", userId).single();
     return new Response(JSON.stringify({
