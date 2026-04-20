@@ -52,13 +52,17 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "ခရက်ဒစ် မလုံလောက်ပါ", required: creditCost }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Get API keys
-    const { data: apiKeys } = await supabaseAdmin.from("app_settings").select("key, value").in("key", ["replicate_api_token", "stability_api_key"]);
+    // Get API keys (env first, DB fallback)
+    const { data: apiKeys } = await supabaseAdmin.from("app_settings").select("key, value")
+      .in("key", ["replicate_api_token", "stability_api_key", "REPLICATE_API_KEY_PRIMARY", "REPLICATE_API_KEY_SECONDARY"]);
     const keyMap: Record<string, string> = {};
-    apiKeys?.forEach((k) => { keyMap[k.key] = k.value || ""; });
+    apiKeys?.forEach((k) => { if (k.value) keyMap[k.key] = k.value; });
 
-    const REPLICATE_API_KEY = keyMap.replicate_api_token || Deno.env.get("REPLICATE_API_KEY");
-    const STABILITY_API_KEY = keyMap.stability_api_key || Deno.env.get("STABILITY_API_KEY");
+    const REPLICATE_API_KEY = Deno.env.get("REPLICATE_API_KEY")
+      || keyMap.REPLICATE_API_KEY_PRIMARY
+      || keyMap.replicate_api_token
+      || keyMap.REPLICATE_API_KEY_SECONDARY;
+    const STABILITY_API_KEY = Deno.env.get("STABILITY_API_KEY") || keyMap.stability_api_key;
 
     if (!REPLICATE_API_KEY) {
       return new Response(JSON.stringify({ error: "API not configured" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
