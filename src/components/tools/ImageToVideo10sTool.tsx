@@ -89,7 +89,6 @@ export const ImageToVideo10sTool = ({ userId, onBack }: Props) => {
           title="Image → 10s Video"
           subtitle="ပုံ + Prompt → ၁၀ စက္ကန့် AI ဗီဒီယို"
           onBack={onBack}
-          icon={<Clapperboard className="w-5 h-5" />}
         />
       )}
 
