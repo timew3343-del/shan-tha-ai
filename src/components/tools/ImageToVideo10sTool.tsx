@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Video, Download, CheckCircle, Clapperboard } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Loader2, Video, Download, CheckCircle, Clapperboard, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useCredits } from "@/hooks/useCredits";
@@ -28,6 +29,26 @@ export const ImageToVideo10sTool = ({ userId, onBack }: Props) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [isLoading, setIsLoading] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
+  const ESTIMATED_SECONDS = 150;
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (isLoading) {
+      setProgress(0);
+      setElapsed(0);
+      const start = Date.now();
+      timerRef.current = window.setInterval(() => {
+        const sec = Math.floor((Date.now() - start) / 1000);
+        setElapsed(sec);
+        setProgress(Math.min(95, (sec / ESTIMATED_SECONDS) * 90));
+      }, 500);
+    } else {
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [isLoading]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -70,6 +91,7 @@ export const ImageToVideo10sTool = ({ userId, onBack }: Props) => {
       if (!data?.success) throw new Error(data?.error || "Video generation failed");
 
       setVideoUrl(data.videoUrl);
+      setProgress(100);
       toast({
         title: "10 စက္ကန့် ဗီဒီယို ပြီးပါပြီ ✅",
         description: data.isAdmin ? "Admin: အခမဲ့" : `သုံးခဲ့သည် − ${data.creditsUsed} credits`,
@@ -150,6 +172,31 @@ export const ImageToVideo10sTool = ({ userId, onBack }: Props) => {
               <><Video className="w-5 h-5 mr-2" />10s ဗီဒီယို ထုတ်ရန်</>
             )}
           </Button>
+
+          {isLoading && (
+            <div className="space-y-2 p-3 rounded-lg bg-muted/50 border">
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2 font-medium">
+                  <Clapperboard className="w-4 h-4 text-primary animate-pulse" />
+                  AI ဗီဒီယို ထုတ်လုပ်နေသည်...
+                </span>
+                <span className="font-mono text-primary">{Math.round(progress)}%</span>
+              </div>
+              <Progress value={progress} className="h-2" />
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  ကြာချိန် − {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}
+                </span>
+                <span>
+                  ခန့်မှန်းကျန်ချိန် − {Math.max(0, Math.ceil((ESTIMATED_SECONDS - elapsed) / 10) * 10)}s
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground italic">
+                Replicate Kling v1.6 — ပျမ်းမျှ 1-3 မိနစ် ကြာတတ်ပါသည်။ စောင့်ပေးပါ။
+              </p>
+            </div>
+          )}
 
           {videoUrl && (
             <div className="space-y-3 pt-2 border-t">
