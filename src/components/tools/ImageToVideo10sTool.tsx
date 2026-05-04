@@ -91,6 +91,7 @@ export const ImageToVideo10sTool = ({ userId, onBack }: Props) => {
       if (!data?.success) throw new Error(data?.error || "Video generation failed");
 
       setVideoUrl(data.videoUrl);
+      setProgress(100);
       toast({
         title: "10 စက္ကန့် ဗီဒီယို ပြီးပါပြီ ✅",
         description: data.isAdmin ? "Admin: အခမဲ့" : `သုံးခဲ့သည် − ${data.creditsUsed} credits`,
