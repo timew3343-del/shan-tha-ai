@@ -60,6 +60,7 @@ const CharacterAnimateTool = lazy(() => import("./tools/CharacterAnimateTool").t
 const AutoResizerTool = lazy(() => import("./tools/AutoResizerTool").then(m => ({ default: m.AutoResizerTool })));
 const VideoEditor = lazy(() => import("./VideoEditor").then(m => ({ default: m.VideoEditor })));
 const ProTTSTool = lazy(() => import("./tools/ProTTSTool").then(m => ({ default: m.ProTTSTool })));
+const ImageToVideo10sTool = lazy(() => import("./tools/ImageToVideo10sTool").then(m => ({ default: m.ImageToVideo10sTool })));
 
 import { ToolCardCompact } from "./ToolCardCompact";
 import { ToolHeader } from "./ToolHeader";
@@ -82,7 +83,7 @@ interface AIToolsTabProps {
   userId?: string;
 }
 
-type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv" | "videoredesign" | "logodesign" | "photorestore" | "spellcheck" | "virtualtryon" | "astrology" | "interiordesign" | "cvbuilder" | "bizconsultant" | "creativewriter" | "legaladvisor" | "messagepolisher" | "nutritionplanner" | "cardealer" | "exteriordesign" | "voicetranslator" | "healthchecker" | "babynamer" | "legaldoc" | "styletransfer" | "smartchef" | "travelplanner" | "fashiondesigner" | "videomulti" | "characteranimate" | "autoresizer" | "videoeditor" | "protts";
+type ActiveTool = "home" | "image" | "video" | "speech" | "faceswap" | "upscale" | "bgremove" | "bgstudio" | "youtube" | "docslide" | "caption" | "adgenerator" | "autoad" | "socialmedia" | "videocopywriting" | "copyrightchecker" | "storyvideo" | "scenesummarizer" | "songmtv" | "videoredesign" | "logodesign" | "photorestore" | "spellcheck" | "virtualtryon" | "astrology" | "interiordesign" | "cvbuilder" | "bizconsultant" | "creativewriter" | "legaladvisor" | "messagepolisher" | "nutritionplanner" | "cardealer" | "exteriordesign" | "voicetranslator" | "healthchecker" | "babynamer" | "legaldoc" | "styletransfer" | "smartchef" | "travelplanner" | "fashiondesigner" | "videomulti" | "characteranimate" | "autoresizer" | "videoeditor" | "protts" | "imgtovid10s";
 
 type ToolCategory = "all" | "image" | "video" | "audio" | "premium" | "health" | "legal" | "lifestyle" | "fashion";
 
@@ -180,6 +181,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
     { id: "interiordesign", icon: Home, titleKey: "", fallbackTitle: "AI အိမ်တွင်း ဒီဇိုင်နာ", descKey: "", fallbackDesc: "အခန်း ပြန်လည်ဒီဇိုင်းဆွဲ", gradient: "bg-gradient-to-br from-teal-500 via-cyan-600 to-blue-700", credits: costs.interior_design, category: ["image", "lifestyle"], badge: "NEW" },
     // Video
     { id: "video", icon: Video, titleKey: "", fallbackTitle: "Image to Video & Voiceover & Music", descKey: "", fallbackDesc: "ပုံ မှ ဗီဒီယို၊ စကားပြောအသံ နှင့် နောက်ခံတီးလုံး ထည့်သွင်းခြင်း", gradient: "bg-gradient-to-br from-red-500 via-rose-600 to-pink-700", credits: costs.video_generation, category: ["video"] },
+    { id: "imgtovid10s", icon: Clapperboard, titleKey: "", fallbackTitle: "Image → 10s Video", fallbackDesc: "ပုံ + Prompt → ၁၀ စက္ကန့် AI ဗီဒီယို", descKey: "", gradient: "bg-gradient-to-br from-rose-500 via-red-600 to-orange-700", credits: (costs as any).image_to_video_10s || 25, category: ["video"], badge: "NEW" },
     { id: "caption", icon: Captions, titleKey: "", fallbackTitle: "AI Caption & Translator/Speaker", descKey: "", fallbackDesc: "စာတန်းထိုး နှင့် ဘာသာစကားပြောင်းလဲပြောဆိုသူ", gradient: "bg-gradient-to-br from-amber-500 via-orange-600 to-red-700", credits: costs.caption_per_minute, category: ["video"] },
     { id: "adgenerator", icon: Megaphone, titleKey: "tool.adGen", fallbackTitle: "AI Ad", descKey: "tool.adGen.desc", fallbackDesc: "ကြော်ငြာ ဖန်တီး", gradient: "bg-gradient-to-br from-pink-500 via-fuchsia-600 to-purple-700", credits: costs.ad_generator, category: ["video"] },
     { id: "videocopywriting", icon: Crown, titleKey: "tool.videoCopy", fallbackTitle: "Video Copywriting", descKey: "tool.videoCopy.desc", fallbackDesc: "AI ကြော်ငြာ ဖန်တီး", gradient: "bg-gradient-to-br from-amber-500 via-yellow-600 to-orange-700", credits: costs.ai_chat * 3, category: ["video"], badge: "PRO" },
@@ -285,6 +287,7 @@ export const AIToolsTab = ({ userId }: AIToolsTabProps) => {
       case "autoresizer": return <AutoResizerTool key="autoresizer" userId={userId} onBack={handleBack} />;
       case "videoeditor": return <div key="videoeditor"><ToolHeader title="Video Editor" subtitle="Trim, Speed, Zoom, Filter, Text" onBack={handleBack} /><VideoEditor userId={userId} /></div>;
       case "protts": return <ProTTSTool key="protts" userId={userId} onBack={handleBack} />;
+      case "imgtovid10s": return <ImageToVideo10sTool key="imgtovid10s" userId={userId} onBack={handleBack} />;
       default: return null;
     }
   };
