@@ -29,6 +29,26 @@ export const ImageToVideo10sTool = ({ userId, onBack }: Props) => {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [isLoading, setIsLoading] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
+  const ESTIMATED_SECONDS = 150;
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (isLoading) {
+      setProgress(0);
+      setElapsed(0);
+      const start = Date.now();
+      timerRef.current = window.setInterval(() => {
+        const sec = Math.floor((Date.now() - start) / 1000);
+        setElapsed(sec);
+        setProgress(Math.min(95, (sec / ESTIMATED_SECONDS) * 90));
+      }, 500);
+    } else {
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [isLoading]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
