@@ -173,6 +173,31 @@ export const ImageToVideo10sTool = ({ userId, onBack }: Props) => {
             )}
           </Button>
 
+          {isLoading && (
+            <div className="space-y-2 p-3 rounded-lg bg-muted/50 border">
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2 font-medium">
+                  <Clapperboard className="w-4 h-4 text-primary animate-pulse" />
+                  AI ဗီဒီယို ထုတ်လုပ်နေသည်...
+                </span>
+                <span className="font-mono text-primary">{Math.round(progress)}%</span>
+              </div>
+              <Progress value={progress} className="h-2" />
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  ကြာချိန် − {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")}
+                </span>
+                <span>
+                  ခန့်မှန်းကျန်ချိန် − {Math.max(0, Math.ceil((ESTIMATED_SECONDS - elapsed) / 10) * 10)}s
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground italic">
+                Replicate Kling v1.6 — ပျမ်းမျှ 1-3 မိနစ် ကြာတတ်ပါသည်။ စောင့်ပေးပါ။
+              </p>
+            </div>
+          )}
+
           {videoUrl && (
             <div className="space-y-3 pt-2 border-t">
               <Label>ရလဒ်</Label>
